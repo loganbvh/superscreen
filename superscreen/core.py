@@ -82,8 +82,8 @@ class BrandtSolution(object):
 
     def current_density(
         self,
-        layers: Optional[Union[str, List[str]]] = None,
         grid_shape=Union[int, Tuple[int, int]],
+        layers: Optional[Union[str, List[str]]] = None,
         method: Optional[str] = "cubic",
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
