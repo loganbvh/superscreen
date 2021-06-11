@@ -1,13 +1,248 @@
+import logging
+from re import L
+import warnings
+from typing import Type, Union, Callable, Optional, Dict, Tuple
+
 import numpy as np
 import scipy.linalg as la
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
-from matplotlib import path
+from scipy.interpolate import griddata
+from matplotlib.path import Path
+import matplotlib.tri as mtri
+
+from .device import Device
+
+logger = logging.getLogger(__name__)
 
 
-def inpolygon(xq, yq, xp, yp):
-    """Checks whether query points (xq, yq) lie in the polyon defined by points (xp, yp).
-    Returns a boolean array of the same shape as xq and yq.
+class BrandtSolution(object):
+    def __init__(
+        self,
+        *,
+        device: Device,
+        streams: Dict[str, np.ndarray],
+        fields: Dict[str, np.ndarray],
+        response_fields: Dict[str, np.ndarray],
+        applied_field: Callable,
+        circulating_currents: Optional[Dict[str, float]] = None,
+    ):
+        self.device = device
+        self.streams = streams
+        self.fields = fields
+        self.response_fields = response_fields
+        self.applied_field = applied_field
+        self.circulating_currents = circulating_currents
+
+    def grid_data(
+        self,
+        dataset: Optional[str] = "fields",
+        grid_shape=Union[int, Tuple[int, int]],
+        method: Optional[str] = "cubic",
+        **kwargs,
+    ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+        valid_data = ("streams", "fields", "response_fields")
+        if dataset not in valid_data:
+            raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
+        datasets = getattr(self, dataset)
+
+        points = self.device.mesh_points
+        x, y = points.T
+        xmin, xmax = x.min(), x.max()
+        ymin, ymax = y.min(), y.max()
+
+        if isinstance(grid_shape, int):
+            grid_shape = (grid_shape, grid_shape)
+        if not isinstance(grid_shape, (tuple, list)) or len(grid_shape) != 2:
+            raise TypeError(
+                f"Expected a tuple of length 2, but got {grid_shape} ({type(grid_shape)})."
+            )
+
+        xs = np.linspace(xmin, xmax, grid_shape[1])
+        ys = np.linspace(ymin, ymax, grid_shape[0])
+
+        xgrid, ygrid = np.meshgrid(xs, ys)
+        zgrids = {}
+        for name, array in datasets.items():
+            zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
+            zgrids[name] = zgrid
+
+        return xgrid, ygrid, zgrids
+
+    def current_density(
+        self,
+        grid_shape=Union[int, Tuple[int, int]],
+        method: Optional[str] = "cubic",
+        **kwargs,
+    ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+        xgrid, ygrid, streams = self.grid_data(
+            dataset="streams", grid_shape=grid_shape, method=method, **kwargs
+        )
+
+        Js = {}
+        for name, g in streams.items():
+            # J = [dg/dy, -dg/dx]
+            # y is axis 0 (rows), x is axis 1 (columns)
+            gy, gx = np.gradient(g, ygrid, xgrid)
+            Js[name] = np.array([gy, -gx])
+
+        return xgrid, ygrid, Js
+
+
+def brandt_layer(
+    device: Device,
+    layer: str,
+    applied_field: Callable,
+    circulating_currents: Optional[Dict[str, float]] = None,
+    check_inversion: Optional[bool] = True,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
+    circulating_currents = circulating_currents or {}
+
+    points = device.mesh_points
+
+    if device.adj is None:
+        device.make_mesh(compute_arrays=True)
+
+    weights = device.weights
+    Q = device.Q
+    Del2 = device.Del2
+    x, y = points.T
+
+    films = [name for name, film in device.films.items() if film.layer == layer]
+    Lambda = device.layers[layer].Lambda
+
+    Hz_applied = applied_field(points[:, 0], points[:, 1])
+    Ha_eff = np.zeros_like(Hz_applied)
+
+    g = np.zeros(len(x))
+    for name in films:
+        film = device.films[name]
+        # Form system A @ gf = h (film only)
+        ix1d = film.contains_points(x, y, index=True)
+        ix2d = np.ix_(ix1d, ix1d)
+        A = Q[ix2d] * weights[ix2d] - Lambda * Del2[ix2d]
+        h = Hz_applied[ix1d] + Ha_eff[ix1d]
+        # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
+        # slightly faster than gf = la.solve(A, h),
+        # and much faster than gf = la.pinv(A) @ h.
+        lu, piv = la.lu_factor(A)
+        gf = la.lu_solve((lu, piv), h)
+        g[ix1d] = gf
+        if check_inversion:
+            # Validate solution
+            errors = (A @ gf) - h
+            if not np.allclose(errors, 0):
+                warnings.warn(
+                    f"Unable to solve for stream matrix, maximum error {np.abs(errors).max():.3e}."
+                )
+
+    for name, current in circulating_currents.items():
+        hole = device.holes[name]
+        ix1d = hole.contains_points(x, y, index=True)
+        g[ix1d] = current  # g[hole] = I_circ
+
+    response_field = -(Q * weights) @ g
+    total_field = Hz_applied + response_field
+
+    return g, total_field, response_field
+
+
+def brandt_layers(
+    device: Device,
+    applied_field: Callable,
+    coupled: Optional[bool] = True,
+    circulating_currents: Optional[Dict[str, float]] = None,
+    check_inversion: Optional[bool] = True,
+) -> BrandtSolution:
+
+    points = device.mesh_points
+    x, y = points.T
+    triangles = device.triangles
+
+    streams = {}
+    fields = {}
+    response_fields = {}
+
+    for name, layer in device.layers.items():
+        logging.info(f"Calculating {name} response to applied field.")
+        Hz_func = lambda x, y: applied_field(x, y, layer.z0)
+        g, total_field, response_field = brandt_layer(
+            device,
+            name,
+            Hz_func,
+            circulating_currents=circulating_currents,
+            check_inversion=check_inversion,
+        )
+        streams[name] = g
+        fields[name] = total_field
+        response_fields[name] = response_field
+
+    if coupled:
+        xt, yt = centroids(points, triangles).T
+        # Calculcate the response fields at each layer from every other layer.
+        other_responses = {}
+        for name, layer in device.layers.items():
+            Hzr = np.zeros(points.shape[0])
+            for other_name, other_layer in device.layers.items():
+                if name == other_name:
+                    continue
+                logger.info(f"Calculcating response field at {name} from {other_name}.")
+                h_interp = mtri.LinearTriInterpolator(
+                    device.mesh, response_fields[other_name]
+                )
+                h = h_interp(xt, yt)
+                areas = area(points, triangles)
+                dz = layer.z0 - other_layer.z0
+                for i in range(points.shape[0]):
+                    rho = np.sqrt((x[i] - xt) ** 2 + (y[i] - yt) ** 2)
+                    q = (2 * dz ** 2 - rho ** 2) / (
+                        4 * np.pi * (dz ** 2 + rho ** 2) ** (5 / 2)
+                    )
+                    Hzr[i] += np.sign(dz) * np.sum(areas * h * q)
+            other_responses[name] = Hzr
+
+        streams = {}
+        fields = {}
+        response_fields = {}
+        # Solve again with the response fields from all layers
+        for name, layer in device.layers.items():
+            logging.info(
+                f"Calculating {name} response to applied field and "
+                "response field from other layers."
+            )
+            Hz_func = lambda x, y: applied_field(x, y, layer.z0) + other_responses[name]
+            g, total_field, response_field = brandt_layer(
+                device,
+                name,
+                Hz_func,
+                circulating_currents=circulating_currents,
+                check_inversion=check_inversion,
+            )
+            streams[name] = g
+            fields[name] = total_field
+            response_fields[name] = response_field
+
+    solution = BrandtSolution(
+        device=device,
+        streams=streams,
+        fields=fields,
+        response_fields=response_fields,
+        applied_field=applied_field,
+        circulating_currents=circulating_currents,
+    )
+
+    return solution
+
+
+def in_polygon(
+    xq: Union[float, np.ndarray],
+    yq: Union[float, np.ndarray],
+    xp: Union[float, np.ndarray],
+    yp: Union[float, np.ndarray],
+) -> Union[bool, np.ndarray[bool]]:
+    """Checks whether query points (xq, yq) lie in the polyon
+    defined by points (xp, yp).
     """
     xq = np.asarray(xq)
     yq = np.asarray(yq)
@@ -17,14 +252,14 @@ def inpolygon(xq, yq, xp, yp):
     xp = np.asarray(xp).reshape(-1)
     yp = np.asarray(yp).reshape(-1)
     q = list(zip(xq, yq))
-    p = path.Path(list(zip(xp, yp)))
+    p = Path(list(zip(xp, yp)))
     bool_array = p.contains_points(q).reshape(shape).squeeze()
     if len(bool_array.shape) == 0:
         bool_array = bool_array.item()
     return bool_array
 
 
-def centroids(points, simplices):
+def centroids(points: np.ndarray, simplices: np.ndarray) -> np.ndarray:
     """Returns x,y coordinates for triangle centroids."""
     return np.array([np.sum(points[ix], axis=0) / 3 for ix in simplices])
 
@@ -66,32 +301,32 @@ def area(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
 def uniform_weights(adj: np.ndarray) -> np.ndarray:
     """Computes the weight matrix using uniform weighting."""
     weights = (adj != 0).astype(float)
-    # normalize row-by-row
+    # Normalize row-by-row
     weights = weights / weights.sum(axis=1)[:, np.newaxis]
     np.fill_diagonal(weights, 1.0)
     return weights
 
 
-def uniform_weights_for_loop(adj):
-    n = adj.shape[0]
-    weights = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):  # weights is symmetric, so only need
-            # compute upper triangular part
-            if adj[i, j]:  # Check if edge is in graph
-                weights[i, j] = 1.0
-    # Symmetrize weights
-    weights = weights + weights.T
-    # Normalize weights
-    for i in range(n):
-        weights[i, :] = weights[i, :] / sum(weights[i, :])
-    for i in range(n):
-        weights[i, i] = 1.0  # Fill in diagonal terms wii
-    return weights
+# def uniform_weights_for_loop(adj):
+#     n = adj.shape[0]
+#     weights = np.zeros((n, n))
+#     for i in range(n):
+#         for j in range(i + 1, n):  # weights is symmetric, so only need
+#             # compute upper triangular part
+#             if adj[i, j]:  # Check if edge is in graph
+#                 weights[i, j] = 1.0
+#     # Symmetrize weights
+#     weights = weights + weights.T
+#     # Normalize weights
+#     for i in range(n):
+#         weights[i, :] = weights[i, :] / sum(weights[i, :])
+#     for i in range(n):
+#         weights[i, i] = 1.0  # Fill in diagonal terms wii
+#     return weights
 
 
 def q_matrix(points: np.ndarray) -> np.ndarray:
-    """Computes the denominator matrix, Q."""
+    """Computes the denominator matrix, q."""
     distances = cdist(points, points)  # Euclidian distance between points
     q = np.zeros_like(distances)
     # Diagonals of distances are zero by definition, so q[i,i] will diverge
@@ -101,24 +336,24 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
     return q
 
 
-def q_matrix_for_loop(points):
-    n = points.shape[0]
-    q = np.zeros((n, n))
-    w_q = 1.0 / (4 * np.pi)  # Weight factor
-    for i in range(n):
-        for j in range(i + 1, n):  # Q is symmetric, so only need
-            # compute upper triangular part
-            n_rij = np.sqrt(
-                (points[i, 0] - points[j, 0]) ** 2 + (points[i, 1] - points[j, 1]) ** 2
-            )
-            if n_rij == 0:
-                raise ValueError("Coincident points in mesh!")
-            q[i, j] = w_q / (n_rij ** 3)
-    # Symmetrize q
-    q = q + q.T
-    for i in range(n):
-        q[i, i] = np.inf  # Fill in diagonal terms qii = inf
-    return q
+# def q_matrix_for_loop(points):
+#     n = points.shape[0]
+#     q = np.zeros((n, n))
+#     w_q = 1.0 / (4 * np.pi)  # Weight factor
+#     for i in range(n):
+#         for j in range(i + 1, n):  # Q is symmetric, so only need
+#             # compute upper triangular part
+#             n_rij = np.sqrt(
+#                 (points[i, 0] - points[j, 0]) ** 2 + (points[i, 1] - points[j, 1]) ** 2
+#             )
+#             if n_rij == 0:
+#                 raise ValueError("Coincident points in mesh!")
+#             q[i, j] = w_q / (n_rij ** 3)
+#     # Symmetrize q
+#     q = q + q.T
+#     for i in range(n):
+#         q[i, i] = np.inf  # Fill in diagonal terms qii = inf
+#     return q
 
 
 def C_vector(points: np.ndarray) -> np.ndarray:
@@ -147,24 +382,24 @@ def laplacian(weights: np.ndarray, method: str = "uniform") -> np.ndarray:
         Del2 = Del2 + Del2.T
         np.fill_diagonal(Del2, -1.0)
     else:
-        raise NotImplementedError("Laplacian method {} not implemented.".format(method))
+        raise NotImplementedError(f'Laplacian method "{method}" not implemented.')
     return Del2
 
 
-def laplacian_for_loop(weights, method="uniform"):
-    if method != "uniform":
-        raise NotImplementedError("Laplacian method {} not implemented.".format(method))
-    n = weights.shape[0]
-    Del2 = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):  # Del2 is symmetric, so only need
-            # compute upper triangular part
-            Del2[i, j] = weights[i, j]
-    # Symmetrize Del2
-    Del2 = Del2 + Del2.T
-    for i in range(n):
-        Del2[i, i] = -1.0  # Fill in diagonal terms Del2ii = -1
-    return Del2
+# def laplacian_for_loop(weights, method="uniform"):
+#     if method != "uniform":
+#         raise NotImplementedError('Laplacian method "{method}" not implemented.')
+#     n = weights.shape[0]
+#     Del2 = np.zeros((n, n))
+#     for i in range(n):
+#         for j in range(i + 1, n):  # Del2 is symmetric, so only need
+#             # compute upper triangular part
+#             Del2[i, j] = weights[i, j]
+#     # Symmetrize Del2
+#     Del2 = Del2 + Del2.T
+#     for i in range(n):
+#         Del2[i, i] = -1.0  # Fill in diagonal terms Del2ii = -1
+#     return Del2
 
 
 def Q_matrix(
@@ -182,330 +417,22 @@ def Q_matrix(
     return Q
 
 
-def Q_matrix_for_loop(q, C, weights):
-    n = weights.shape[0]
-    Q = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i + 1, n):  # Q is symmetric, so we only need
-            # compute upper triangular part
-            Q[i, j] = -q[i, j]
-    # Symmetrize Q
-    Q = Q + Q.T
-    Q_ij = 0
-    # Fill in diagonal terms Qii
-    for i in range(n):
-        for k in range(n):
-            if k != i:
-                Q_ij = Q_ij + q[i, k] * weights[i, k]
-        # weights[i,i] cancels out, so can be arbitrary
-        Q[i, i] = (Q_ij + C[i]) / weights[i, i]
-        Q_ij = 0
-    return Q
-
-
-# def brandt_2D(sparams, stype, vectorize=True):
-#     if not isinstance(sparams, BrandtParams):
-#         raise TypeError(
-#             "Expected BrandtParams istance, but got {}.".format(type(sparams))
-#         )
-#     if stype not in ("coupled", "decoupled"):
-#         raise ValueError("Expected 'coupled' or 'decoupled', but got {}.".format(stype))
-
-#     # All length units in um
-#     lambda_s = sparams.lambda_s  # London penetration depth
-#     d = sparams.d  # Superconductor thickness
-#     Ha_func = sparams.Ha  # Background magnetic field function
-#     Lambda = lambda_s ** 2 / d  # Effective magnetic penetration depth
-#     # Default parameters
-#     Ir = 0  # No ring current
-#     # Determine solution type (coupled: inductive coupling between layers)
-#     if stype == "coupled":
-#         # Import additional parameters from previous solution
-#         Ha_0 = sparams.Ha_0
-#         ph = sparams.ph  # Hole point coordinates
-#         th = sparams.th  # Hole triangle indices
-#         pr = sparams.pr  # Ring
-#         tr = sparams.tr
-#         pb = sparams.pb  # Bounding region
-#         tb = sparams.tb
-#         adj = sparams.adj
-#         weights = sparams.weights
-#         q = sparams.q
-#         Q = sparams.Q
-#         C = sparams.C
-#         Del2 = sparams.Del2
-#     elif stype == "decoupled":
-#         # Get mesh from input argument
-#         ph = sparams.ph
-#         th = sparams.th
-#         pr = sparams.pr
-#         tr = sparams.tr
-#         pb = sparams.pb
-#         tb = sparams.tb
-#         Ir = sparams.Ir
-#         xmax = sparams.xmax
-#         xmin = sparams.xmin
-#         ymax = sparams.ymax
-#         ymin = sparams.ymin
-
-#     # Combine sub-meshes into global mesh:
-#     # Delete coincident points in mesh and relabel points in triangles
-#     nr = pr.shape[0]
-#     # Offset hole indices by nr
-#     th += nr
-#     # Array of relabeled indices in hole mesh
-#     ivh_r = np.arange(nr, nr + ph.shape[0])
-#     ind_r = 0
-#     # Check for coincidence in ring mesh
-#     for i in range(nr):
-#         # Hole mesh
-#         ind = np.where((ph == pr[i, :]).all(axis=1))[0]
-#         if ind.size > 1:
-#             raise ValueError("Duplicate points on input mesh!")
-#         elif ind.size != 0:
-#             ind = ind[0]
-#             ph = np.delete(ph, ind, 0)
-#             ivh_r[ind + 1 + ind_r :] -= 1
-#             ivh_r[ind + ind_r] = i
-#             ind_r += 1
-#             for ni in range(th.shape[0]):
-#                 for nj in range(th.shape[1]):
-#                     if th[ni, nj] == ind + nr:
-#                         th[ni, nj] = i
-#                     elif th[ni, nj] > ind + nr:
-#                         th[ni, nj] -= 1
-#     nh = ph.shape[0]
-#     # Offset bounding indices by nr+nh
-#     tb += nr + nh
-#     # Array of relabeled indices in bounding mesh
-#     ivb_r = np.arange(nr + nh, nr + nh + pb.shape[0])
-#     ind_r = 0
-#     for i in range(nr):
-#         # Bounding region mesh
-#         ind = np.where((pb == pr[i, :]).all(axis=1))[0]
-#         if ind.size > 1:
-#             raise ValueError("Duplicate points on input mesh!")
-#         elif ind.size != 0:
-#             ind = ind[0]
-#             pb = np.delete(pb, ind, 0)
-#             ivb_r[ind + 1 + ind_r :] -= 1
-#             ivb_r[ind + ind_r] = i
-#             for ni in range(tb.shape[0]):
-#                 for nj in range(tb.shape[1]):
-#                     if tb[ni, nj] == ind + nr + nh:
-#                         tb[ni, nj] = i
-#                     elif tb[ni, nj] > ind + nr + nh:
-#                         tb[ni, nj] -= 1
-
-#     nb = pb.shape[0]
-#     iv = range(nr)  # Point indices of superconducting film
-#     ivh = range(nr, nr + nh)  # Point indices of hole
-#     p = np.concatenate((pr, ph, pb), axis=0)
-#     t = np.concatenate((tr, th, tb), axis=0)
-#     n_tr = tr.shape[0]
-#     n_th = th.shape[0]
-#     logging.info(t.shape[0])
-
-#     if stype == "decoupled":
-#         logging.info("Computing adjacency matrix adj... ")
-#         adj = compute_adj(t)
-#         logging.info("Done")
-#     # Number of vertices in global mesh
-#     n = adj.shape[0]
-#     # -----------------------------------------------------------------------------
-#     # Generate magnetic field data for layer
-#     # -----------------------------------------------------------------------------
-#     logging.info("Generating magnetic field data for layer... ")
-#     if stype == "coupled":
-#         Ha = Ha_func(p[:, 0], p[:, 1]) + Ha_0
-#     else:
-#         Ha = Ha_func(p[:, 0], p[:, 1])
-
-#     if stype == "decoupled":
-
-#         logging.info("Computing weight matrix weights... ")
-#         if sparams.weight == "uniform":
-#             if vectorize:
-#                 weights = uniform_weights(adj)
-#             else:
-#                 weights = uniform_weights_for_loop(adj)
-
-#         elif sparams.weight == "cotangent":
-#             raise NotImplementedError('cotangent weighting not implemented.')
-#             # weights = np.zeros((n, n))
-#             # for i in range(n):
-#             #     for j in range(i + 1, n):  # weights is symmetric, so only need
-#             #         # compute upper triangular part
-#             #         w_ij = 0
-#             #         if adj[i, j]:  # Check if edge is in graph
-#             #             # Identify alpha_ij and alpha_ji for adjacent polar vertices to edge ij
-#             #             adj_v = np.nonzero(np.bitwise_and(adj[i, :], adj[j, :]))
-#             #             if adj_v.size > 2:
-#             #                 raise ValueError("Adjacency matrix definition error")
-#             #             for k in range(adj_v.size):
-#             #                 xi = p[i, :] - p[adj_v[k], :]  # Vector xi
-#             #                 xj = p[j, :] - p[adj_v[k], :]  # Vector xj
-#             #                 n_xi = la.norm(xi)
-#             #                 n_xj = la.norm(xj)
-#             #                 cos_a = 0.5 * (
-#             #                     n_xi / n_xj
-#             #                     + n_xj / n_xi
-#             #                     - la.norm(xi - xj) ** 2 / (n_xi * n_xj)
-#             #                 )
-#             #                 if np.abs(cos_a) > 1:
-#             #                     raise ValueError("Angle error")
-#             #                 cot_a = cos_a / np.sqrt(1 - cos_a ** 2)
-#             #                 w_ij = w_ij + 0.5 * cot_a
-#             #             weights[i, j] = w_ij
-#             # # Symmetrize weights
-#             # weights = weights + weights.T
-#             # # Check if all edge weights have been computed
-#             # if not (np.array_equal(adj, weights != 0)):
-#             #     raise ValueError("Weight matrix error")
-
-#         logging.info("Computing denominator matrix Q... ")
-#         if vectorize:
-#             q = q_matrix(p)
-#         else:
-#             q = q_matrix_for_loop(p)
-
-#         logging.info("Computing edge vector C... ")
-#         if vectorize:
-#             C = C_vector(p)
-#         else:
-#             C = C_vector(p)
-
-#         logging.info("Computing Laplacian matrix Del2... ")
-#         if vectorize:
-#             Del2 = laplacian(weights)
-#         else:
-#             Del2 = laplacian_for_loop(weights)
-
-#         logging.info("Computing dipole field kernel matrix Q... ")
-#         if vectorize:
-#             Q = Q_matrix(q, C, weights)
-#         else:
-#             Q = Q_matrix_for_loop(q, C, weights)
-
-#     # -----------------------------------------------------------------------------
-#     # Compute Ha_eff (sum only over points in hole)
-#     # -----------------------------------------------------------------------------
-#     ones = np.ones(nh)
-#     Ha_eff = -Ir * (
-#         (Q[:, ivh] * weights[:, ivh]) @ ones
-#         - Lambda * (Del2[:, ivh] @ ones)
-#     )
-
-#     # -----------------------------------------------------------------------------
-#     # Compute stream function gi using pivoted LU decomposition
-#     # -----------------------------------------------------------------------------
-#     # Restrict solution to subdomain of superconductor geometry
-#     logging.info("Computing stream function gi... ")
-
-#     # Form system A_Q.g = Ha (film only)
-#     film = np.ix_(iv, iv)
-#     A_Q = (
-#         -Q[film] * weights[film]
-#         + Lambda * Del2[film]
-#     )
-#     # PLU decomposition
-#     P, L, U = la.lu(A_Q)
-#     # Solve for g on film subdomain
-#     g = np.zeros(n)
-#     g[iv] = -la.solve(
-#         U, la.solve(L, P @ (Ha[iv] + Ha_eff[iv]))
-#     )
-#     g[ivh] = Ir  # g = I in hole
-#     logging.info("Done")
-#     # Compute screened magnetic field Hz in layer
-#     # Hz = Ha + np.matmul(np.multiply(Q, weights), gi)
-#     Hz = Ha + (Q * weights) @ g
-#     # Return computed solution and mesh parameters
-#     sol = BrandtSolution()
-#     sol.adj = adj
-#     sol.weights = weights
-#     sol.q = q
-#     sol.Q = Q
-#     sol.C = C
-#     sol.Del2 = Del2
-#     sol.g = g
-#     sol.Hz = Hz
-#     sol.nr = nr
-#     sol.nh = nh
-#     sol.nb = nb
-#     sol.n_tr = n_tr
-#     sol.n_th = n_th
-#     sol.iv = iv
-#     sol.ivh = ivh
-#     sol.p = p
-#     sol.t = t
-#     sol.ivh_r = ivh_r
-#     sol.ivb_r = ivb_r
-#     return sol
-
-
-# def brandt_layers(n_layers, sparams, stype):
-#     sol = [0] * n_layers  # Solution information for each layer
-#     Hzrt0 = [0] * n_layers  # Response fields without coupling
-#     Hzrt0_sol = [0] * n_layers  # Response fields with coupling
-#     if stype == "decoupled":
-#         for i in range(n_layers):
-#             logging.info("Solving for magnetic fields and currents on layer %d..." % i)
-#             sol[i] = brandt_2D(sparams[i], "decoupled")
-#     elif stype == "coupled":
-#         # First solve each layer independently
-#         for i in range(n_layers):
-#             logging.info("Solving for magnetic fields and currents on layer %d..." % i)
-#             sol[i] = brandt_2D(sparams[i], "decoupled")
-#         logging.info("Propagating fields between layers... ")
-#         for i in range(n_layers):
-#             for j in range(n_layers):
-#                 # Propagate fields between layers (layers j to each layer i, i != j)
-#                 if j != i:
-#                     # Find the center points of the triangles in plane j
-#                     ntj = sol[j].t.shape[0]
-#                     XYtj = np.zeros((ntj, 2))
-#                     for nt in range(ntj):
-#                         for nrow in range(3):
-#                             XYtj[nt, 0] = XYtj[nt, 0] + sol[j].p[sol[j].t[nt, nrow], 0]
-#                             XYtj[nt, 1] = XYtj[nt, 1] + sol[j].p[sol[j].t[nt, nrow], 1]
-#                         XYtj[nt] = XYtj[nt] / 3
-#                     triang = mtri.Triangulation(
-#                         sol[j].p[:, 0], sol[j].p[:, 1], sol[j].t
-#                     )
-#                     gi_intrp = mtri.LinearTriInterpolator(triang, sol[j].Hz)
-#                     # Interpolate gi in layer j to centers of mesh triangles
-#                     gjt = gi_intrp(XYtj)
-#                     # Calculate area of each triangle in plane j
-#                     arj = area(sol[j].p, sol[j].t)
-#                     # Compute Q(r, rp) for planes i and j
-#                     z = sparams[j].z0 - sparams[i].z0
-#                     npi = sparams[i].p.shape[0]
-#                     ntj = sparams[j].t.shape[0]
-#                     p1i = sparams[i].p
-#                     p1j = sparams[j].p
-#                     for ni in range(npi):
-#                         qzsum0 = 0
-#                         for nj in range(ntj):
-#                             rho = np.sqrt(
-#                                 (p1i[0, ni] - p1j[0, nj]) ** 2
-#                                 + (p1i[1, ni] - p1j[1, nj]) ** 2
-#                             )
-#                             qzsum0 = qzsum0 + arj[nj] * gjt[nj] * (
-#                                 2 * z ** 2 - rho ** 2
-#                             ) / (4 * np.pi * np.power(z ** 2 + rho ** 2, 5.0 / 2))
-#                         Hzrt0[i][ni] = Hzrt0[i][ni] + qzsum0
-#         logging.info("Done")
-
-#         # Solve again for magnetic fields and currents on each layer with inductive coupling
-#         logging.info("Solving again with inductive coupling...")
-#         for i in range(n_layers):
-#             # Define solution parameters
-#             sparams[i].Ha_0 = Hzrt0[i]
-#             # Compute solution for layer and polygons
-#             sol[i] = brandt_2D(sparams[i], "coupled")
-#         logging.info("Done")
-#     else:
-#         raise ValueError("Invalid solution type")
-#     logging.info("Done with solution")
-#     return sol, Hzrt0, Hzrt0_sol
+# def Q_matrix_for_loop(q, C, weights):
+#     n = weights.shape[0]
+#     Q = np.zeros((n, n))
+#     for i in range(n):
+#         for j in range(i + 1, n):  # Q is symmetric, so we only need
+#             # compute upper triangular part
+#             Q[i, j] = -q[i, j]
+#     # Symmetrize Q
+#     Q = Q + Q.T
+#     Q_ij = 0
+#     # Fill in diagonal terms Qii
+#     for i in range(n):
+#         for k in range(n):
+#             if k != i:
+#                 Q_ij = Q_ij + q[i, k] * weights[i, k]
+#         # weights[i,i] cancels out, so can be arbitrary
+#         Q[i, i] = (Q_ij + C[i]) / weights[i, i]
+#         Q_ij = 0
+#     return Q
