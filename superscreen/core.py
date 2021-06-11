@@ -65,13 +65,10 @@ class BrandtSolution(object):
 
         points = self.device.mesh_points
         x, y = points.T
-        xmin, xmax = x.min(), x.max()
-        ymin, ymax = y.min(), y.max()
-
-        xs = np.linspace(xmin, xmax, grid_shape[1])
-        ys = np.linspace(ymin, ymax, grid_shape[0])
-
-        xgrid, ygrid = np.meshgrid(xs, ys)
+        xgrid, ygrid = np.meshgrid(
+            np.linspace(x.min(), x.max(), grid_shape[1]),
+            np.linspace(y.min(), y.max(), grid_shape[0]),
+        )
         zgrids = {}
         for name, array in datasets.items():
             if name in layers:
