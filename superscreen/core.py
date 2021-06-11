@@ -427,13 +427,12 @@ def C_vector(points: np.ndarray) -> np.ndarray:
     C = np.zeros(points.shape[0])
     for i, (x, y) in enumerate(points):
         with np.errstate(divide="ignore"):
-            C_i = (
+            C[i] = (
                 np.sqrt((xmax - x) ** (-2) + (ymax - y) ** (-2))
                 + np.sqrt((xmin - x) ** (-2) + (ymax - y) ** (-2))
                 + np.sqrt((xmax - x) ** (-2) + (ymin - y) ** (-2))
                 + np.sqrt((xmin - x) ** (-2) + (ymin - y) ** (-2))
             )
-        C[i] = C_i
     C[np.isinf(C)] = 1e30
     return C / (4 * np.pi)
 
