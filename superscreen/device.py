@@ -8,10 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import optimesh
 
-from .utils import inpolygon, PathMaker, json_numpy_obj_hook, NumpyJSONEncoder
 from . import core
 
-logger = logging.getLogger("Device")
+logger = logging.getLogger(__name__)
 
 
 class Layer(object):
@@ -26,8 +25,9 @@ class Layer(object):
         return self.london_lambda ** 2 / self.thickness
 
     def __repr__(self) -> str:
-        return 'Layer("{}", thickness={:.3f}, london_lambda={:.3f}, z0={:.3f})'.format(
-            self.name, self.thickness, self.london_lambda, self.z0
+        return (
+            f'Layer("{self.name}", thickness={self.thickness:.3f}, '
+            f"london_lambda={self.london_lambda:.3f}, z0={self.z0:.3f})"
         )
 
 
@@ -38,9 +38,7 @@ class Polygon(object):
         self.points = np.asarray(points)
 
         if self.points.ndim != 2 or self.points.shape[-1] != 2:
-            raise ValueError(
-                "Expected shape (n, 2), but got {}.".format(self.points.shape)
-            )
+            raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
 
     def contains_points(
         self,
@@ -49,15 +47,13 @@ class Polygon(object):
         index: bool = False,
     ) -> Union[bool, np.ndarray]:
         x, y = self.points.T
-        bool_array = inpolygon(xq, yq, x, y)
+        bool_array = core.in_polygon(xq, yq, x, y)
         if index:
             return np.where(bool_array)[0]
         return bool_array
 
     def __repr__(self) -> str:
-        return 'Polygon("{}", layer="{}", points=ndarray[shape={}])'.format(
-            self.name, self.layer, self.points.shape
-        )
+        return f'Polygon("{self.name}", layer="{self.layer}", points=ndarray[shape={self.points.shape}])'
 
 
 class Device(object):
@@ -99,6 +95,7 @@ class Device(object):
         self.units = units
         self._origin = tuple(origin)
 
+        # Remove duplicate points to avoid meshing issues.
         self.points = np.unique(
             np.concatenate(
                 [film.points for film in self.films.values()]
@@ -156,8 +153,8 @@ class Device(object):
                 flux_region.points[:, 1] += dy
             self.make_mesh(n_refine=0, compute_arrays=False)
 
-    def make_mesh(self, n_refine: int = 0, compute_arrays: bool = True):
-        print("Making mesh with origin {}...".format(self.origin))
+    def make_mesh(self, n_refine: int = 0, compute_arrays: bool = True) -> None:
+        logging.info(f"Making mesh with origin {self.origin}.")
         x, y = self.points.T
         if self.mesh is None:
             triangles = None
@@ -172,9 +169,7 @@ class Device(object):
         if n_refine:
             x, y = self.mesh_points.T
             triangles = self.mesh.triangles
-            logger.info(
-                "Initial mesh: {} nodes, {} triangles".format(len(x), len(triangles))
-            )
+            logger.info(f"Initial mesh: {len(x)} points, {len(triangles)} triangles.")
             tri = mtri.Triangulation(x, y, triangles=triangles)
             refiner = mtri.UniformTriRefiner(tri)
             refined = refiner.refine_triangulation(subdiv=n_refine)
@@ -183,10 +178,12 @@ class Device(object):
                 points, refined.triangles, "cpt-fixed-point", 1e-4, 10000
             )
             self.mesh = mtri.Triangulation(points[:, 0], points[:, 1], triangles=cells)
-            msg = "Refined mesh ({} iterations): {} nodes, {} triangles"
-            logger.info(msg.format(n_refine, len(points), len(cells)))
+            logger.info(
+                f"Refined mesh ({n_refine} subdivisions): {len(points)} points, {len(cells)} triangles."
+            )
 
         if compute_arrays:
+            logger.info("Computing field-independent matrices.")
             points = self.mesh_points
             triangles = self.triangles
             self.adj = core.compute_adj(triangles)
@@ -196,7 +193,7 @@ class Device(object):
             self.Q = core.Q_matrix(self.q, self.C, self.weights)
             self.Del2 = core.laplacian(self.weights)
 
-    def plot_polygons(self, ax=None, grid=True, legend=True, **kwargs):
+    def plot_polygons(self, ax=None, grid=True, legend=True, **kwargs) -> None:
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         for name, film in self.films.items():
@@ -210,7 +207,7 @@ class Device(object):
         if legend:
             ax.legend(loc="best")
 
-    def plot_mesh(self, ax=None, triangles=True, vertices=False, grid=True):
+    def plot_mesh(self, ax=None, triangles=True, vertices=False, grid=True) -> None:
         x, y = self.mesh_points.T
         if ax is None:
             fig, ax = plt.subplots(1, 1)
@@ -221,36 +218,36 @@ class Device(object):
         ax.set_aspect("equal")
         ax.grid(grid)
 
-    @classmethod
-    def from_json(cls, fname):
-        """Create a Device from json metadata, i.e. output from Device.to_json()."""
-        with open(fname, "r") as f:
-            meta = json.load(f, object_hook=json_numpy_obj_hook)
-        args = [meta[k] for k in cls.args]
-        kwargs = {k: meta[k] for k in cls.kwargs}
-        return cls(*args, **kwargs)
-
     @property
-    def metadata(self):
+    def metadata(self) -> Dict:
         metadata = {attr: getattr(self, attr) for attr in self.args + self.kwargs}
         metadata["points"] = len(self.mesh_points)
         metadata["triangles"] = len(self.triangles)
         return metadata
 
-    def to_json(self, fname=None):
-        if fname is None:
-            path = PathMaker(directory="layouts").dir
-            fname = os.path.join(path, self.name)
-        if not fname.endswith(".json"):
-            fname += ".json"
-        with open(fname, "w") as f:
-            json.dump(self.metadata, f, indent=4, encoder=NumpyJSONEncoder)
+    # @classmethod
+    # def from_json(cls, fname):
+    #     """Create a Device from json metadata, i.e. output from Device.to_json()."""
+    #     with open(fname, "r") as f:
+    #         meta = json.load(f, object_hook=json_numpy_obj_hook)
+    #     args = [meta[k] for k in cls.args]
+    #     kwargs = {k: meta[k] for k in cls.kwargs}
+    #     return cls(*args, **kwargs)
 
-    def save_mesh(self, fname=None):
-        import meshio
+    # def to_json(self, fname=None):
+    #     if fname is None:
+    #         path = PathMaker(directory="layouts").dir
+    #         fname = os.path.join(path, self.name)
+    #     if not fname.endswith(".json"):
+    #         fname += ".json"
+    #     with open(fname, "w") as f:
+    #         json.dump(self.metadata, f, indent=4, encoder=NumpyJSONEncoder)
 
-        if fname is None:
-            path = PathMaker(directory="mesh").dir
-            fname = os.path.join(path, self.name) + ".msh"
-        mesh = meshio.Mesh(self.mesh_points, {"triangle": self.triangles})
-        meshio.write(fname, mesh)
+    # def save_mesh(self, fname=None):
+    #     import meshio
+
+    #     if fname is None:
+    #         path = PathMaker(directory="mesh").dir
+    #         fname = os.path.join(path, self.name) + ".msh"
+    #     mesh = meshio.Mesh(self.mesh_points, {"triangle": self.triangles})
+    #     meshio.write(fname, mesh)
