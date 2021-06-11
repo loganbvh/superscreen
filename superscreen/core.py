@@ -1,7 +1,7 @@
 import logging
 from re import L
 import warnings
-from typing import Type, Union, Callable, Optional, Dict, Tuple
+from typing import Union, Callable, Optional, Dict, Tuple
 
 import numpy as np
 import scipy.linalg as la
@@ -90,6 +90,7 @@ class BrandtSolution(object):
 
 
 def brandt_layer(
+    *,
     device: Device,
     layer: str,
     applied_field: Callable,
@@ -149,6 +150,7 @@ def brandt_layer(
 
 
 def brandt_layers(
+    *,
     device: Device,
     applied_field: Callable,
     coupled: Optional[bool] = True,
@@ -166,11 +168,14 @@ def brandt_layers(
 
     for name, layer in device.layers.items():
         logging.info(f"Calculating {name} response to applied field.")
-        Hz_func = lambda x, y: applied_field(x, y, layer.z0)
+
+        def layer_field(x, y):
+            return applied_field(x, y, layer.z0)
+
         g, total_field, response_field = brandt_layer(
-            device,
-            name,
-            Hz_func,
+            device=device,
+            layer=name,
+            applied_field=layer_field,
             circulating_currents=circulating_currents,
             check_inversion=check_inversion,
         )
@@ -211,11 +216,14 @@ def brandt_layers(
                 f"Calculating {name} response to applied field and "
                 "response field from other layers."
             )
-            Hz_func = lambda x, y: applied_field(x, y, layer.z0) + other_responses[name]
+
+            def layer_field(x, y):
+                return applied_field(x, y, layer.z0) + other_responses[name]
+
             g, total_field, response_field = brandt_layer(
-                device,
-                name,
-                Hz_func,
+                device=device,
+                layer=name,
+                applied_field=layer_field,
                 circulating_currents=circulating_currents,
                 check_inversion=check_inversion,
             )
