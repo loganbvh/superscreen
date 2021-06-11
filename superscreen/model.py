@@ -1,152 +1,3 @@
-import warnings
-from typing import Callable, Optional, Dict, Tuple
-
-import numpy as np
-import scipy.linalg as la
-import matplotlib.tri as mtri
-
-from .device import Device
-from . import core
-
-
-class BrandtSolution(object):
-    def __init__(
-        self,
-        *,
-        device: Device,
-        streams: Dict[str, np.ndarray],
-        fields: Dict[str, np.ndarray],
-        response_fields: Dict[str, np.ndarray],
-        Hz_func: Callable,
-        circulating_currents: Optional[Dict[str, float]] = None,
-    ):
-        self.device = device
-        self.streams = streams
-        self.fields = fields
-        self.response_fields = response_fields
-        self.Hz_func = Hz_func
-        self.circulating_currents = circulating_currents
-
-
-def brandt_layer(device, layer, Hz_func, circulating_currents=None):
-    
-    circulating_currents = circulating_currents or {}
-    
-    points = device.mesh_points
-
-    if device.adj is None:
-        device.make_mesh(compute_arrays=True)
-
-    weights = device.weights
-    Q = device.Q
-    Del2 = device.Del2
-    x, y = points.T
-    
-    films = [name for name, film in device.films.items() if film.layer == layer]
-    Lambda = device.layers[layer].Lambda
-    
-    Hz_applied = Hz_func(points[:, 0], points[:, 1])
-    Ha_eff = np.zeros_like(Hz_applied)
-        
-    g = np.zeros(len(x))
-    for name in films:
-        film = device.films[name]
-        # Form system A @ gf = h (film only)
-        ix1d = film.contains_points(x, y, index=True)
-        ix2d = np.ix_(ix1d, ix1d)
-        A = Q[ix2d] * weights[ix2d] - Lambda * Del2[ix2d]
-        h = Hz_applied[ix1d] + Ha_eff[ix1d]
-        # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
-        # slightly faster than gf = la.solve(A, h),
-        # and much faster than gf = la.pinv(A) @ h.
-        lu, piv = la.lu_factor(A)
-        gf = la.lu_solve((lu, piv), h)
-        g[ix1d] = gf
-        # Validate solution
-        errors = (A @ gf) - h
-        if not np.allclose(errors, 0):
-            warnings.warn(
-                "Unable to solve for stream matrix, maximum error {:.3e}".format(
-                    np.abs(errors).max())
-            )
-            
-    for name, current in circulating_currents.items():
-        hole = device.holes[name]
-        ix1d = hole.contains_points(x, y, index=True)
-        g[ix1d] = current  # g[hole] = I_circ
-
-    response_field = -(Q * weights) @ g
-    total_field = Hz_applied + response_field
-
-    return g, total_field, response_field
-
-
-def brandt_layers(device, Hz_func, coupled=True, circulating_currents=None):
-
-    points = device.mesh_points
-    x, y = points.T
-    triangles = device.triangles
-
-    streams = {}
-    fields = {}
-    response_fields = {}
-
-    for name, layer in device.layers.items():
-        print("Solving layer", name)
-        Hz0_func = lambda x, y: Hz_func(x, y, layer.z0)
-        g, total_field, response_field = brandt_layer(
-            device,
-            name,
-            Hz0_func,
-            circulating_currents=circulating_currents
-        )
-        streams[name] = g
-        fields[name] = total_field
-        response_fields[name] = response_field
-        
-    if coupled:
-        xt, yt = core.centroids(points, triangles).T
-        # Calculcate the response fields at each layer from every other layer.
-        other_responses = {}
-        for name, layer in device.layers.items():
-            print("Calculcating response field at {} from".format(name))
-            Hzr = np.zeros(points.shape[0])
-            for other_name, other_layer in device.layers.items():
-                if name == other_name:
-                    continue
-                print("\t" + other_name)
-                h_interp = mtri.LinearTriInterpolator(device.mesh, response_fields[other_name])
-                h = h_interp(xt, yt)
-                areas = core.area(points, triangles)
-                dz = layer.z0 - other_layer.z0
-                for i in range(points.shape[0]):
-                    rho =  np.sqrt((x[i] - xt) ** 2 + (y[i] - yt) ** 2)
-                    q = (2 * dz ** 2 - rho ** 2) / (
-                        4 * np.pi * (dz ** 2 + rho ** 2) ** (5 / 2)
-                    )
-                    Hzr[i] += np.sign(dz) * np.sum(areas * h * q)
-            other_responses[name] = Hzr
-
-        streams = {}
-        fields = {}
-        response_fields = {}
-        # Solve again with the response fields from all layers
-        for name, layer in device.layers.items():
-            print("Solving layer again", name)
-            Hz0_func = lambda x, y: Hz_func(x, y, layer.z0) + other_responses[name]
-            g, total_field, response_field = brandt_layer(
-                device,
-                name,
-                Hz0_func,
-                circulating_currents=circulating_currents
-            )
-            streams[name] = g
-            fields[name] = total_field
-            response_fields[name] = response_field
-
-    return streams, fields, response_fields
-
-
 # class BrandtModel(object):
 #     def __init__(self, device_layout, mesh_refinements=3, progbar=True):
 #         """Base class for multi-layer supercondcting film screening simulations following Brandt.
@@ -342,7 +193,7 @@ def brandt_layers(device, Hz_func, coupled=True, circulating_currents=None):
 #         """
 #         x, y = self.points.T
 #         Kij = np.zeros((len(x), len(x)))
-#         film = self.device.inpolygon(polygon, x, y)
+#         film = self.device.in_polygon(polygon, x, y)
 #         london = self.device.lambdas[self.device.layers[polygon]]
 #         d = self.device.thicknesses[self.device.layers[polygon]]
 #         Pearl = london ** 2 / d
@@ -424,7 +275,7 @@ def brandt_layers(device, Hz_func, coupled=True, circulating_currents=None):
 #         xt, yt = centroids(points, sim).T
 #         for name, (poly, layer) in self.device.flux_regions.items():
 #             x, y = poly.T
-#             in_points = inpolygon(xt, yt, x, y)
+#             in_points = in_polygon(xt, yt, x, y)
 #             ix = np.ix_(in_points)
 #             # unscreened flux
 #             Hz = pts2sim(sim, self.applied_Hz[layer])
