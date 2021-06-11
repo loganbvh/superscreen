@@ -1,7 +1,6 @@
 import logging
-from re import L
 import warnings
-from typing import Union, Callable, Optional, Dict, Tuple
+from typing import Union, Callable, Optional, Dict, Tuple, List
 
 import numpy as np
 import scipy.linalg as la
@@ -36,20 +35,26 @@ class BrandtSolution(object):
 
     def grid_data(
         self,
-        dataset: Optional[str] = "fields",
-        grid_shape=Union[int, Tuple[int, int]],
+        dataset: str,
+        grid_shape: Union[int, Tuple[int, int]],
+        layers: Optional[Union[str, List[str]]] = None,
         method: Optional[str] = "cubic",
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+
         valid_data = ("streams", "fields", "response_fields")
         if dataset not in valid_data:
             raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
         datasets = getattr(self, dataset)
 
-        points = self.device.mesh_points
-        x, y = points.T
-        xmin, xmax = x.min(), x.max()
-        ymin, ymax = y.min(), y.max()
+        if isinstance(layers, str):
+            layers = [layers]
+        if layers is None:
+            layers = list(self.device.layers)
+        else:
+            for layer in layers:
+                if layer not in self.device.layers:
+                    raise ValueError(f"Unknown layer, {layer}.")
 
         if isinstance(grid_shape, int):
             grid_shape = (grid_shape, grid_shape)
@@ -58,27 +63,38 @@ class BrandtSolution(object):
                 f"Expected a tuple of length 2, but got {grid_shape} ({type(grid_shape)})."
             )
 
+        points = self.device.mesh_points
+        x, y = points.T
+        xmin, xmax = x.min(), x.max()
+        ymin, ymax = y.min(), y.max()
+
         xs = np.linspace(xmin, xmax, grid_shape[1])
         ys = np.linspace(ymin, ymax, grid_shape[0])
 
         xgrid, ygrid = np.meshgrid(xs, ys)
         zgrids = {}
         for name, array in datasets.items():
-            zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
-            zgrids[name] = zgrid
+            if name in layers:
+                zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
+                zgrids[name] = zgrid
 
         return xgrid, ygrid, zgrids
 
     def current_density(
         self,
+        layers: Optional[Union[str, List[str]]] = None,
         grid_shape=Union[int, Tuple[int, int]],
         method: Optional[str] = "cubic",
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
-        xgrid, ygrid, streams = self.grid_data(
-            dataset="streams", grid_shape=grid_shape, method=method, **kwargs
-        )
 
+        xgrid, ygrid, streams = self.grid_data(
+            dataset="streams",
+            layers=layers,
+            grid_shape=grid_shape,
+            method=method,
+            **kwargs,
+        )
         Js = {}
         for name, g in streams.items():
             # J = [dg/dy, -dg/dx]
@@ -87,6 +103,47 @@ class BrandtSolution(object):
             Js[name] = np.array([gy, -gx])
 
         return xgrid, ygrid, Js
+
+    def polygon_flux(
+        self, polygons: Optional[Union[str, List[str]]] = None
+    ) -> Dict[str, float]:
+        films = list(self.device.films)
+        holes = list(self.device.holes)
+        flux_regions = list(self.device.flux_regions)
+        all_polygons = films + holes + flux_regions
+
+        if isinstance(polygons, str):
+            polygons = [polygons]
+        if polygons is None:
+            polygons = all_polygons
+        else:
+            for poly in polygons:
+                if poly not in all_polygons:
+                    raise ValueError(f"Unknown polygon, {poly}.")
+
+        points = self.device.points
+        triangles = self.device.triangles
+        x, y = points.T
+
+        areas = area(points, triangles)
+        xt, yt = centroids(points, triangles)
+
+        flux = {}
+        for name in polygons:
+            if name in films:
+                poly = self.device.films[name]
+            elif name in holes:
+                poly = self.device.holes[name]
+            else:
+                poly = self.device.flux_regions[name]
+            h_interp = mtri.LinearTriInterpolator(
+                self.device.mesh, self.fields[poly.layer]
+            )
+            field = h_interp(xt, yt)
+            ix = poly.contains_points(xt, yt, index=True)
+            flux[name] = np.sum(field[ix] * areas[ix])
+
+        return flux
 
 
 def brandt_layer(
