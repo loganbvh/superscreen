@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
 from scipy.interpolate import griddata
 from matplotlib.path import Path
-import matplotlib.tri as mtri
+from matplotlib.tri import LinearTriInterpolator
 
 from .device import Device
 
@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 class BrandtSolution(object):
+    """A container for the calculated stream functions and fields,
+    with some convenient data processing methods.
+    """
+
     def __init__(
         self,
         *,
@@ -41,7 +45,21 @@ class BrandtSolution(object):
         method: Optional[str] = "cubic",
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+        """Interpolates results from the triangular mesh to a rectangular grid.
 
+        Keyword arguments are passed to scipy.interpolate.griddata().
+
+        Args:
+            dataset: Name of the dataset to interpolate
+                (one of "streams", "fields", or "response_fields").
+            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
+                then the grid will be square, shape = (N, N).
+            layers: Name(s) of the layer(s) for which to interpolate results.
+            method: Interpolation method to use (see scipy.interpolate.griddata). Default: "cubic".
+
+        Returns:
+            (x grid, y grid, dict of interpolated data for each layer)
+        """
         valid_data = ("streams", "fields", "response_fields")
         if dataset not in valid_data:
             raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
@@ -74,7 +92,6 @@ class BrandtSolution(object):
             if name in layers:
                 zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
                 zgrids[name] = zgrid
-
         return xgrid, ygrid, zgrids
 
     def current_density(
@@ -84,7 +101,19 @@ class BrandtSolution(object):
         method: Optional[str] = "cubic",
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+        """Computes the current density ``J = [dg/dy, -dg/dx]`` on a rectangular grid.
 
+        Keyword arguments are passed to scipy.interpolate.griddata().
+
+        Args:
+            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
+                then the grid will be square, shape = (N, N).
+            layers: Name(s) of the layer(s) for which to interpolate current density.
+            method: Interpolation method to use (see scipy.interpolate.griddata). Default: "cubic".
+
+        Returns:
+            (x grid, y grid, dict of interpolated current density for each layer)
+        """
         xgrid, ygrid, streams = self.grid_data(
             dataset="streams",
             layers=layers,
@@ -96,14 +125,23 @@ class BrandtSolution(object):
         for name, g in streams.items():
             # J = [dg/dy, -dg/dx]
             # y is axis 0 (rows), x is axis 1 (columns)
-            gy, gx = np.gradient(g, ygrid, xgrid)
+            gy, gx = np.gradient(g, ygrid[:, 0], xgrid[0, :])
             Js[name] = np.array([gy, -gx])
-
         return xgrid, ygrid, Js
 
     def polygon_flux(
         self, polygons: Optional[Union[str, List[str]]] = None
     ) -> Dict[str, float]:
+        """Compute the flux through all polygons (films, holes, and flux regions)
+            by integrating the calculated fields.
+
+        Args:
+            polygons: Name(s) of the polygon(s) for which to compute the flux.
+                Default: All polygons.
+
+        Returns:
+            dict of flux for each polygon
+        """
         films = list(self.device.films)
         holes = list(self.device.holes)
         flux_regions = list(self.device.flux_regions)
@@ -118,12 +156,11 @@ class BrandtSolution(object):
                 if poly not in all_polygons:
                     raise ValueError(f"Unknown polygon, {poly}.")
 
-        points = self.device.points
+        points = self.device.mesh_points
         triangles = self.device.triangles
-        x, y = points.T
 
         areas = area(points, triangles)
-        xt, yt = centroids(points, triangles)
+        xt, yt = centroids(points, triangles).T
 
         flux = {}
         for name in polygons:
@@ -133,13 +170,10 @@ class BrandtSolution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.flux_regions[name]
-            h_interp = mtri.LinearTriInterpolator(
-                self.device.mesh, self.fields[poly.layer]
-            )
+            h_interp = LinearTriInterpolator(self.device.mesh, self.fields[poly.layer])
             field = h_interp(xt, yt)
             ix = poly.contains_points(xt, yt, index=True)
             flux[name] = np.sum(field[ix] * areas[ix])
-
         return flux
 
 
@@ -151,10 +185,20 @@ def brandt_layer(
     circulating_currents: Optional[Dict[str, float]] = None,
     check_inversion: Optional[bool] = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Computes the stream function and magnetic field within a single layer of a Device.
 
+    Args:
+        device: The Device to simulate.
+        layer: Name of the layer to analyze.
+        applied_field: A callable that computes the applied magnetic field
+            as a function of x, y coordinates.
+        circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
+        check_inversion: Whether to verify the accuracy of the matrix inversion. Default: True.
+
+    Returns:
+        stream function, total field, film response field
+    """
     circulating_currents = circulating_currents or {}
-
-    points = device.mesh_points
 
     if device.adj is None:
         device.make_mesh(compute_arrays=True)
@@ -162,19 +206,39 @@ def brandt_layer(
     weights = device.weights
     Q = device.Q
     Del2 = device.Del2
+    points = device.mesh_points
     x, y = points.T
 
-    films = [name for name, film in device.films.items() if film.layer == layer]
+    film_names = [name for name, film in device.films.items() if film.layer == layer]
     Lambda = device.layers[layer].Lambda
 
     Hz_applied = applied_field(points[:, 0], points[:, 1])
-    Ha_eff = np.zeros_like(Hz_applied)
 
-    g = np.zeros(len(x))
-    for name in films:
+    hole_indices = {}
+    in_hole = np.zeros(len(x), dtype=int)
+    for name, hole in device.holes.items():
+        ix = hole.contains_points(x, y)
+        hole_indices[name] = np.where(ix)[0]
+        in_hole = np.logical_or(in_hole, ix)
+
+    g = np.zeros_like(x)
+    Ha_eff = np.zeros_like(Hz_applied)
+    for name, current in circulating_currents.items():
+        # Set the stream function in all holes
+        hole = hole_indices[name]
+        g[hole] = current  # g[hole] = I_circ
+
+        # Calculcate the effective field associated with the circulating currents:
+        A = Q[:, hole] * weights[:, hole] - Lambda * Del2[:, hole]
+        Ha_eff += -(A @ g[hole])
+
+    # Compute the film responses to the applied field
+    for name in film_names:
         film = device.films[name]
-        # Form system A @ gf = h (film only)
-        ix1d = film.contains_points(x, y, index=True)
+        # Form the linear system, A @ gf = h (film only)
+        # We want all points that are in a film and not in a hole.
+        ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
+        ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
         A = Q[ix2d] * weights[ix2d] - Lambda * Del2[ix2d]
         h = Hz_applied[ix1d] + Ha_eff[ix1d]
@@ -192,11 +256,6 @@ def brandt_layer(
                     f"Unable to solve for stream matrix, maximum error {np.abs(errors).max():.3e}."
                 )
 
-    for name, current in circulating_currents.items():
-        hole = device.holes[name]
-        ix1d = hole.contains_points(x, y, index=True)
-        g[ix1d] = current  # g[hole] = I_circ
-
     response_field = -(Q * weights) @ g
     total_field = Hz_applied + response_field
 
@@ -207,21 +266,58 @@ def brandt_layers(
     *,
     device: Device,
     applied_field: Callable,
-    coupled: Optional[bool] = True,
     circulating_currents: Optional[Dict[str, float]] = None,
     check_inversion: Optional[bool] = True,
-) -> BrandtSolution:
+    coupled: Optional[bool] = True,
+    iterations: Optional[int] = 1,
+    vectorize=False,
+) -> List[BrandtSolution]:
+    """Computes the stream functions and magnetic fields for all layers in a Device.
 
+    The simulation strategy is:
+
+    1. Compute the stream functions and fields for each layer given
+    only the applied field.
+
+    2. If coupled is True and there are multiple layers, then for each layer,
+    calculcate the response field from all other layers and recompute the
+    stream function and fields based on the sum of the applied field
+    and the responses from all other layers.
+
+    3. If iterations > 1, then repeat step 2 (iterations - 1) times.
+    The solution should converge in only a few iterations.
+
+
+    Args:
+        device: The Device to simulate.
+        applied_field: A callable that computes the applied magnetic field
+            as a function of x, y, z coordinates.
+        circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
+        check_inversion: Whether to verify the accuracy of the matrix inversion.
+            Default: True.
+        coupled: Whether to account for the interactions between different layers
+            (e.g. shielding). Default: True.
+        iterations: Number of times to compute the interactions between layers
+            (iterations is ignored if coupled is False). Default: 1.
+
+    Returns:
+        A list of BrandtSolutions of length 1 if coupled is False,
+        or length (iterations + 1) if coupled is True.
+    """
     points = device.mesh_points
     x, y = points.T
     triangles = device.triangles
+
+    solutions = []
 
     streams = {}
     fields = {}
     response_fields = {}
 
+    # Compute the stream functions and fields for each layer
+    # given only the applied field.
     for name, layer in device.layers.items():
-        logging.info(f"Calculating {name} response to applied field.")
+        logger.info(f"Calculating {name} response to applied field.")
 
         def layer_field(x, y):
             return applied_field(x, y, layer.z0)
@@ -237,54 +333,6 @@ def brandt_layers(
         fields[name] = total_field
         response_fields[name] = response_field
 
-    if coupled:
-        xt, yt = centroids(points, triangles).T
-        # Calculcate the response fields at each layer from every other layer.
-        other_responses = {}
-        for name, layer in device.layers.items():
-            Hzr = np.zeros(points.shape[0])
-            for other_name, other_layer in device.layers.items():
-                if name == other_name:
-                    continue
-                logger.info(f"Calculcating response field at {name} from {other_name}.")
-                h_interp = mtri.LinearTriInterpolator(
-                    device.mesh, response_fields[other_name]
-                )
-                h = h_interp(xt, yt)
-                areas = area(points, triangles)
-                dz = layer.z0 - other_layer.z0
-                for i in range(points.shape[0]):
-                    rho = np.sqrt((x[i] - xt) ** 2 + (y[i] - yt) ** 2)
-                    q = (2 * dz ** 2 - rho ** 2) / (
-                        4 * np.pi * (dz ** 2 + rho ** 2) ** (5 / 2)
-                    )
-                    Hzr[i] += np.sign(dz) * np.sum(areas * h * q)
-            other_responses[name] = Hzr
-
-        streams = {}
-        fields = {}
-        response_fields = {}
-        # Solve again with the response fields from all layers
-        for name, layer in device.layers.items():
-            logging.info(
-                f"Calculating {name} response to applied field and "
-                "response field from other layers."
-            )
-
-            def layer_field(x, y):
-                return applied_field(x, y, layer.z0) + other_responses[name]
-
-            g, total_field, response_field = brandt_layer(
-                device=device,
-                layer=name,
-                applied_field=layer_field,
-                circulating_currents=circulating_currents,
-                check_inversion=check_inversion,
-            )
-            streams[name] = g
-            fields[name] = total_field
-            response_fields[name] = response_field
-
     solution = BrandtSolution(
         device=device,
         streams=streams,
@@ -293,8 +341,87 @@ def brandt_layers(
         applied_field=applied_field,
         circulating_currents=circulating_currents,
     )
+    solutions.append(solution)
 
-    return solution
+    if coupled:
+        if iterations < 1:
+            raise ValueError(f"Iterations ({iterations}) cannot be less than 1.")
+
+        tri_points = centroids(points, triangles)
+        areas = area(points, triangles)
+        if vectorize:
+            # Compute ||(x, y) - (xt, yt)||^2
+            rho2 = cdist(points, tri_points, metric="sqeuclidean")
+        else:
+            xt, yt = tri_points.T
+
+        for i in range(iterations):
+            # Calculcate the response fields at each layer from every other layer
+            other_responses = {}
+            for name, layer in device.layers.items():
+                Hzr = np.zeros_like(x)
+                for other_name, other_layer in device.layers.items():
+                    if name == other_name:
+                        continue
+                    logger.info(
+                        f"Calculcating response field at {name} "
+                        f"from {other_name} ({i+1}/{iterations})."
+                    )
+                    dz = other_layer.z0 - layer.z0
+                    # Interpolate other_layer's stream function to the triangle coordinates
+                    # so that we can do a surface integral using triangle areas.
+                    g_interp = LinearTriInterpolator(device.mesh, streams[other_name])
+                    g = g_interp(*tri_points.T)
+                    if vectorize:
+                        q = (2 * dz ** 2 - rho2) / (
+                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                        )
+                        Hzr += np.sign(dz) * np.sum(areas * q * g, axis=1)
+                    else:
+                        # TODO: vectorize this loop using scipy.spatial.distance.cdist
+                        for i in range(points.shape[0]):
+                            rho2 = (x[i] - xt) ** 2 + (y[i] - yt) ** 2
+                            q = (2 * dz ** 2 - rho2) / (
+                                4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                            )
+                            Hzr[i] += np.sign(dz) * np.sum(areas * g * q)
+                other_responses[name] = Hzr
+
+            # Solve again with the response fields from all layers
+            streams = {}
+            fields = {}
+            response_fields = {}
+            for name, layer in device.layers.items():
+                logger.info(
+                    f"Calculating {name} response to applied field and "
+                    f"response field from other layers ({i+1}/{iterations})."
+                )
+
+                def layer_field(x, y):
+                    return applied_field(x, y, layer.z0) + other_responses[name]
+
+                g, total_field, response_field = brandt_layer(
+                    device=device,
+                    layer=name,
+                    applied_field=layer_field,
+                    circulating_currents=circulating_currents,
+                    check_inversion=check_inversion,
+                )
+                streams[name] = g
+                fields[name] = total_field
+                response_fields[name] = response_field
+
+            solution = BrandtSolution(
+                device=device,
+                streams=streams,
+                fields=fields,
+                response_fields=response_fields,
+                applied_field=applied_field,
+                circulating_currents=circulating_currents,
+            )
+            solutions.append(solution)
+
+    return solutions
 
 
 def in_polygon(
@@ -302,7 +429,7 @@ def in_polygon(
     yq: Union[float, np.ndarray],
     xp: Union[float, np.ndarray],
     yp: Union[float, np.ndarray],
-) -> Union[bool, np.ndarray[bool]]:
+) -> Union[bool, np.ndarray]:
     """Checks whether query points (xq, yq) lie in the polyon
     defined by points (xp, yp).
     """
@@ -327,6 +454,7 @@ def centroids(points: np.ndarray, simplices: np.ndarray) -> np.ndarray:
 
 
 def compute_adj(triangles: np.ndarray) -> np.ndarray:
+    """Computes the adjacency matrix for a given set of triangles."""
     A = np.concatenate(
         [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
     )
@@ -389,7 +517,8 @@ def uniform_weights(adj: np.ndarray) -> np.ndarray:
 
 def q_matrix(points: np.ndarray) -> np.ndarray:
     """Computes the denominator matrix, q."""
-    distances = cdist(points, points)  # Euclidian distance between points
+    # Euclidian distance between points
+    distances = cdist(points, points, metric="euclidean")
     q = np.zeros_like(distances)
     # Diagonals of distances are zero by definition, so q[i,i] will diverge
     nz = np.nonzero(distances)
