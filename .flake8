@@ -1,0 +1,6 @@
+[flake8]
+max-line-length = 88
+select = C,E,F,W,B,B950
+extend-ignore = E203, E501, W503
+    # Ignore unused imports in __init__ files.
+    *superscreen/__init__.py:F401
