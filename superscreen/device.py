@@ -8,12 +8,20 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import optimesh
 
-from . import core
-
 logger = logging.getLogger(__name__)
 
 
 class Layer(object):
+    """A single layer of a superconducting device.
+
+    Args:
+        name: Name of the layer.
+        thickness: Thickness of the superconducting film(s) located in the layer.
+        london_lambda: London penetration depth of the superconducting film(s)
+            located in the layer.
+        z0: Vertical location of the layer.
+    """
+
     def __init__(self, name: str, *, thickness: float, london_lambda: float, z0: float):
         self.name = name
         self.thickness = thickness
@@ -22,6 +30,7 @@ class Layer(object):
 
     @property
     def Lambda(self) -> float:
+        """Effective penetration depth of the superconductor."""
         return self.london_lambda ** 2 / self.thickness
 
     def __repr__(self) -> str:
@@ -32,6 +41,15 @@ class Layer(object):
 
 
 class Polygon(object):
+    """A polygonal region located in a Layer.
+
+    Args:
+        name: Name of the polygon.
+        layer: Name of the layer in which the polygon is located.
+        points: An array of shape (n, 2) specifying the x, y coordinates of
+            the polyon's vertices.
+    """
+
     def __init__(self, name: str, *, layer: str, points: np.ndarray):
         self.name = name
         self.layer = layer
@@ -46,8 +64,25 @@ class Polygon(object):
         yq: Union[float, np.ndarray],
         index: bool = False,
     ) -> Union[bool, np.ndarray]:
+        """Determines whether points xq, yq lie within the polygon.
+
+        Args:
+            xq: x coordinate(s) of query point(s).
+            yq: y coordinate(s) of query point(s).
+            index: If True, then return the indices of the points in [xq, yq]
+                that lie within the polygon. Otherwise, return a boolean array
+                of the same shape as xq and yq. Default: False.
+
+        Returns:
+            If index is True, returns the indices of the points in [xq, yq]
+            that lie within the polygon. Otherwise, returns a boolean array
+            of the same shape as xq and yq indicating whether each point
+            lies within the polygon.
+        """
+        from .core import in_polygon
+
         x, y = self.points.T
-        bool_array = core.in_polygon(xq, yq, x, y)
+        bool_array = in_polygon(xq, yq, x, y)
         if index:
             return np.where(bool_array)[0]
         return bool_array
@@ -57,20 +92,28 @@ class Polygon(object):
 
 
 class Device(object):
-    """Object representing a device composed of multiple layers of thin film superconductor.
-    All distances/lengths should be in the units specified by self.units.
+    """An object representing a device composed of multiple layers of
+    thin film superconductor.
+
+    Args:
+        name: Name of the device.
+        layers: A dict of named Layers.
+        films: A dict of named Polygons representing regions of superconductor.
+        holes: A dict of named Polygons representing holes in superconducting films.
+            Default: {}.
+        flux_regions: A dict of named Polygons representing regions for which you
+            want to calculcate fluxes. Default: {}.
+        units: Distance units for the coordinate system. Default: "um".
+        origin: Location of the origina of the coordinate system. Default: (0, 0, 0).
     """
 
-    args = [
-        "name",
-    ]
+    args = ["name"]
 
     kwargs = [
         "layers",
         "films",
         "holes",
         "flux_regions",
-        "mesh_refinements",
         "units",
         "origin",
     ]
@@ -83,7 +126,6 @@ class Device(object):
         films: Dict[str, Polygon],
         holes: Optional[Dict[str, Polygon]] = None,
         flux_regions: Optional[Dict[str, Polygon]] = None,
-        mesh_refinements: int = 0,
         units: str = "um",
         origin: Tuple[float, float, float] = (0, 0, 0),
     ):
@@ -95,15 +137,14 @@ class Device(object):
         self.units = units
         self._origin = tuple(origin)
 
-        # Remove duplicate points to avoid meshing issues.
-        self.points = np.unique(
-            np.concatenate(
-                [film.points for film in self.films.values()]
-                + [hole.points for hole in self.holes.values()]
-                + [flux_region.points for flux_region in self.flux_regions.values()]
-            ),
-            axis=0,
+        # Remove duplicate points to avoid meshing issues
+        self.points = np.concatenate(
+            [film.points for film in self.films.values()]
+            + [hole.points for hole in self.holes.values()]
+            + [flux_region.points for flux_region in self.flux_regions.values()]
         )
+
+        self.points = np.unique(self.points, axis=0)
 
         self.adj = None
         self.weights = None
@@ -113,22 +154,25 @@ class Device(object):
         self.Del2 = None
 
         self.mesh = None
-        self.make_mesh(n_refine=mesh_refinements)
+        self.make_mesh()
 
     @property
     def mesh_points(self) -> np.ndarray:
+        """Array of mesh points (vertices). Shape: (n, 2)."""
         return np.stack([self.mesh.x, self.mesh.y], axis=1)
 
     @property
     def triangles(self) -> np.ndarray:
+        """Array of mesh triangles. Shape: (m, 3)."""
         return self.mesh.triangles
 
     @property
     def origin(self) -> Tuple[float, float, float]:
+        """Location of the origin of the coordinate system."""
         return self._origin
 
     @origin.setter
-    def origin(self, new_origin: Tuple[float, float, float]):
+    def origin(self, new_origin: Tuple[float, float, float]) -> None:
         xp, yp, zp = new_origin
         self._update_origin(xp, yp, zp)
 
@@ -154,7 +198,14 @@ class Device(object):
             self.make_mesh(n_refine=0, compute_arrays=False)
 
     def make_mesh(self, n_refine: int = 0, compute_arrays: bool = True) -> None:
-        logging.info(f"Making mesh with origin {self.origin}.")
+        """Computes or refines the triangular mesh.
+
+        Args:
+            n_refine: Number of times to refine the mesh. Default: 0.
+            compute_arrays: Whether to compute the field-indepentsn arrays
+                needed for Brandt simulations. Default: True.
+        """
+        logger.info(f"Making mesh with origin {self.origin}.")
         x, y = self.points.T
         if self.mesh is None:
             triangles = None
@@ -183,6 +234,8 @@ class Device(object):
             )
 
         if compute_arrays:
+            from . import core
+
             logger.info("Computing field-independent matrices.")
             points = self.mesh_points
             triangles = self.triangles
@@ -193,7 +246,26 @@ class Device(object):
             self.Q = core.Q_matrix(self.q, self.C, self.weights)
             self.Del2 = core.laplacian(self.weights)
 
-    def plot_polygons(self, ax=None, grid=True, legend=True, **kwargs) -> None:
+    def plot_polygons(
+        self,
+        ax: Optional[plt.Axes] = None,
+        grid: Optional[bool] = False,
+        legend: Optional[bool] = True,
+        **kwargs,
+    ) -> plt.Axes:
+        """Plot all of the device's polygons.
+
+        Keyword arguments are passed to ax.plot().
+
+        Args:
+            ax: matplotlib axis on which to plot. If None, a new figure is created.
+                Default: None.
+            grid: Whether to add grid lines. Default: False.
+            legend: Whether to add a legend. Default: True.
+
+        Returns:
+            The matplotlib axis.
+        """
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         for name, film in self.films.items():
@@ -206,23 +278,52 @@ class Device(object):
         ax.grid(grid)
         if legend:
             ax.legend(loc="best")
+        return ax
 
-    def plot_mesh(self, ax=None, triangles=True, vertices=False, grid=True) -> None:
+    def plot_mesh(
+        self,
+        ax: Optional[plt.Axes] = None,
+        edges: Optional[bool] = True,
+        vertices: Optional[bool] = False,
+        grid: Optional[bool] = True,
+        **kwargs,
+    ) -> plt.Axes:
+        """Plots the device's mesh.
+
+        Keyword arguments are passed to ax.triplot() and ignored if edges is False.
+
+        Args:
+            ax: matplotlib axis on which to plot. If None, a new figure is created.
+                Default: None.
+            edges: Whether to plot the triangle edges. Default: True.
+            vertices: Whether to plot the triangle vertices: Default: False.
+            grid: Whether to add grid lines. Default: False.
+
+        Returns:
+            The matplotlib axis.
+        """
         x, y = self.mesh_points.T
         if ax is None:
             fig, ax = plt.subplots(1, 1)
-        if triangles:
-            ax.triplot(x, y, self.triangles, linewidth=1)
+        if edges:
+            ax.triplot(x, y, self.triangles, **kwargs)
         if vertices:
             ax.plot(x, y, "k.")
         ax.set_aspect("equal")
         ax.grid(grid)
+        return ax
 
-    @property
-    def metadata(self) -> Dict:
+    def to_dict(self, save_mesh: Optional[bool] = False) -> Dict:
+        """Returns a dict of device metadata."""
         metadata = {attr: getattr(self, attr) for attr in self.args + self.kwargs}
-        metadata["points"] = len(self.mesh_points)
-        metadata["triangles"] = len(self.triangles)
+        metadata["n_points"] = len(self.mesh_points)
+        metadata["n_triangles"] = len(self.triangles)
+        if save_mesh:
+            metadata["mesh_points"] = self.mesh_points
+            metadata["triangles"] = self.triangles
+        else:
+            metadata["mesh_points"] = {}
+            metadata["triangles"] = {}
         return metadata
 
     # @classmethod
@@ -241,7 +342,7 @@ class Device(object):
     #     if not fname.endswith(".json"):
     #         fname += ".json"
     #     with open(fname, "w") as f:
-    #         json.dump(self.metadata, f, indent=4, encoder=NumpyJSONEncoder)
+    #         json.dump(self.to_dict(), f, indent=4, encoder=NumpyJSONEncoder)
 
     # def save_mesh(self, fname=None):
     #     import meshio
@@ -251,3 +352,26 @@ class Device(object):
     #         fname = os.path.join(path, self.name) + ".msh"
     #     mesh = meshio.Mesh(self.mesh_points, {"triangle": self.triangles})
     #     meshio.write(fname, mesh)
+
+    def __repr__(self) -> str:
+        # Normal tab "\t" renders a bit too big in jupyter if you ask me.
+        indent = 4
+        t = " " * indent
+        nt = "\n" + t
+
+        def format_dict(d):
+            if not d:
+                return None
+            items = [f'{t}"{key}": {value}' for key, value in d.items()]
+            return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
+
+        args = [
+            f'"{self.name}"',
+            f"layers={format_dict(self.layers)}",
+            f"films={format_dict(self.films)}",
+            f"holes={format_dict(self.holes)}",
+            f"flux_regions={format_dict(self.flux_regions)}",
+            f'units="{self.units}"',
+            f"origin={self.origin}",
+        ]
+        return "Device(" + nt + (", " + nt).join(args) + ",\n)"
