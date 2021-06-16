@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 from scipy.spatial.distance import cdist
 from scipy.interpolate import griddata
 from matplotlib.path import Path
-from matplotlib.tri import LinearTriInterpolator
+from matplotlib.tri import Triangulation, LinearTriInterpolator
 
 from .device import Device
 
@@ -81,7 +81,7 @@ class BrandtSolution(object):
                 f"Expected a tuple of length 2, but got {grid_shape} ({type(grid_shape)})."
             )
 
-        points = self.device.mesh_points
+        points = self.device.points
         x, y = points.T
         xgrid, ygrid = np.meshgrid(
             np.linspace(x.min(), x.max(), grid_shape[1]),
@@ -156,12 +156,12 @@ class BrandtSolution(object):
                 if poly not in all_polygons:
                     raise ValueError(f"Unknown polygon, {poly}.")
 
-        points = self.device.mesh_points
+        points = self.device.points
         triangles = self.device.triangles
 
         areas = area(points, triangles)
         xt, yt = centroids(points, triangles).T
-
+        mesh = Triangulation(*points.T, triangles=triangles)
         flux = {}
         for name in polygons:
             if name in films:
@@ -170,7 +170,7 @@ class BrandtSolution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.flux_regions[name]
-            h_interp = LinearTriInterpolator(self.device.mesh, self.fields[poly.layer])
+            h_interp = LinearTriInterpolator(mesh, self.fields[poly.layer])
             field = h_interp(xt, yt)
             ix = poly.contains_points(xt, yt, index=True)
             flux[name] = np.sum(field[ix] * areas[ix])
@@ -203,10 +203,15 @@ def brandt_layer(
     if device.adj is None:
         device.make_mesh(compute_arrays=True)
 
+    if not device._mesh_is_valid:
+        raise RuntimeError(
+            "Device mesh is not valid. Run device.make_mesh() to generate the mesh."
+        )
+
     weights = device.weights
     Q = device.Q
     Del2 = device.Del2
-    points = device.mesh_points
+    points = device.points
     x, y = points.T
 
     film_names = [name for name, film in device.films.items() if film.layer == layer]
@@ -304,7 +309,7 @@ def brandt_layers(
         A list of BrandtSolutions of length 1 if coupled is False,
         or length (iterations + 1) if coupled is True.
     """
-    points = device.mesh_points
+    points = device.points
     x, y = points.T
     triangles = device.triangles
 
@@ -354,7 +359,8 @@ def brandt_layers(
             rho2 = cdist(points, tri_points, metric="sqeuclidean")
         else:
             xt, yt = tri_points.T
-
+        if iterations > 0:
+            mesh = Triangulation(*points.T, triangles=triangles)
         for i in range(iterations):
             # Calculcate the response fields at each layer from every other layer
             other_responses = {}
@@ -370,7 +376,7 @@ def brandt_layers(
                     dz = other_layer.z0 - layer.z0
                     # Interpolate other_layer's stream function to the triangle coordinates
                     # so that we can do a surface integral using triangle areas.
-                    g_interp = LinearTriInterpolator(device.mesh, streams[other_name])
+                    g_interp = LinearTriInterpolator(mesh, streams[other_name])
                     g = g_interp(*tri_points.T)
                     if vectorize:
                         q = (2 * dz ** 2 - rho2) / (

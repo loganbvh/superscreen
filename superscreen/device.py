@@ -1,11 +1,14 @@
 import os
 import json
 import logging
+import warnings
 from typing import Union, Dict, Optional, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
+from scipy.spatial import ConvexHull
+from meshpy import triangle
 import optimesh
 
 logger = logging.getLogger(__name__)
@@ -128,6 +131,7 @@ class Device(object):
         flux_regions: Optional[Dict[str, Polygon]] = None,
         units: str = "um",
         origin: Tuple[float, float, float] = (0, 0, 0),
+        **mesh_kwargs,
     ):
         self.name = name
         self.layers = layers
@@ -138,13 +142,15 @@ class Device(object):
         self._origin = tuple(origin)
 
         # Remove duplicate points to avoid meshing issues
-        self.points = np.concatenate(
+        self.poly_points = np.concatenate(
             [film.points for film in self.films.values()]
             + [hole.points for hole in self.holes.values()]
             + [flux_region.points for flux_region in self.flux_regions.values()]
         )
+        self.poly_points = np.unique(self.poly_points, axis=0)
 
-        self.points = np.unique(self.points, axis=0)
+        self.points = None
+        self.triangles = None
 
         self.adj = None
         self.weights = None
@@ -153,18 +159,19 @@ class Device(object):
         self.Q = None
         self.Del2 = None
 
-        self.mesh = None
-        self.make_mesh()
+        self._mesh_is_valid = False
+        if mesh_kwargs:
+            self.make_mesh(**mesh_kwargs)
 
-    @property
-    def mesh_points(self) -> np.ndarray:
-        """Array of mesh points (vertices). Shape: (n, 2)."""
-        return np.stack([self.mesh.x, self.mesh.y], axis=1)
+    # @property
+    # def mesh_points(self) -> np.ndarray:
+    #     """Array of mesh points (vertices). Shape: (n, 2)."""
+    #     return np.stack([self.mesh.x, self.mesh.y], axis=1)
 
-    @property
-    def triangles(self) -> np.ndarray:
-        """Array of mesh triangles. Shape: (m, 3)."""
-        return self.mesh.triangles
+    # @property
+    # def triangles(self) -> np.ndarray:
+    #     """Array of mesh triangles. Shape: (m, 3)."""
+    #     return self.mesh.triangles
 
     @property
     def origin(self) -> Tuple[float, float, float]:
@@ -182,7 +189,7 @@ class Device(object):
         dy = yp - y0
         self._origin = (xp, yp, zp)
         if dx or dy:
-            points = self.mesh_points
+            points = self.points
             points[:, 0] += dx
             points[:, 1] += dy
             self.points = points
@@ -195,50 +202,83 @@ class Device(object):
             for flux_region in self.flux_regions.values():
                 flux_region.points[:, 0] += dx
                 flux_region.points[:, 1] += dy
-            self.make_mesh(n_refine=0, compute_arrays=False)
+            self._mesh_is_valid = False
 
-    def make_mesh(self, n_refine: int = 0, compute_arrays: bool = True) -> None:
+    def make_mesh(
+        self,
+        compute_arrays: bool = True,
+        min_triangles: Optional[int] = None,
+        optimesh_steps: Optional[int] = None,
+        optimesh_method: str = "cvt-block-diagonal",
+        optimesh_tolerance: float = 1e-3,
+        optimesh_verbose: bool = False,
+        **meshpy_kwargs,
+    ) -> None:
         """Computes or refines the triangular mesh.
 
         Args:
-            n_refine: Number of times to refine the mesh. Default: 0.
             compute_arrays: Whether to compute the field-indepentsn arrays
                 needed for Brandt simulations. Default: True.
+            min_triangles: Minimum number of triangles in the mesh. If None, then the
+                number of triangles will be determined by meshpy_kwargs.
+            optimesh_steps: Maximum number of optimesh steps. If None, then no optimization is done.
+            optimesh_method: Name of the optimization method to use. Default: "cvt-block-diagonal".
+            optimesh_tolerance: Optimesh quality tolerance.
+            optimesh_verbose: Whether to use verbose mode in optimesh.
+            **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
-        logger.info(f"Making mesh with origin {self.origin}.")
-        x, y = self.points.T
-        if self.mesh is None:
-            triangles = None
+        logger.info("Generating mesh...")
+        hull = ConvexHull(self.poly_points)
+        mesh_info = triangle.MeshInfo()
+        mesh_info.set_points(self.poly_points)
+        mesh_info.set_facets(hull.simplices)
+        if min_triangles is None:
+            mesh = triangle.build(mesh_info=mesh_info, **meshpy_kwargs)
+            points = np.array(mesh.points)
+            triangles = np.array(mesh.elements)
         else:
-            triangles = self.mesh.triangles
-        mesh = mtri.Triangulation(x, y, triangles=triangles)
-        points, cells = optimesh.optimize_points_cells(
-            self.points, mesh.triangles, "cpt-fixed-point", 1e-4, 10000
+            max_vol = 1
+            num_triangles = 0
+            kwargs = meshpy_kwargs.copy()
+            i = 1
+            while num_triangles < min_triangles:
+                kwargs["max_volume"] = max_vol
+                mesh = triangle.build(
+                    mesh_info=mesh_info,
+                    **kwargs,
+                )
+                points = np.array(mesh.points)
+                triangles = np.array(mesh.elements)
+                num_triangles = triangles.shape[0]
+                logger.debug(
+                    f"Iteration {i}: Made mesh with {points.shape[0]} points and "
+                    f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
+                    f"Target number of triangles: {min_triangles}."
+                )
+                max_vol *= 0.8
+                i += 1
+        if optimesh_steps:
+            logger.info(f"Optimizing mesh with {triangles.shape[0]} triangles.")
+            points, triangles = optimesh.optimize_points_cells(
+                points,
+                triangles,
+                optimesh_method,
+                optimesh_tolerance,
+                optimesh_steps,
+                verbose=optimesh_verbose,
+            )
+        logger.info(
+            f"Finished generating mesh with {points.shape[0]} points and "
+            f"{triangles.shape[0]} triangles."
         )
-        self.mesh = mtri.Triangulation(points[:, 0], points[:, 1], cells)
-
-        if n_refine:
-            x, y = self.mesh_points.T
-            triangles = self.mesh.triangles
-            logger.info(f"Initial mesh: {len(x)} points, {len(triangles)} triangles.")
-            tri = mtri.Triangulation(x, y, triangles=triangles)
-            refiner = mtri.UniformTriRefiner(tri)
-            refined = refiner.refine_triangulation(subdiv=n_refine)
-            points = np.stack([refined.x, refined.y], axis=1)
-            points, cells = optimesh.optimize_points_cells(
-                points, refined.triangles, "cpt-fixed-point", 1e-4, 10000
-            )
-            self.mesh = mtri.Triangulation(points[:, 0], points[:, 1], triangles=cells)
-            logger.info(
-                f"Refined mesh ({n_refine} subdivisions): {len(points)} points, {len(cells)} triangles."
-            )
+        self.points = points
+        self.triangles = triangles
+        self._mesh_is_valid = True
 
         if compute_arrays:
             from . import core
 
             logger.info("Computing field-independent matrices.")
-            points = self.mesh_points
-            triangles = self.triangles
             self.adj = core.compute_adj(triangles)
             self.weights = core.uniform_weights(self.adj)
             self.q = core.q_matrix(points)
@@ -269,11 +309,14 @@ class Device(object):
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         for name, film in self.films.items():
-            ax.plot(*film.points.T, "-", label=name, **kwargs)
+            points = np.concatenate([film.points, film.points[:1]], axis=0)
+            ax.plot(*points.T, "-", label=name, **kwargs)
         for name, hole in self.holes.items():
-            ax.plot(*hole.points.T, ".-.", label=name, **kwargs)
+            points = np.concatenate([hole.points, hole.points[:1]], axis=0)
+            ax.plot(*points.T, ".-.", label=name, **kwargs)
         for name, region in self.flux_regions.items():
-            ax.plot(*region.points.T, "--.", label=name, **kwargs)
+            points = np.concatenate([region.points, region.points[:1]], axis=0)
+            ax.plot(*points.T, "--.", label=name, **kwargs)
         ax.set_aspect("equal")
         ax.grid(grid)
         if legend:
@@ -302,7 +345,7 @@ class Device(object):
         Returns:
             The matplotlib axis.
         """
-        x, y = self.mesh_points.T
+        x, y = self.points.T
         if ax is None:
             fig, ax = plt.subplots(1, 1)
         if edges:
@@ -316,13 +359,13 @@ class Device(object):
     def to_dict(self, save_mesh: Optional[bool] = False) -> Dict:
         """Returns a dict of device metadata."""
         metadata = {attr: getattr(self, attr) for attr in self.args + self.kwargs}
-        metadata["n_points"] = len(self.mesh_points)
+        metadata["n_points"] = len(self.points)
         metadata["n_triangles"] = len(self.triangles)
         if save_mesh:
-            metadata["mesh_points"] = self.mesh_points
+            metadata["points"] = self.points
             metadata["triangles"] = self.triangles
         else:
-            metadata["mesh_points"] = {}
+            metadata["points"] = {}
             metadata["triangles"] = {}
         return metadata
 
