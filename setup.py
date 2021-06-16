@@ -7,7 +7,7 @@ on a triangular mesh using a matrix inversion method described in the following 
 2. Supercond. Sci. Technol. 29 (2016) 124001 [Kirtley].
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 DESCRIPTION = (
     "SuperScreen: simulate Meissner screening in multiplanar superconducting devices."
@@ -24,8 +24,10 @@ PYTHON_VERSION = ">=3.6"
 INSTALL_REQUIRES = [
     "jupyter",
     "matplotlib",
+    "meshpy",
     "numpy",
     "optimesh",
+    "pandas",
     "scipy",
 ]
 
@@ -69,7 +71,7 @@ setup(
     author_email=AUTHOR_EMAIL,
     url=URL,
     license=LICENSE,
-    packages=["superscreen"],
+    packages=find_packages(),
     include_package_data=True,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
