@@ -1,8 +1,14 @@
 from typing import Callable, Optional, Dict, List
 
-from .device import Layer, Polygon, Device
 from .core import brandt_layers as _brandt_layers
 from .core import BrandtSolution
+from .device import Layer, Polygon, Device
+
+from . import io
+from . import sources
+from . import visualization
+
+from .version import __version__, __version_info__
 
 
 def solve(
