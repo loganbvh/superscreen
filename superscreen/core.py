@@ -240,7 +240,7 @@ def brandt_layer(
     # Compute the film responses to the applied field
     for name in film_names:
         film = device.films[name]
-        # Form the linear system, A @ gf = h (film only)
+        # Form the linear system, (Q * w - Lambda * Del2) @ gf = h (film only)
         # We want all points that are in a film and not in a hole.
         ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]

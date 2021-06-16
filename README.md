@@ -1,4 +1,4 @@
-# superscreen
+# SuperScreen
 
 SuperScreen is a package for simulating Meissner screening in multiplanar thin film
 superconducting devices. SuperScreen solves the coupled Maxwell's and London equations
