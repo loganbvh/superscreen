@@ -5,7 +5,6 @@ from .brandt import BrandtSolution
 from .device import Layer, Polygon, Device
 from .parameter import Parameter, Constant
 
-from . import io
 from . import sources
 from . import visualization
 
