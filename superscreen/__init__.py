@@ -1,8 +1,9 @@
 from typing import Callable, Optional, Dict, List
 
-from .core import brandt_layers as _brandt_layers
-from .core import BrandtSolution
+from .brandt import brandt_layers as _brandt_layers
+from .brandt import BrandtSolution
 from .device import Layer, Polygon, Device
+from .parameter import Parameter, Constant
 
 from . import io
 from . import sources
