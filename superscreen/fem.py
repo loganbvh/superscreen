@@ -46,8 +46,8 @@ def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
         shape (m,) array of triangle areas.
     """
     a = np.zeros(triangles.shape[0])
-    for i, e in enumerate(triangles):
-        xy = points[e]
+    for i, t in enumerate(triangles):
+        xy = points[t]
         # s1 = xy[2, :] - xy[1, :]
         # s2 = xy[0, :] - xy[2, :]
         # s3 = xy[1, :] - xy[0, :]
