@@ -52,8 +52,8 @@ def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
         # s2 = xy[0, :] - xy[2, :]
         # s3 = xy[1, :] - xy[0, :]
         # which can be simplified to
-        # s = xy[[2, 0, 1]] - xy[[1, 2, 0]]
-        s = xy[[2, 0]] - xy[[1, 2]]
+        # s = xy[[2, 0, 1]] - xy[[1, 2, 0]]  # 3D
+        s = xy[[2, 0]] - xy[[1, 2]]  # 2D
         # a should be positive if triangles are CCW arranged
         a[i] = la.det(s)
     return a * 0.5
