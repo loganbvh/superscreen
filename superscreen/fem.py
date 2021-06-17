@@ -2,7 +2,7 @@ from typing import Union
 
 import numpy as np
 import scipy.linalg as la
-from scipy.sparse import csr_matrix
+import scipy.sparse as sp
 from matplotlib.path import Path
 
 
@@ -35,21 +35,6 @@ def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     return np.array([np.sum(points[t], axis=0) / 3 for t in triangles])
 
 
-def adjacency_matrix(
-    triangles: np.ndarray, sparse: bool = False
-) -> Union[np.ndarray, csr_matrix]:
-    """Computes the adjacency matrix for a given set of triangles."""
-    A = np.concatenate(
-        [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
-    )
-    adj = csr_matrix((np.ones(A.shape[0]), (A[:, 0], A[:, 1])))
-    adj = adj + adj.T
-    adj = (adj > 0).astype(int)
-    if sparse:
-        return adj
-    return adj.toarray()
-
-
 def area(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
     """Calculate the area of each triangle.
 
@@ -74,30 +59,59 @@ def area(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
     return a * 0.5
 
 
+def adjacency_matrix(
+    triangles: np.ndarray, sparse: bool = False
+) -> Union[np.ndarray, sp.csr_matrix]:
+    """Computes the adjacency matrix for a given set of triangles."""
+    A = np.concatenate(
+        [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
+    )
+    adj = sp.csr_matrix((np.ones(A.shape[0]), (A[:, 0], A[:, 1])))
+    adj = adj + adj.T
+    adj = (adj > 0).astype(int)
+    if sparse:
+        return adj
+    return adj.toarray()
+
+
 def calculcate_weights(
-    points: np.ndarray, triangles: np.ndarray, method: str
-) -> np.ndarray:
+    points: np.ndarray,
+    triangles: np.ndarray,
+    method: str,
+    sparse: bool = False,
+) -> Union[np.ndarray, sp.csr_matrix]:
     method = method.lower()
     if method == "uniform":
-        adj = adjacency_matrix(triangles)
+        adj = adjacency_matrix(triangles, sparse=sparse)
         weights = (adj != 0).astype(float)
     elif method == "inv_euclidean":
-        weights = weights_inv_euclidean(points, triangles)
+        weights = weights_inv_euclidean(points, triangles, sparse=sparse)
     elif method == "half_cotangent":
-        weights = weights_half_cotangent(points, triangles)
+        weights = weights_half_cotangent(points, triangles, sparse=sparse)
     else:
         raise ValueError(
             f"Unknown method ({method}). "
             f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
         )
     # normalize row-by-row
-    weights = weights / weights.sum(axis=1)[:, np.newaxis]
-    np.fill_diagonal(weights, 1.0)
+    if sp.issparse(weights):
+        weights = sp.lil_matrix(weights / weights.sum(axis=1))
+        weights.setdiag(1.0)
+        weights = weights.tocsr()
+    else:
+        weights = np.asarray(weights)
+        weights = weights / weights.sum(axis=1)[:, np.newaxis]
+        np.fill_diagonal(weights, 1.0)
     return weights
 
 
-def weights_inv_euclidean(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+def weights_inv_euclidean(
+    points: np.ndarray, triangles: np.ndarray, sparse: bool = False
+) -> Union[np.ndarray, sp.csr_matrix]:
+    if sparse:
+        weights = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
+    else:
+        weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
 
     for t in triangles:
         # compute the three vectors of the triangle
@@ -115,11 +129,19 @@ def weights_inv_euclidean(points: np.ndarray, triangles: np.ndarray) -> np.ndarr
         weights[t[2], t[0]] = 1 / n20
         weights[t[2], t[1]] = 1 / n21
         weights[t[1], t[2]] = 1 / n21
+
     return weights
 
 
-def weights_half_cotangent(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+def weights_half_cotangent(
+    points: np.ndarray, triangles: np.ndarray, sparse: bool = False
+) -> Union[np.ndarray, sp.csr_matrix]:
+
+    if sparse:
+        weights = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
+    else:
+        weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+
     for t in triangles:
         # compute the directional vectors at the 1st vertex
         vec1 = points[t[1]] - points[t[0]]
@@ -162,9 +184,17 @@ def weights_half_cotangent(points: np.ndarray, triangles: np.ndarray) -> np.ndar
     return weights
 
 
-def mass_matrix(points: np.ndarray, triangles: np.ndarray, diagonal: bool = True):
+def mass_matrix(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    diagonal: bool = True,
+    sparse: bool = False,
+) -> Union[np.ndarray, sp.csr_matrix]:
+    if sparse:
+        mass = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
+    else:
+        mass = np.zeros((points.shape[0], points.shape[0]), dtype=float)
 
-    mass = np.zeros((points.shape[0], points.shape[0]), dtype=float)
     areas = area(points, triangles)
 
     if diagonal:
@@ -191,11 +221,34 @@ def mass_matrix(points: np.ndarray, triangles: np.ndarray, diagonal: bool = True
 
 
 def laplacian_operator(
-    points: np.ndarray, triangles: np.ndarray, weights: np.ndarray
-) -> np.ndarray:
-    # Laplacian matrix
-    L = weights - np.diag(weights.sum(axis=1))
-    M = mass_matrix(points, triangles)
-    # Laplacian operator
-    Del2 = la.inv(M) @ L
+    points: Union[np.ndarray, sp.csr_matrix],
+    triangles: Union[np.ndarray, sp.csr_matrix],
+    weights: Union[np.ndarray, sp.csr_matrix],
+    sparse: bool = False,
+) -> Union[np.ndarray, sp.csr_matrix]:
+
+    M = mass_matrix(points, triangles, sparse=sparse)
+    if sparse:
+        # Convert to lil for efficient slicing, etc.
+        if not sp.issparse(weights):
+            weights = sp.lil_matrix(weights)
+        if not isinstance(weights, sp.lil_matrix):
+            weights = weights.tolil()
+        # Laplacian matrix
+        L = weights - sp.diags(np.asarray(weights.sum(axis=1)).squeeze(), format="lil")
+        # lil -> csr is efficient
+        L = L.tocsr()
+        # lil -> csc is less efficient, but inversion is more
+        # efficient for csc
+        M = M.tocsc()
+        # Laplacian operator
+        # * is matrix multiplication for sparse matrices
+        Del2 = (sp.linalg.inv(M) * L).tocsr()
+    else:
+        if sp.issparse(weights):
+            weights = weights.toarray()
+        # Laplacian matrix
+        L = weights - np.diag(weights.sum(axis=1))
+        # Laplacian operator
+        Del2 = la.inv(M) @ L
     return Del2

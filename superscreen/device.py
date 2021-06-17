@@ -173,6 +173,7 @@ class Device(object):
         flux_regions: Optional[Dict[str, Polygon]] = None,
         units: str = "um",
         origin: Tuple[float, float, float] = (0, 0, 0),
+        sparse: bool = False,
         **mesh_kwargs,
     ):
         self.name = name
@@ -182,6 +183,7 @@ class Device(object):
         self.flux_regions = flux_regions or {}
         self.units = units
         self._origin = tuple(origin)
+        self.sparse = sparse
 
         # Remove duplicate points to avoid meshing issues
         self.poly_points = np.concatenate(
@@ -323,11 +325,15 @@ class Device(object):
             from . import brandt
 
             logger.info("Computing field-independent matrices.")
-            self.weights = calculcate_weights(points, triangles, weight_method)
+            self.weights = calculcate_weights(
+                points, triangles, weight_method, sparse=self.sparse
+            )
             self.q = brandt.q_matrix(points)
             self.C = brandt.C_vector(points)
             self.Q = brandt.Q_matrix(self.q, self.C, self.weights)
-            self.Del2 = laplacian_operator(points, triangles, self.weights)
+            self.Del2 = laplacian_operator(
+                points, triangles, self.weights, sparse=self.sparse
+            )
 
     def plot_polygons(
         self,

@@ -10,7 +10,7 @@ from matplotlib.tri import Triangulation, LinearTriInterpolator
 
 from .device import Device
 from .fem import area, centroids
-from . parameter import Constant
+from .parameter import Constant
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,11 @@ def brandt_layer(
         )
 
     weights = device.weights
-    Q = device.Q
     Del2 = device.Del2
+    if device.sparse:
+        weights = weights.toarray()
+        Del2 = Del2.toarray()
+    Q = device.Q
     points = device.points
     x, y = points.T
     london_lambda = device.layers[layer].london_lambda
@@ -97,7 +100,7 @@ def brandt_layer(
     for name in film_names:
         film = device.films[name]
         # Form the linear system for the film:
-        # (Q * w - Lambda * Del2) @ gf = A @ gf = h
+        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # We want all points that are in a film and not in a hole.
         ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
@@ -325,6 +328,9 @@ def Q_matrix(
     """Computes the kernel matrix, Q."""
     if copy_q:
         q = q.copy()
+    if not isinstance(weights, np.ndarray):
+        # Convert sparse matrix to array
+        weights = weights.toarray()
     # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
     # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
     np.fill_diagonal(q, 0)
