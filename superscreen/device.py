@@ -1,21 +1,31 @@
-import os
-import json
+# import os
+# import json
 import logging
-import warnings
 from typing import Union, Dict, Optional, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as mtri
 from scipy.spatial import ConvexHull
 from meshpy import triangle
 import optimesh
 
+from .fem import calculcate_weights, laplacian_operator
+from .parameter import Parameter, CompositeParameter
+
+
 logger = logging.getLogger(__name__)
+
+ParamType = Union[float, Parameter, CompositeParameter]
 
 
 class Layer(object):
     """A single layer of a superconducting device.
+
+    You can provide either an effective penetration depth Lambda,
+    or both a London penetration depth (lambda_london) and a layer
+    thickness. Lambda and london_lambda can either be real numers or
+    Parameters which compute the penetration depth as a function of
+    position.
 
     Args:
         name: Name of the layer.
@@ -25,21 +35,53 @@ class Layer(object):
         z0: Vertical location of the layer.
     """
 
-    def __init__(self, name: str, *, thickness: float, london_lambda: float, z0: float):
+    def __init__(
+        self,
+        name: str,
+        Lambda: Optional[ParamType] = None,
+        london_lambda: Optional[ParamType] = None,
+        thickness: Optional[float] = None,
+        z0: float = 0,
+    ):
         self.name = name
         self.thickness = thickness
         self.london_lambda = london_lambda
         self.z0 = z0
+        if Lambda is None:
+            if london_lambda is None or thickness is None:
+                raise ValueError(
+                    "You must provide either an effective penetration depth Lambda "
+                    "or both a london_lambda and a thickness."
+                )
+            self._Lambda = None
+        else:
+            if london_lambda is not None or thickness is not None:
+                raise ValueError(
+                    "You must provide either an effective penetration depth Lambda "
+                    "or both a london_lambda and a thickness (but not all three)."
+                )
+            self._Lambda = Lambda
 
     @property
     def Lambda(self) -> float:
         """Effective penetration depth of the superconductor."""
+        if self._Lambda is not None:
+            return self._Lambda
         return self.london_lambda ** 2 / self.thickness
 
     def __repr__(self) -> str:
+        Lambda = self.Lambda
+        if isinstance(Lambda, (int, float)):
+            Lambda = f"{Lambda:.3f}"
+        d = self.thickness
+        if isinstance(d, (int, float)):
+            d = f"{d:.3f}"
+        london = self.london_lambda
+        if isinstance(london, (int, float)):
+            london = f"{london:.3f}"
         return (
-            f'Layer("{self.name}", thickness={self.thickness:.3f}, '
-            f"london_lambda={self.london_lambda:.3f}, z0={self.z0:.3f})"
+            f'Layer("{self.name}", Lambda={Lambda}, '
+            f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
         )
 
 
@@ -82,7 +124,7 @@ class Polygon(object):
             of the same shape as xq and yq indicating whether each point
             lies within the polygon.
         """
-        from .core import in_polygon
+        from .fem import in_polygon
 
         x, y = self.points.T
         bool_array = in_polygon(xq, yq, x, y)
@@ -152,7 +194,6 @@ class Device(object):
         self.points = None
         self.triangles = None
 
-        self.adj = None
         self.weights = None
         self.q = None
         self.C = None
@@ -207,6 +248,7 @@ class Device(object):
     def make_mesh(
         self,
         compute_arrays: bool = True,
+        weight_method: str = "uniform",
         min_triangles: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
         optimesh_method: str = "cvt-block-diagonal",
@@ -219,6 +261,8 @@ class Device(object):
         Args:
             compute_arrays: Whether to compute the field-indepentsn arrays
                 needed for Brandt simulations. Default: True.
+            weight_method: Meshing scheme: either "uniform", "half_cotangent", or "inv_euclidian".
+                Default: "uniform".
             min_triangles: Minimum number of triangles in the mesh. If None, then the
                 number of triangles will be determined by meshpy_kwargs.
             optimesh_steps: Maximum number of optimesh steps. If None, then no optimization is done.
@@ -276,15 +320,14 @@ class Device(object):
         self._mesh_is_valid = True
 
         if compute_arrays:
-            from . import core
+            from . import brandt
 
             logger.info("Computing field-independent matrices.")
-            self.adj = core.compute_adj(triangles)
-            self.weights = core.uniform_weights(self.adj)
-            self.q = core.q_matrix(points)
-            self.C = core.C_vector(points)
-            self.Q = core.Q_matrix(self.q, self.C, self.weights)
-            self.Del2 = core.laplacian(self.weights)
+            self.weights = calculcate_weights(points, triangles, weight_method)
+            self.q = brandt.q_matrix(points)
+            self.C = brandt.C_vector(points)
+            self.Q = brandt.Q_matrix(self.q, self.C, self.weights)
+            self.Del2 = laplacian_operator(points, triangles, self.weights)
 
     def plot_polygons(
         self,
