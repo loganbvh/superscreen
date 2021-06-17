@@ -4,6 +4,7 @@ from typing import Union, Callable, Optional, Dict, Tuple, List
 
 import numpy as np
 import scipy.linalg as la
+import scipy.sparse as sp
 from scipy.spatial.distance import cdist
 from scipy.interpolate import griddata
 from matplotlib.tri import Triangulation, LinearTriInterpolator
@@ -51,8 +52,11 @@ def brandt_layer(
 
     weights = device.weights
     Del2 = device.Del2
-    if device.sparse:
+    # We need to do slicing and summing, so its easiest
+    # to just use numpy arrays
+    if sp.issparse(weights):
         weights = weights.toarray()
+    if sp.issparse(Del2):
         Del2 = Del2.toarray()
     Q = device.Q
     points = device.points
@@ -75,9 +79,11 @@ def brandt_layer(
 
     Hz_applied = applied_field(points[:, 0], points[:, 1])
     if isinstance(Lambda, (int, float)):
+        # Make Lambda a callable
         Lambda = Constant(Lambda)
     Lambda = Lambda(points[:, 0], points[:, 1])
 
+    # Identify holes in the superconductor
     hole_indices = {}
     in_hole = np.zeros(len(x), dtype=int)
     for name, hole in device.holes.items():
@@ -85,26 +91,30 @@ def brandt_layer(
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
 
+    # Set the boundary conditions for all holes:
+    # 1. g[hole] = I_circ_hole
+    # 2. Effective field associated with I_circ_hole
+    # See Section II(a) in [Brandt], Eqs. 18-19 in [Kirtley1],
+    # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(x)
     Ha_eff = np.zeros_like(Hz_applied)
     for name, current in circulating_currents.items():
-        # Set the stream function in all holes
         hole = hole_indices[name]
         g[hole] = current  # g[hole] = I_circ
-
-        # Calculcate the effective field associated with the circulating currents:
+        # Effective field associated with the circulating currents:
         A = Q[:, hole] * weights[:, hole] - Lambda[hole] * Del2[:, hole]
         Ha_eff += A @ g[hole]
 
-    # Compute the film responses to the applied field
+    # Now solve for the stream function inside the superconducting films
     for name in film_names:
         film = device.films[name]
-        # Form the linear system for the film:
-        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # We want all points that are in a film and not in a hole.
         ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
+        # Form the linear system for the film:
+        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
+        # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
         h = Hz_applied[ix1d] + Ha_eff[ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
@@ -118,10 +128,10 @@ def brandt_layer(
             errors = (A @ gf) - h
             if not np.allclose(errors, 0):
                 warnings.warn(
-                    f"Unable to solve for stream function, "
+                    f"Unable to solve for stream function in {layer} ({name}), "
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
-
+    # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
     response_field = (Q * weights) @ g
     total_field = Hz_applied + response_field
 
@@ -151,7 +161,6 @@ def brandt_layers(
     and the responses from all other layers.
 
     3. If iterations > 1, then repeat step 2 (iterations - 1) times.
-    The solution should converge in only a few iterations.
 
 
     Args:
@@ -171,7 +180,6 @@ def brandt_layers(
         or length (iterations + 1) if coupled is True.
     """
     points = device.points
-    x, y = points.T
     triangles = device.triangles
 
     solutions = []
@@ -215,18 +223,14 @@ def brandt_layers(
 
         tri_points = centroids(points, triangles)
         areas = area(points, triangles)
-        if vectorize:
-            # Compute ||(x, y) - (xt, yt)||^2
-            rho2 = cdist(points, tri_points, metric="sqeuclidean")
-        else:
-            xt, yt = tri_points.T
-        if iterations > 0:
-            mesh = Triangulation(*points.T, triangles=triangles)
+        # Compute ||(x, y) - (xt, yt)||^2
+        rho2 = cdist(points, tri_points, metric="sqeuclidean")
+        mesh = Triangulation(*points.T, triangles=triangles)
         for i in range(iterations):
             # Calculcate the response fields at each layer from every other layer
             other_responses = {}
             for name, layer in device.layers.items():
-                Hzr = np.zeros_like(x)
+                Hzr = np.zeros(points.shape[0], dtype=float)
                 for other_name, other_layer in device.layers.items():
                     if name == other_name:
                         continue
@@ -239,19 +243,10 @@ def brandt_layers(
                     # so that we can do a surface integral using triangle areas.
                     g_interp = LinearTriInterpolator(mesh, streams[other_name])
                     g = g_interp(*tri_points.T)
-                    if vectorize:
-                        q = (2 * dz ** 2 - rho2) / (
-                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
-                        )
-                        Hzr += np.sign(dz) * np.sum(areas * q * g, axis=1)
-                    else:
-                        # TODO: vectorize this loop using scipy.spatial.distance.cdist
-                        for i in range(points.shape[0]):
-                            rho2 = (x[i] - xt) ** 2 + (y[i] - yt) ** 2
-                            q = (2 * dz ** 2 - rho2) / (
-                                4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
-                            )
-                            Hzr[i] += np.sign(dz) * np.sum(areas * g * q)
+                    # Calculate the dipole kernel and integrate
+                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                    q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                    Hzr += np.sign(dz) * np.sum(areas * q * g, axis=1)
                 other_responses[name] = Hzr
 
             # Solve again with the response fields from all layers
@@ -292,7 +287,10 @@ def brandt_layers(
 
 
 def q_matrix(points: np.ndarray) -> np.ndarray:
-    """Computes the denominator matrix, q."""
+    """Computes the denominator matrix, q.
+
+    Eq. 7 in [Brandt.], Eq. 8 in [Kirtley1], Eq. 8 in [Kirtley2].
+    """
     # euclidean distance between points
     distances = cdist(points, points, metric="euclidean")
     q = np.zeros_like(distances)
@@ -304,7 +302,10 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
 
 
 def C_vector(points: np.ndarray) -> np.ndarray:
-    """Computes the edge vector, C."""
+    """Computes the edge vector, C.
+
+    Eq. 12 in [Brandt.], Eq. 16 in [Kirtley1], Eq. 15 in [Kirtley2].
+    """
     xmax = points[:, 0].max()
     xmin = points[:, 0].min()
     ymax = points[:, 1].max()
@@ -325,7 +326,10 @@ def C_vector(points: np.ndarray) -> np.ndarray:
 def Q_matrix(
     q: np.ndarray, C: np.ndarray, weights: np.ndarray, copy_q: bool = True
 ) -> np.ndarray:
-    """Computes the kernel matrix, Q."""
+    """Computes the kernel matrix, Q.
+
+    Eq. 10 in [Brandt.], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
+    """
     if copy_q:
         q = q.copy()
     if not isinstance(weights, np.ndarray):

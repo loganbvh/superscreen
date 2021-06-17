@@ -12,7 +12,7 @@ def in_polygon(
     xp: Union[float, np.ndarray],
     yp: Union[float, np.ndarray],
 ) -> Union[bool, np.ndarray]:
-    """Checks whether query points (xq, yq) lie in the polyon
+    """Check whether query points (xq, yq) lie in the polyon
     defined by points (xp, yp).
     """
     xq = np.asarray(xq)
@@ -31,22 +31,22 @@ def in_polygon(
 
 
 def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """Returns x,y coordinates for triangle centroids."""
+    """Returns x, y coordinates for triangle centroids."""
     return np.array([np.sum(points[t], axis=0) / 3 for t in triangles])
 
 
-def area(points: np.ndarray, tris: np.ndarray) -> np.ndarray:
-    """Calculate the area of each triangle.
+def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Calculates the area of each triangle.
 
     Args:
-        points (np.ndarray): shape (n,2) array of x,y coordinates of nodes
-        tris (np.ndarray) shape (m,3) array of triangles
+        points: shape (n,2) array of x,y coordinates of nodes
+        triangle: shape (m,3) array of triangles
 
     Returns:
-        np.ndarray: shape (m,) array of triangle areas.
+        shape (m,) array of triangle areas.
     """
-    a = np.zeros(tris.shape[0])
-    for i, e in enumerate(tris):
+    a = np.zeros(triangles.shape[0])
+    for i, e in enumerate(triangles):
         xy = points[e]
         # s1 = xy[2, :] - xy[1, :]
         # s2 = xy[0, :] - xy[2, :]
@@ -82,8 +82,9 @@ def calculcate_weights(
 ) -> Union[np.ndarray, sp.csr_matrix]:
     method = method.lower()
     if method == "uniform":
+        # Uniform weights are just the adjacency matrix.
         adj = adjacency_matrix(triangles, sparse=sparse)
-        weights = (adj != 0).astype(float)
+        weights = adj.astype(float)
     elif method == "inv_euclidean":
         weights = weights_inv_euclidean(points, triangles, sparse=sparse)
     elif method == "half_cotangent":
@@ -95,6 +96,8 @@ def calculcate_weights(
         )
     # normalize row-by-row
     if sp.issparse(weights):
+        # weights / weights.sum(axis=1) returns np.matrix,
+        # to convert back to lil.
         weights = sp.lil_matrix(weights / weights.sum(axis=1))
         weights.setdiag(1.0)
         weights = weights.tocsr()
@@ -107,7 +110,12 @@ def calculcate_weights(
 
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = False
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.lil_matrix]:
+    """Weight edges by the inverse Euclidean distance of the edge lengths."""
+    # Adapted from spharaphy.TriMesh:
+    # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
+    # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
+
     if sparse:
         weights = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
     else:
@@ -135,7 +143,11 @@ def weights_inv_euclidean(
 
 def weights_half_cotangent(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = False
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.lil_matrix]:
+    """Weight edges by half of the cotangent of the two angles opposite the edge."""
+    # Adapted from spharaphy.TriMesh:
+    # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
+    # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
 
     if sparse:
         weights = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
@@ -143,44 +155,33 @@ def weights_half_cotangent(
         weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
 
     for t in triangles:
-        # compute the directional vectors at the 1st vertex
+        # First vertex
         vec1 = points[t[1]] - points[t[0]]
         vec2 = points[t[2]] - points[t[0]]
-
-        # compute the weight of the edge 0.5 * cot
-        w = 0.5 * (
-            1.0
-            / np.tan(np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2))))
+        w = 0.5 / np.tan(
+            np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2)))
         )
-
         weights[t[1], t[2]] += w
         weights[t[2], t[1]] += w
 
-        # compute the directional vectors at the 2nd vertex
+        # Second vertex
         vec1 = points[t[0]] - points[t[1]]
         vec2 = points[t[2]] - points[t[1]]
-
-        # compute the weight of the edge 0.5 * cot
-        w = 0.5 * (
-            1.0
-            / np.tan(np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2))))
+        w = 0.5 / np.tan(
+            np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2)))
         )
-
         weights[t[0], t[2]] += w
         weights[t[2], t[0]] += w
 
-        # compute the directional vectors at the 3rd vertex
+        # Third vertex
         vec1 = points[t[0]] - points[t[2]]
         vec2 = points[t[1]] - points[t[2]]
-
-        # compute the weight of the edge 0.5 * cot
-        w = 0.5 * (
-            1.0
-            / np.tan(np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2))))
+        w = 0.5 / np.tan(
+            np.arccos(np.dot(vec1, vec2) / (la.norm(vec1) * la.norm(vec2)))
         )
-
         weights[t[0], t[1]] += w
         weights[t[1], t[0]] += w
+
     return weights
 
 
@@ -189,7 +190,11 @@ def mass_matrix(
     triangles: np.ndarray,
     diagonal: bool = True,
     sparse: bool = False,
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.lil_matrix]:
+    """The mass matrix defines an effective area for each vertex."""
+    # Adapted from spharaphy.TriMesh:
+    # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
+    # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
     if sparse:
         mass = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
     else:
@@ -226,29 +231,30 @@ def laplacian_operator(
     weights: Union[np.ndarray, sp.csr_matrix],
     sparse: bool = False,
 ) -> Union[np.ndarray, sp.csr_matrix]:
+    """Laplacian operator for the mesh (sometimes called
+    Laplace-Beltrami operator).
 
+    The Laplacian operator M^(-1) @ L, where M is the mass
+    matrix and L is the Laplacian matrix.
+    """
+    # See: http://rodolphe-vaillant.fr/?e=20
+    # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
     M = mass_matrix(points, triangles, sparse=sparse)
     if sparse:
         # Convert to lil for efficient slicing, etc.
-        if not sp.issparse(weights):
+        if not sp.isspmatrix_lil(weights):
             weights = sp.lil_matrix(weights)
-        if not isinstance(weights, sp.lil_matrix):
-            weights = weights.tolil()
-        # Laplacian matrix
         L = weights - sp.diags(np.asarray(weights.sum(axis=1)).squeeze(), format="lil")
         # lil -> csr is efficient
         L = L.tocsr()
         # lil -> csc is less efficient, but inversion is more
         # efficient for csc
         M = M.tocsc()
-        # Laplacian operator
         # * is matrix multiplication for sparse matrices
         Del2 = (sp.linalg.inv(M) * L).tocsr()
     else:
         if sp.issparse(weights):
             weights = weights.toarray()
-        # Laplacian matrix
         L = weights - np.diag(weights.sum(axis=1))
-        # Laplacian operator
         Del2 = la.inv(M) @ L
     return Del2

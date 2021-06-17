@@ -1,5 +1,3 @@
-# import os
-# import json
 import logging
 from typing import Union, Dict, Optional, Tuple
 
@@ -133,7 +131,10 @@ class Polygon(object):
         return bool_array
 
     def __repr__(self) -> str:
-        return f'Polygon("{self.name}", layer="{self.layer}", points=ndarray[shape={self.points.shape}])'
+        return (
+            f'Polygon("{self.name}", layer="{self.layer}", '
+            f"points=ndarray[shape={self.points.shape}])"
+        )
 
 
 class Device(object):
@@ -151,17 +152,6 @@ class Device(object):
         units: Distance units for the coordinate system. Default: "um".
         origin: Location of the origina of the coordinate system. Default: (0, 0, 0).
     """
-
-    args = ["name"]
-
-    kwargs = [
-        "layers",
-        "films",
-        "holes",
-        "flux_regions",
-        "units",
-        "origin",
-    ]
 
     def __init__(
         self,
@@ -205,16 +195,6 @@ class Device(object):
         self._mesh_is_valid = False
         if mesh_kwargs:
             self.make_mesh(**mesh_kwargs)
-
-    # @property
-    # def mesh_points(self) -> np.ndarray:
-    #     """Array of mesh points (vertices). Shape: (n, 2)."""
-    #     return np.stack([self.mesh.x, self.mesh.y], axis=1)
-
-    # @property
-    # def triangles(self) -> np.ndarray:
-    #     """Array of mesh triangles. Shape: (m, 3)."""
-    #     return self.mesh.triangles
 
     @property
     def origin(self) -> Tuple[float, float, float]:
@@ -405,45 +385,27 @@ class Device(object):
         ax.grid(grid)
         return ax
 
-    def to_dict(self, save_mesh: Optional[bool] = False) -> Dict:
+    def to_dict(self, include_mesh: Optional[bool] = False) -> Dict:
         """Returns a dict of device metadata."""
-        metadata = {attr: getattr(self, attr) for attr in self.args + self.kwargs}
+        attrs = [
+            "name",
+            "layers",
+            "films",
+            "holes",
+            "flux_regions",
+            "units",
+            "origin",
+        ]
+        metadata = {attr: getattr(self, attr) for attr in attrs}
         metadata["n_points"] = len(self.points)
         metadata["n_triangles"] = len(self.triangles)
-        if save_mesh:
+        if include_mesh:
             metadata["points"] = self.points
             metadata["triangles"] = self.triangles
         else:
             metadata["points"] = {}
             metadata["triangles"] = {}
         return metadata
-
-    # @classmethod
-    # def from_json(cls, fname):
-    #     """Create a Device from json metadata, i.e. output from Device.to_json()."""
-    #     with open(fname, "r") as f:
-    #         meta = json.load(f, object_hook=json_numpy_obj_hook)
-    #     args = [meta[k] for k in cls.args]
-    #     kwargs = {k: meta[k] for k in cls.kwargs}
-    #     return cls(*args, **kwargs)
-
-    # def to_json(self, fname=None):
-    #     if fname is None:
-    #         path = PathMaker(directory="layouts").dir
-    #         fname = os.path.join(path, self.name)
-    #     if not fname.endswith(".json"):
-    #         fname += ".json"
-    #     with open(fname, "w") as f:
-    #         json.dump(self.to_dict(), f, indent=4, encoder=NumpyJSONEncoder)
-
-    # def save_mesh(self, fname=None):
-    #     import meshio
-
-    #     if fname is None:
-    #         path = PathMaker(directory="mesh").dir
-    #         fname = os.path.join(path, self.name) + ".msh"
-    #     mesh = meshio.Mesh(self.mesh_points, {"triangle": self.triangles})
-    #     meshio.write(fname, mesh)
 
     def __repr__(self) -> str:
         # Normal tab "\t" renders a bit too big in jupyter if you ask me.
