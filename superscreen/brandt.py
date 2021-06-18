@@ -31,6 +31,12 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
     """Computes the denominator matrix, q.
 
     Eq. 7 in [Brandt.], Eq. 8 in [Kirtley1], Eq. 8 in [Kirtley2].
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices
+
+    Returns:
+        Shape (n, n) array qij
     """
     # euclidean distance between points
     distances = cdist(points, points, metric="euclidean")
@@ -46,6 +52,12 @@ def C_vector(points: np.ndarray) -> np.ndarray:
     """Computes the edge vector, C.
 
     Eq. 12 in [Brandt.], Eq. 16 in [Kirtley1], Eq. 15 in [Kirtley2].
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices
+
+    Returns:
+        Shape (n, ) array Ci
     """
     xmax = points[:, 0].max()
     xmin = points[:, 0].min()
@@ -70,6 +82,12 @@ def Q_matrix(
     """Computes the kernel matrix, Q.
 
     Eq. 10 in [Brandt.], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices
+
+    Returns:
+        Shape (n, n) array Qij
     """
     if copy_q:
         q = q.copy()
@@ -91,18 +109,19 @@ def field_conversion(
     length_units: str = "m",
     ureg: Optional[pint.UnitRegistry] = None,
 ) -> pint.Quantity:
-    """Returns a conversion factor from ``field_unit`` to ``current_units / length_units``.
+    """Returns a conversion factor from ``field_units`` to ``current_units / length_units``.
 
-    field_units: Magnetic field/flux unit to convert, having dimensionality
-        either of magnetic field H (e.g. A / m or Oe) or of
-        magnetic flux density B = mu0 * H (e.g. Tesla or Gauss).
-    current_units: Current unit to use for the conversion.
-    length_units: Lenght/distance unit to use for the conversion.
-    ureg: pint UnitRegistry to use for the conversion. If None is provided,
-        a new UnitRegistry is created.
+    Args:
+        field_units: Magnetic field/flux unit to convert, having dimensionality
+            either of magnetic field ``H`` (e.g. A / m or Oe) or of
+            magnetic flux density ``B = mu0 * H`` (e.g. Tesla or Gauss).
+        current_units: Current unit to use for the conversion.
+        length_units: Lenght/distance unit to use for the conversion.
+        ureg: pint UnitRegistry to use for the conversion. If None is provided,
+            a new UnitRegistry is created.
 
     Returns:
-        Conversion factor as a pint.Quantity. ``conversion_factor.magnitude``
+        Conversion factor as a ``pint.Quantity``. ``conversion_factor.magnitude``
         gives you the numerical value of the conversion factor.
     """
     if ureg is None:
@@ -127,7 +146,7 @@ def brandt_layer(
     current_units: str = "uA",
     check_inversion: Optional[bool] = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Computes the stream function and magnetic field within a single layer of a Device.
+    """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
     Args:
         device: The Device to simulate.
@@ -268,7 +287,7 @@ def solve(
     coupled: Optional[bool] = True,
     iterations: Optional[int] = 1,
 ) -> List["BrandtSolution"]:
-    """Computes the stream functions and magnetic fields for all layers in a Device.
+    """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
     The simulation strategy is:
 
@@ -579,7 +598,7 @@ class BrandtSolution(object):
         with_units: bool = False,
     ) -> Dict[str, float]:
         """Compute the flux through all polygons (films, holes, and flux regions)
-            by integrating the calculated fields.
+        by integrating the calculated fields.
 
         Args:
             polygons: Name(s) of the polygon(s) for which to compute the flux.
@@ -587,7 +606,7 @@ class BrandtSolution(object):
             with_units: Whether to a dict of pint.Quantities with units attached.
 
         Returns:
-            dict of flux for each polygon in units of [self.field_units * device.units**2].
+            dict of flux for each polygon in units of ``[self.field_units * device.units**2]``.
         """
         films = list(self.device.films)
         holes = list(self.device.holes)

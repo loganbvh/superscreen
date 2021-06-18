@@ -30,6 +30,7 @@ author = "Logan Bishop-Van Horn"
 extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autodoc",
+    "sphinx_autodoc_typehints",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
@@ -61,6 +62,8 @@ html_static_path = ["_static"]
 
 autodoc_member_order = "bysource"
 
+autodoc_typehints = "description"
+
 nbsphinx_execute = "always"
 
 nbsphinx_execute_arguments = [
@@ -70,4 +73,7 @@ nbsphinx_execute_arguments = [
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
+    "numpy": ("http://docs.scipy.org/doc/numpy", None),
+    "scipy": ("http://docs.scipy.org/doc/scipy/reference", None),
+    "matplotlib": ("http://matplotlib.org/stable", None),
 }

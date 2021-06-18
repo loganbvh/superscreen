@@ -19,8 +19,15 @@ def in_polygon(
     xp: Union[float, np.ndarray],
     yp: Union[float, np.ndarray],
 ) -> Union[bool, np.ndarray]:
-    """Check whether query points (xq, yq) lie in the polyon
-    defined by points (xp, yp).
+    """Returns a boolean array of the same shape as ``xq`` and ``yq`` indicating
+    whether each points lies within the polygon defined by ``xp`` and ``yp``.
+    If ``xq`` and ``yq`` are scalars, then a single boolean is returned.
+
+    Args:
+        xq: x-coordinates of "query" points
+        yq: y-coordinates of "query" points
+        xp: x-coordinates of polygon
+        yp: y-coordinates of polygon
     """
     xq = np.asarray(xq)
     yq = np.asarray(yq)
@@ -38,7 +45,7 @@ def in_polygon(
 
 
 def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """Returns x, y coordinates for triangle centroids."""
+    """Returns x, y coordinates for triangle centroids (centers of mass)."""
     return np.array([np.sum(points[t], axis=0) / 3 for t in triangles])
 
 
@@ -46,11 +53,11 @@ def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     """Calculates the area of each triangle.
 
     Args:
-        points: shape (n,2) array of x,y coordinates of nodes
-        triangle: shape (m,3) array of triangles
+        points: Shape (n, 2) array of x,y coordinates of vertices
+        triangles: Shape (m, 3) array of triangles indices
 
     Returns:
-        shape (m,) array of triangle areas.
+        Shape (m, ) array of triangle areas
     """
     a = np.zeros(triangles.shape[0])
     for i, t in enumerate(triangles):
@@ -69,7 +76,16 @@ def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
 def adjacency_matrix(
     triangles: np.ndarray, sparse: bool = False
 ) -> Union[np.ndarray, sp.csr_matrix]:
-    """Computes the adjacency matrix for a given set of triangles."""
+    """Computes the adjacency matrix for a given set of triangles.
+
+    Args:
+        triangles: Shape (m, 3) array of triangles indices
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) adjacency matrix, where n = triangles.max() + 1
+
+    """
     A = np.concatenate(
         [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
     )
@@ -89,6 +105,17 @@ def calculcate_weights(
     method: str,
     sparse: bool = False,
 ) -> Union[np.ndarray, sp.csr_matrix]:
+    """Returns the weight matrix, calculated using the specified method.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangle indices.
+        method: "uniform", "inv_euclidean", or "half_cotangent".
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) matrix of vertex weights
+    """
     method = method.lower()
     if method == "uniform":
         # Uniform weights are just the adjacency matrix.
@@ -120,7 +147,16 @@ def calculcate_weights(
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = False
 ) -> Union[np.ndarray, sp.lil_matrix]:
-    """Weight edges by the inverse Euclidean distance of the edge lengths."""
+    """Weights edges by the inverse Euclidean distance of the edge lengths.
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangles indices.
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) matrix of vertex weights
+    """
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
@@ -153,7 +189,16 @@ def weights_inv_euclidean(
 def weights_half_cotangent(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = False
 ) -> Union[np.ndarray, sp.lil_matrix]:
-    """Weight edges by half of the cotangent of the two angles opposite the edge."""
+    """Weights edges by half of the cotangent of the two angles opposite the edge.
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangles indices.
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) matrix of vertex weights
+    """
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
@@ -200,7 +245,17 @@ def mass_matrix(
     diagonal: bool = True,
     sparse: bool = False,
 ) -> Union[np.ndarray, sp.lil_matrix]:
-    """The mass matrix defines an effective area for each vertex."""
+    """The mass matrix defines an effective area for each vertex.
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangles indices.
+        diagonal: Whether to return a diagonal mass matrix.
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) mass matrix
+    """
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
@@ -243,8 +298,17 @@ def laplacian_operator(
     """Laplacian operator for the mesh (sometimes called
     Laplace-Beltrami operator).
 
-    The Laplacian operator M^(-1) @ L, where M is the mass
-    matrix and L is the Laplacian matrix.
+    The Laplacian operator is defined as ``inv(M) @ L``,
+    where M is the mass matrix and L is the Laplacian matrix.
+
+    Args:
+        points: Shape (n, 2) array of x,y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangles indices.
+        weights: Shape (n, n) array of vertex weights.
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) Laplacian operator
     """
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf

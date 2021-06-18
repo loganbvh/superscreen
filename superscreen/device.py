@@ -71,7 +71,7 @@ class Layer(object):
             self._Lambda = Lambda
 
     @property
-    def Lambda(self) -> float:
+    def Lambda(self) -> Union[float, CompositeParameter]:
         """Effective penetration depth of the superconductor."""
         if self._Lambda is not None:
             return self._Lambda

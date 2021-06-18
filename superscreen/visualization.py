@@ -69,7 +69,7 @@ def plot_streams_layer(
         colorbar: Whether to add a colorbar to the plot.
 
     Returns:
-        matplotlib axis
+        matplotlib axis and Colorbar if one was created (None otherwise)
     """
     if ax is None:
         fig, ax = plt.subplots(**kwargs)

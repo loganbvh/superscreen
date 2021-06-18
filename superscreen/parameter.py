@@ -82,10 +82,10 @@ class Parameter(object):
         func: A callable/function that actually calculcates the parameter's value.
             The function must take x, y, (and optionally z) as the first and only
             positional arguments, and all other arguments must be keyword arguments.
-            Therefore func should have a signature like func(x, y, z, a=1, b=2, c=True),
-            func(x, y, *, a, b, c), func(x, y, z, *, a, b, c),
-            or func(x, y, z, *, a, b=None, c=3).
-        **kwargs: Keyword arguments for func.
+            Therefore func should have a signature like ``func(x, y, z, a=1, b=2, c=True)``,
+            ``func(x, y, *, a, b, c)``, ``func(x, y, z, *, a, b, c)``,
+            or ``func(x, y, z, *, a, b=None, c=3)``.
+        kwargs: Keyword arguments for func.
     """
 
     def __init__(self, func: Callable, **kwargs):
@@ -281,6 +281,8 @@ class CompositeParameter(Parameter):
 
 
 class Constant(Parameter):
+    """A Parameter whose value doesn't depend on position."""
+
     def __init__(self, value, dimensions=2):
         if dimensions not in (2, 3):
             raise ValueError("Dimensions must be 2 or 3.")
