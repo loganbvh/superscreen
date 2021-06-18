@@ -250,7 +250,7 @@ def brandt_layer(
     return g, total_field, screening_field
 
 
-def brandt_layers(
+def solve(
     *,
     device: Device,
     applied_field: Callable,
