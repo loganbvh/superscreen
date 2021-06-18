@@ -1,8 +1,8 @@
 from typing import Optional, Union, Tuple, List
 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.colors as cm
+import matplotlib.pyplot as plt
 from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 

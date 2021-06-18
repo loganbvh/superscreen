@@ -4,7 +4,8 @@ superconducting devices. SuperScreen solves the coupled Maxwell's and London equ
 on a triangular mesh using a matrix inversion method described in the following references:
 
 1. Phys. Rev. B 72, 024529 (2005) [Brandt].
-2. Supercond. Sci. Technol. 29 (2016) 124001 [Kirtley].
+2. Rev. Sci. Instrum. 87, 093702 (2016). [Kirtley1]
+3. Supercond. Sci. Technol. 29 (2016) 124001 [Kirtley2].
 """
 
 from setuptools import setup, find_packages

@@ -6,8 +6,8 @@ import pint
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse as sp
-from scipy.spatial.distance import cdist
 from scipy.interpolate import griddata
+from scipy.spatial.distance import cdist
 from matplotlib.tri import Triangulation, LinearTriInterpolator
 
 from .device import Device
