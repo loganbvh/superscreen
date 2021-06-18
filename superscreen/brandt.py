@@ -113,9 +113,9 @@ def brandt_layer(
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
         # Form the linear system for the film:
-        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
+        # (Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
+        A = Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d]
         h = Hz_applied[ix1d] + Ha_eff[ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
         # slightly faster than gf = la.solve(A, h),
@@ -132,10 +132,10 @@ def brandt_layer(
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    response_field = (Q * weights) @ g
-    total_field = Hz_applied + response_field
+    screening_field = -(Q * weights) @ g
+    total_field = Hz_applied + screening_field
 
-    return g, total_field, response_field
+    return g, total_field, screening_field
 
 
 def brandt_layers(
@@ -156,9 +156,9 @@ def brandt_layers(
     only the applied field.
 
     2. If coupled is True and there are multiple layers, then for each layer,
-    calculcate the response field from all other layers and recompute the
+    calculcate the screening field from all other layers and recompute the
     stream function and fields based on the sum of the applied field
-    and the responses from all other layers.
+    and the screening fields from all other layers.
 
     3. If iterations > 1, then repeat step 2 (iterations - 1) times.
 
@@ -186,7 +186,7 @@ def brandt_layers(
 
     streams = {}
     fields = {}
-    response_fields = {}
+    screening_fields = {}
 
     # Compute the stream functions and fields for each layer
     # given only the applied field.
@@ -196,7 +196,7 @@ def brandt_layers(
         def layer_field(x, y):
             return applied_field(x, y, layer.z0)
 
-        g, total_field, response_field = brandt_layer(
+        g, total_field, screening_field = brandt_layer(
             device=device,
             layer=name,
             applied_field=layer_field,
@@ -205,13 +205,13 @@ def brandt_layers(
         )
         streams[name] = g
         fields[name] = total_field
-        response_fields[name] = response_field
+        screening_fields[name] = screening_field
 
     solution = BrandtSolution(
         device=device,
         streams=streams,
         fields=fields,
-        response_fields=response_fields,
+        screening_fields=screening_fields,
         applied_field=applied_field,
         circulating_currents=circulating_currents,
     )
@@ -227,8 +227,8 @@ def brandt_layers(
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
         mesh = Triangulation(*points.T, triangles=triangles)
         for i in range(iterations):
-            # Calculcate the response fields at each layer from every other layer
-            other_responses = {}
+            # Calculcate the screening fields at each layer from every other layer
+            other_screening_fields = {}
             for name, layer in device.layers.items():
                 Hzr = np.zeros(points.shape[0], dtype=float)
                 for other_name, other_layer in device.layers.items():
@@ -247,12 +247,12 @@ def brandt_layers(
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
                     Hzr += np.sign(dz) * np.sum(areas * q * g, axis=1)
-                other_responses[name] = Hzr
+                other_screening_fields[name] = Hzr
 
             # Solve again with the response fields from all layers
             streams = {}
             fields = {}
-            response_fields = {}
+            screening_fields = {}
             for name, layer in device.layers.items():
                 logger.info(
                     f"Calculating {name} response to applied field and "
@@ -260,9 +260,9 @@ def brandt_layers(
                 )
 
                 def layer_field(x, y):
-                    return applied_field(x, y, layer.z0) + other_responses[name]
+                    return applied_field(x, y, layer.z0) + other_screening_fields[name]
 
-                g, total_field, response_field = brandt_layer(
+                g, total_field, screening_field = brandt_layer(
                     device=device,
                     layer=name,
                     applied_field=layer_field,
@@ -271,13 +271,13 @@ def brandt_layers(
                 )
                 streams[name] = g
                 fields[name] = total_field
-                response_fields[name] = response_field
+                screening_fields[name] = screening_field
 
             solution = BrandtSolution(
                 device=device,
                 streams=streams,
                 fields=fields,
-                response_fields=response_fields,
+                screening_fields=screening_fields,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
             )
@@ -355,14 +355,14 @@ class BrandtSolution(object):
         device: Device,
         streams: Dict[str, np.ndarray],
         fields: Dict[str, np.ndarray],
-        response_fields: Dict[str, np.ndarray],
+        screening_fields: Dict[str, np.ndarray],
         applied_field: Callable,
         circulating_currents: Optional[Dict[str, float]] = None,
     ):
         self.device = device
         self.streams = streams
         self.fields = fields
-        self.response_fields = response_fields
+        self.screening_fields = screening_fields
         self.applied_field = applied_field
         self.circulating_currents = circulating_currents
 
@@ -380,7 +380,7 @@ class BrandtSolution(object):
 
         Args:
             dataset: Name of the dataset to interpolate
-                (one of "streams", "fields", or "response_fields").
+                (one of "streams", "fields", or "screening_fields").
             grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
                 then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate results.
@@ -389,7 +389,7 @@ class BrandtSolution(object):
         Returns:
             (x grid, y grid, dict of interpolated data for each layer)
         """
-        valid_data = ("streams", "fields", "response_fields")
+        valid_data = ("streams", "fields", "screening_fields")
         if dataset not in valid_data:
             raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
         datasets = getattr(self, dataset)

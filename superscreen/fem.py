@@ -66,6 +66,8 @@ def adjacency_matrix(
     A = np.concatenate(
         [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
     )
+    # This is the (data, (row_ind, col_ind)) format for csr_matrix,
+    # meaning that adj[row_ind[k], col_ind[k]] = data[k]
     adj = sp.csr_matrix((np.ones(A.shape[0]), (A[:, 0], A[:, 1])))
     adj = adj + adj.T
     adj = (adj > 0).astype(int)
