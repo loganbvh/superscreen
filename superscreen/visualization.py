@@ -11,10 +11,14 @@ from .brandt import BrandtSolution
 
 
 def auto_grid(
-    num_plots: int, max_cols: int = 3, figsize: Optional[Tuple[float, float]] = None
+    num_plots: int,
+    max_cols: int = 3,
+    **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Creates a grid of at least ``num_plots`` subplots
     with at most ``max_cols`` columns.
+
+    Additional keyword arguments are passed to plt.subplots().
 
     Args:
         num_plots: Total number of plots that will be populated.
@@ -25,7 +29,7 @@ def auto_grid(
     """
     ncols = min(max_cols, num_plots)
     nrows = int(np.ceil(num_plots / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
+    fig, axes = plt.subplots(nrows, ncols, **kwargs)
     if not isinstance(axes, (list, np.ndarray)):
         axes = np.array([axes])
     return fig, axes
@@ -39,8 +43,11 @@ def plot_streams_layer(
     cmap: str = "magma",
     levels: int = 101,
     colorbar: bool = True,
+    **kwargs,
 ) -> Tuple[plt.Axes, Optional[Colorbar]]:
     """Plots the stream function for a single layer in a Device.
+
+    Additional keyword arguments are passed to plt.subplots() if ax is None.
 
     Args:
         solution: The BrandtSolution from which to extract the stream function.
@@ -58,7 +65,7 @@ def plot_streams_layer(
         matplotlib axis
     """
     if ax is None:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(**kwargs)
     else:
         fig = ax.figure
     device = solution.device
@@ -87,12 +94,14 @@ def plot_streams(
     layers: Optional[Union[List[str], str]] = None,
     units: Optional[str] = None,
     max_cols: int = 3,
-    figsize: Optional[Tuple[float, float]] = None,
     cmap: str = "magma",
     levels: int = 101,
     colorbar: bool = True,
+    **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the stream function for multiple layers in a Device.
+
+    Additional keyword arguments are passed to plt.subplots().
 
     Args:
         solution: The BrandtSolution from which to extract stream functions.
@@ -101,7 +110,6 @@ def plot_streams(
         units: Units in which to plot the stream function. Defaults to
             solution.current_units.
         max_cols: Maximum number of columns in the grid of subplots.
-        figsize: matplotlib figure size.
         cmap: Name of the matplotlib colormap to use.
         levels: Number of contour levels to used.
         colorbar: Whether to add a colorbar to each subplot.
@@ -114,7 +122,7 @@ def plot_streams(
         layers = list(device.layers)
     if isinstance(layers, str):
         layers = [layers]
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, figsize=figsize)
+    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
     used_axes = []
     for layer, ax in zip(layers, fig.axes):
         ax, cbar = plot_streams_layer(
@@ -145,15 +153,17 @@ def plot_fields(
     grid_shape: Union[int, Tuple[int, int]] = (200, 200),
     grid_method: str = "cubic",
     max_cols: int = 3,
-    figsize: Optional[Tuple[float, float]] = None,
     cmap: str = "cividis",
     colorbar: bool = True,
     share_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
+    **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots either the total field or the screening field for
     multiple layers in a Device.
+
+    Additional keyword arguments are passed to plt.subplots().
 
     Args:
         solution: The BrandtSolution from which to extract fields.
@@ -167,7 +177,6 @@ def plot_fields(
             is given, then the grid will be square, shape = (n, n).
         grid_method: Interpolation method to use (see scipy.interpolate.griddata).
         max_cols: Maximum number of columns in the grid of subplots.
-        figsize: matplotlib figure size.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
         share_color_scale: Whether to force all layers to use the same color scale.
@@ -187,7 +196,7 @@ def plot_fields(
         layers = list(device.layers)
     if isinstance(layers, str):
         layers = [layers]
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, figsize=figsize)
+    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
     used_axes = []
     xgrid, ygrid, fields = solution.grid_data(
         dataset=dataset,
@@ -251,7 +260,6 @@ def plot_currents(
     grid_shape: Union[int, Tuple[int, int]] = (200, 200),
     grid_method: str = "cubic",
     max_cols: int = 3,
-    figsize: Optional[Tuple[float, float]] = None,
     cmap: str = "inferno",
     colorbar: bool = True,
     share_color_scale: bool = False,
@@ -259,8 +267,11 @@ def plot_currents(
     vmax: Optional[float] = None,
     streamplot: bool = True,
     min_stream_amp: float = 0.05,
+    **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the current density (sheet current) for each layer in a Device.
+
+    Additional keyword arguments are passed to plt.subplots().
 
     Args:
         solution: The BrandtSolution from which to extract sheet current.
@@ -272,7 +283,6 @@ def plot_currents(
             is given, then the grid will be square, shape = (n, n).
         grid_method: Interpolation method to use (see scipy.interpolate.griddata).
         max_cols: Maximum number of columns in the grid of subplots.
-        figsize: matplotlib figure size.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
         share_color_scale: Whether to force all layers to use the same color scale.
@@ -294,7 +304,7 @@ def plot_currents(
         layers = list(device.layers)
     if isinstance(layers, str):
         layers = [layers]
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, figsize=figsize)
+    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
     used_axes = []
     xgrid, ygrid, current_densities = solution.current_density(
         grid_shape=grid_shape,
