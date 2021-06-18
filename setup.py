@@ -33,15 +33,13 @@ INSTALL_REQUIRES = [
     "scipy",
 ]
 
-# EXTRAS_REQUIRE = {
-#     "docs": [
-#         "sphinx",
-#         "sphinx_rtd_theme",
-#         "nbsphinx",
-#     ],
-# }
-
-EXTRAS_REQUIRE = None
+EXTRAS_REQUIRE = {
+    "docs": [
+        "sphinx",
+        "sphinx_rtd_theme",
+        "nbsphinx",
+    ],
+}
 
 CLASSIFIERS = """\
 Development Status :: 4 - Beta
