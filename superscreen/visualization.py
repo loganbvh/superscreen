@@ -1,3 +1,10 @@
+# This file is part of superscreen.
+
+#     Copyright (c) 2021 Logan Bishop-Van Horn
+
+#     This source code is licensed under the MIT license found in the
+#     LICENSE file in the root directory of this source tree.
+
 from typing import Optional, Union, Tuple, List
 
 import numpy as np
