@@ -132,7 +132,7 @@ def brandt_layer(
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be converted
             to units of [current_units / device.units].
-        check_inversion: Whether to verify the accuracy of the matrix inversion. Default: True.
+        check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
         stream function, total field, film response field
@@ -282,15 +282,14 @@ def brandt_layers(
             as a function of x, y, z coordinates.
         circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-            Default: True.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be converted
             to units of [current_units / device.units].
         coupled: Whether to account for the interactions between different layers
-            (e.g. shielding). Default: True.
+            (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
-            (iterations is ignored if coupled is False). Default: 1.
+            (iterations is ignored if coupled is False).
 
     Returns:
         A list of BrandtSolutions of length 1 if coupled is False,
@@ -479,11 +478,11 @@ class BrandtSolution(object):
             grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
                 then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate results.
-            method: Interpolation method to use (see scipy.interpolate.griddata). Default: "cubic".
+            method: Interpolation method to use (see scipy.interpolate.griddata).
             with_units: Whether to return arrays of pint.Quantities with units attached.
 
         Returns:
-            (x grid, y grid, dict of interpolated data for each layer)
+            x grid, y grid, dict of interpolated data for each layer
         """
         valid_data = ("streams", "fields", "screening_fields")
         if dataset not in valid_data:
@@ -545,11 +544,11 @@ class BrandtSolution(object):
             grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
                 then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate current density.
-            method: Interpolation method to use (see scipy.interpolate.griddata). Default: "cubic".
+            method: Interpolation method to use (see scipy.interpolate.griddata).
             with_units: Whether to return arrays of pint.Quantities with units attached.
 
         Returns:
-            (x grid, y grid, dict of interpolated current density for each layer)
+            x grid, y grid, dict of interpolated current density for each layer
         """
         xgrid, ygrid, streams = self.grid_data(
             dataset="streams",

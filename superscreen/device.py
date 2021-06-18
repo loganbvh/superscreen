@@ -117,7 +117,7 @@ class Polygon(object):
             yq: y coordinate(s) of query point(s).
             index: If True, then return the indices of the points in [xq, yq]
                 that lie within the polygon. Otherwise, return a boolean array
-                of the same shape as xq and yq. Default: False.
+                of the same shape as xq and yq.
 
         Returns:
             If index is True, returns the indices of the points in [xq, yq]
@@ -149,11 +149,10 @@ class Device(object):
         layers: A dict of named Layers.
         films: A dict of named Polygons representing regions of superconductor.
         holes: A dict of named Polygons representing holes in superconducting films.
-            Default: {}.
         flux_regions: A dict of named Polygons representing regions for which you
-            want to calculcate fluxes. Default: {}.
-        units: Distance units for the coordinate system. Default: "um".
-        origin: Location of the origina of the coordinate system. Default: (0, 0, 0).
+            want to calculcate fluxes.
+        units: Distance units for the coordinate system.
+        origin: Location of the origina of the coordinate system.
     """
 
     def __init__(
@@ -241,7 +240,7 @@ class Device(object):
     def make_mesh(
         self,
         compute_arrays: bool = True,
-        weight_method: str = "uniform",
+        weight_method: str = "half_cotangent",
         min_triangles: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
         optimesh_method: str = "cvt-block-diagonal",
@@ -253,13 +252,12 @@ class Device(object):
 
         Args:
             compute_arrays: Whether to compute the field-indepentsn arrays
-                needed for Brandt simulations. Default: True.
+                needed for Brandt simulations.
             weight_method: Meshing scheme: either "uniform", "half_cotangent", or "inv_euclidian".
-                Default: "uniform".
             min_triangles: Minimum number of triangles in the mesh. If None, then the
                 number of triangles will be determined by meshpy_kwargs.
             optimesh_steps: Maximum number of optimesh steps. If None, then no optimization is done.
-            optimesh_method: Name of the optimization method to use. Default: "cvt-block-diagonal".
+            optimesh_method: Name of the optimization method to use.
             optimesh_tolerance: Optimesh quality tolerance.
             optimesh_verbose: Whether to use verbose mode in optimesh.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
@@ -339,12 +337,11 @@ class Device(object):
 
         Args:
             ax: matplotlib axis on which to plot. If None, a new figure is created.
-                Default: None.
-            grid: Whether to add grid lines. Default: False.
-            legend: Whether to add a legend. Default: True.
+            grid: Whether to add grid lines.
+            legend: Whether to add a legend.
 
         Returns:
-            The matplotlib axis.
+            matplotlib axis
         """
         if ax is None:
             fig, ax = plt.subplots(1, 1)
@@ -377,13 +374,12 @@ class Device(object):
 
         Args:
             ax: matplotlib axis on which to plot. If None, a new figure is created.
-                Default: None.
-            edges: Whether to plot the triangle edges. Default: True.
-            vertices: Whether to plot the triangle vertices: Default: False.
-            grid: Whether to add grid lines. Default: False.
+            edges: Whether to plot the triangle edges.
+            vertices: Whether to plot the triangle vertices.
+            grid: Whether to add grid lines.
 
         Returns:
-            The matplotlib axis.
+            matplotlib axis
         """
         x, y = self.points.T
         if ax is None:

@@ -44,15 +44,14 @@ def solve(
             as a function of x, y, z coordinates.
         circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-            Default: True.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be converted
             to units of [current_units / device.units].
         coupled: Whether to account for the interactions between different layers
-            (e.g. shielding). Default: True.
+            (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
-            (iterations is ignored if coupled is False). Default: 1.
+            (iterations is ignored if coupled is False).
 
     Returns:
         A list of BrandtSolutions of length 1 if coupled is False,

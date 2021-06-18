@@ -15,7 +15,7 @@ def constant(
 
     Args:
         x, y, z: Position coordinates.
-        value: Value of the field. Default: 0.
+        value: Value of the field.
     """
     return value * np.ones_like(x)
 

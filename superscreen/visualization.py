@@ -151,7 +151,7 @@ def plot_fields(
     share_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-):
+) -> Tuple[plt.Figure, np.ndarray]:
     """Plots either the total field or the screening field for
     multiple layers in a Device.
 
@@ -259,7 +259,7 @@ def plot_currents(
     vmax: Optional[float] = None,
     streamplot: bool = True,
     min_stream_amp: float = 0.05,
-):
+) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the current density (sheet current) for each layer in a Device.
 
     Args:
