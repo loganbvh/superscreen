@@ -28,6 +28,7 @@ INSTALL_REQUIRES = [
     "numpy",
     "optimesh",
     "pandas",
+    "pint",
     "scipy",
 ]
 

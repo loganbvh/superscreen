@@ -2,6 +2,7 @@ import logging
 from typing import Union, Dict, Optional, Tuple
 
 import numpy as np
+from pint import UnitRegistry
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 from meshpy import triangle
@@ -12,6 +13,8 @@ from .parameter import Parameter, CompositeParameter
 
 
 logger = logging.getLogger(__name__)
+
+ureg = UnitRegistry()
 
 ParamType = Union[float, Parameter, CompositeParameter]
 
@@ -171,16 +174,19 @@ class Device(object):
         self.films = films
         self.holes = holes or {}
         self.flux_regions = flux_regions or {}
-        self.units = units
+        # Make units a "read-only" attribute.
+        # It should never be changed after instantiation.
+        self._units = units
         self._origin = tuple(origin)
         self.sparse = sparse
+        self.ureg = ureg
 
-        # Remove duplicate points to avoid meshing issues
         self.poly_points = np.concatenate(
             [film.points for film in self.films.values()]
             + [hole.points for hole in self.holes.values()]
             + [flux_region.points for flux_region in self.flux_regions.values()]
         )
+        # Remove duplicate points to avoid meshing issues
         self.poly_points = np.unique(self.poly_points, axis=0)
 
         self.points = None
@@ -195,6 +201,11 @@ class Device(object):
         self._mesh_is_valid = False
         if mesh_kwargs:
             self.make_mesh(**mesh_kwargs)
+
+    @property
+    def units(self):
+        """Length units used for the device geometry."""
+        return self._units
 
     @property
     def origin(self) -> Tuple[float, float, float]:
