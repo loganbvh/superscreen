@@ -9,6 +9,8 @@ from .brandt import solve, BrandtSolution
 from .device import Layer, Polygon, Device
 from .parameter import Parameter, Constant
 from .visualization import (
+    auto_grid,
+    grids_to_vecs,
     plot_streams_layer,
     plot_streams,
     plot_fields,
