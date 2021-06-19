@@ -11,8 +11,9 @@ The ``superscreen.fem`` module contains functions useful performing computations
 on a triangular mesh. Many of the functions take as arguments two arrays, ``points``
 and ``triangles``, which together define the mesh. ``points``, which has shape ``(n, 2)``,
 defines the coordinates of the triangle vertices. Each row in ``triangles``, which has shape ``(m, 3)``
-gives the indices of the three vertices in a single triangle, such that ``[points[t] for t in triangles]``
-gives a list of the three vertices of every triangle in the mesh.
+gives the indices of the three vertices in a single triangle, such that ``points[triangles]``
+is a shape ``(m, 3, 2)`` array where each row gives the coordinates of the three vertices
+of a triangle in the mesh.
 
 The weight matrix, mass matrix, and Laplacian operator are all sparse, meaning that most of their
 entries are zero. In order to save memory, functions that generate these arrays give

@@ -71,16 +71,16 @@ def function_repr(
 
 class Parameter(object):
     """A callable object that computes a scalar parameter
-    as a function of position coordinates x, y, z.
+    as a function of position coordinates x, y (and optionally z).
 
     Addition, subtraction, multiplication, and division
     between multiple Parameters and/or real numbers (ints and floats)
     is supported. The result of any of these operations is a
-    CompositeParameter object.
+    ``CompositeParameter`` object.
 
     Args:
         func: A callable/function that actually calculcates the parameter's value.
-            The function must take x, y, (and optionally z) as the first and only
+            The function must take x, y (and optionally z) as the first and only
             positional arguments, and all other arguments must be keyword arguments.
             Therefore func should have a signature like ``func(x, y, z, a=1, b=2, c=True)``,
             ``func(x, y, *, a, b, c)``, ``func(x, y, z, *, a, b, c)``,

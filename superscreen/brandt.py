@@ -175,8 +175,7 @@ def brandt_layer(
 
     weights = device.weights
     Del2 = device.Del2
-    # We need to do slicing and summing, so its easiest
-    # to just use numpy arrays
+    # We need to do slicing, etc., so its easiest to just use numpy arrays
     if sp.issparse(weights):
         weights = weights.toarray()
     if sp.issparse(Del2):
@@ -192,8 +191,8 @@ def brandt_layer(
         warnings.warn(
             f"Layer '{layer}': The film thickness, d = {d:.4f} {device.units}, "
             f"is greater than or equal to the London penetration depth "
-            f"({lambda_str} = {london_lambda:.4f} {device.units}), resulting in "
-            f"an effective penetration depth {Lambda_str} = {Lambda:.4f} "
+            f"({lambda_str} = {london_lambda:.4f} {device.units}), resulting "
+            f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
             f"{device.units} <= {lambda_str}. The assumption that the current density "
             f"is nearly constant over the thickness of the film may not be valid. "
         )
