@@ -58,7 +58,7 @@ def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     return points[triangles].sum(axis=1) / 3
 
 
-def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     """Calculates the area of each triangle.
 
     Args:
@@ -273,15 +273,15 @@ def mass_matrix(
     else:
         mass = np.zeros((points.shape[0], points.shape[0]), dtype=float)
 
-    areas = area(points, triangles)
+    tri_areas = areas(points, triangles)
 
     if diagonal:
-        for A, t in zip(areas, triangles):
+        for A, t in zip(tri_areas, triangles):
             mass[t[0], t[0]] += A / 3
             mass[t[1], t[1]] += A / 3
             mass[t[2], t[2]] += A / 3
     else:
-        for A, t in zip(areas, triangles):
+        for A, t in zip(tri_areas, triangles):
             # Add A / 12 to every edge in t
             mass[t[0], t[1]] += A / 12
             mass[t[1], t[0]] = mass[t[0], t[1]]

@@ -18,7 +18,7 @@ from scipy.spatial.distance import cdist
 from matplotlib.tri import Triangulation, LinearTriInterpolator
 
 from .device import Device
-from .fem import area, centroids
+from .fem import areas, centroids
 from .parameter import Constant
 
 logger = logging.getLogger(__name__)
@@ -385,7 +385,7 @@ def solve(
             raise ValueError(f"Iterations ({iterations}) cannot be less than 1.")
 
         tri_points = centroids(points, triangles)
-        areas = area(points, triangles)
+        tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
         mesh = Triangulation(*points.T, triangles=triangles)
@@ -409,7 +409,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                    Hzr += np.sign(dz) * np.sum(areas * q * g, axis=1)
+                    Hzr += np.sign(dz) * np.sum(tri_areas * q * g, axis=1)
                 other_screening_fields[name] = Hzr
 
             # Solve again with the response fields from all layers
@@ -631,7 +631,7 @@ class BrandtSolution(object):
         points = self.device.points
         triangles = self.device.triangles
 
-        areas = area(points, triangles)
+        tri_areas = areas(points, triangles)
         xt, yt = centroids(points, triangles).T
         mesh = Triangulation(*points.T, triangles=triangles)
         flux = {}
@@ -645,5 +645,5 @@ class BrandtSolution(object):
             h_interp = LinearTriInterpolator(mesh, self.fields[poly.layer])
             field = h_interp(xt, yt)
             ix = poly.contains_points(xt, yt, index=True)
-            flux[name] = np.sum(field[ix] * areas[ix]) * units
+            flux[name] = np.sum(field[ix] * tri_areas[ix]) * units
         return flux
