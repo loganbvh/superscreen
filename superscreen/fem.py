@@ -45,8 +45,17 @@ def in_polygon(
 
 
 def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """Returns x, y coordinates for triangle centroids (centers of mass)."""
-    return np.array([np.sum(points[t], axis=0) / 3 for t in triangles])
+    """Returns x, y coordinates for triangle centroids (centers of mass).
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangle indices.
+
+    Returns:
+        Shape (m, 2) array of triangle centroid (center of mass)
+        coordinates
+    """
+    return points[triangles].sum(axis=1) / 3
 
 
 def area(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
