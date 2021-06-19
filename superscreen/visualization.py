@@ -42,7 +42,9 @@ def auto_grid(
     return fig, axes
 
 
-def grids_to_vecs(xgrid: np.ndarray, ygrid: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def grids_to_vecs(
+    xgrid: np.ndarray, ygrid: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
     """Extracts coordinate vectors from 2D meshgrids.
 
     Args:
