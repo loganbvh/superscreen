@@ -27,4 +27,6 @@ Supporting Functions
 
 .. autofunction:: superscreen.visualization.auto_grid
 
+.. autofunction:: superscreen.visualization.grids_to_vecs
+
 .. autofunction:: superscreen.visualization.plot_streams_layer

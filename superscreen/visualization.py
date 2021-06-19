@@ -42,6 +42,19 @@ def auto_grid(
     return fig, axes
 
 
+def grids_to_vecs(xgrid: np.ndarray, ygrid: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Extracts coordinate vectors from 2D meshgrids.
+
+    Args:
+        xgrid: meshgrid of x coordinates
+        ygrid: meshgrid of y coordinates
+
+    Returns:
+        vector of x coordinates, vector of y coordinates
+    """
+    return xgrid[0, :], ygrid[:, 0]
+
+
 def plot_streams_layer(
     solution: BrandtSolution,
     layer: str,
