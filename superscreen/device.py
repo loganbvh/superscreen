@@ -16,14 +16,12 @@ from meshpy import triangle
 import optimesh
 
 from .fem import calculcate_weights, laplacian_operator
-from .parameter import Parameter, CompositeParameter
+from .parameter import Parameter
 
 
 logger = logging.getLogger(__name__)
 
 ureg = UnitRegistry()
-
-ParamType = Union[float, Parameter, CompositeParameter]
 
 
 class Layer(object):
@@ -46,8 +44,8 @@ class Layer(object):
     def __init__(
         self,
         name: str,
-        Lambda: Optional[ParamType] = None,
-        london_lambda: Optional[ParamType] = None,
+        Lambda: Optional[Union[float, Parameter]] = None,
+        london_lambda: Optional[Union[float, Parameter]] = None,
         thickness: Optional[float] = None,
         z0: float = 0,
     ):
@@ -71,7 +69,7 @@ class Layer(object):
             self._Lambda = Lambda
 
     @property
-    def Lambda(self) -> Union[float, CompositeParameter]:
+    def Lambda(self) -> Union[float, Parameter]:
         """Effective penetration depth of the superconductor."""
         if self._Lambda is not None:
             return self._Lambda
@@ -172,7 +170,6 @@ class Device(object):
         flux_regions: Optional[Dict[str, Polygon]] = None,
         units: str = "um",
         origin: Tuple[float, float, float] = (0, 0, 0),
-        sparse: bool = False,
         **mesh_kwargs,
     ):
         self.name = name
@@ -184,7 +181,7 @@ class Device(object):
         # It should never be changed after instantiation.
         self._units = units
         self._origin = tuple(origin)
-        self.sparse = sparse
+        self.sparse = None
         self.ureg = ureg
 
         self.poly_points = np.concatenate(
@@ -199,8 +196,6 @@ class Device(object):
         self.triangles = None
 
         self.weights = None
-        self.q = None
-        self.C = None
         self.Q = None
         self.Del2 = None
 
@@ -247,6 +242,7 @@ class Device(object):
     def make_mesh(
         self,
         compute_arrays: bool = True,
+        sparse: bool = True,
         weight_method: str = "half_cotangent",
         min_triangles: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
@@ -260,6 +256,7 @@ class Device(object):
         Args:
             compute_arrays: Whether to compute the field-indepentsn arrays
                 needed for Brandt simulations.
+            sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent", or "inv_euclidian".
             min_triangles: Minimum number of triangles in the mesh. If None, then the
                 number of triangles will be determined by meshpy_kwargs.
@@ -322,14 +319,15 @@ class Device(object):
 
             logger.info("Computing field-independent matrices.")
             self.weights = calculcate_weights(
-                points, triangles, weight_method, sparse=self.sparse
+                points, triangles, weight_method, sparse=sparse
             )
-            self.q = brandt.q_matrix(points)
-            self.C = brandt.C_vector(points)
-            self.Q = brandt.Q_matrix(self.q, self.C, self.weights)
+            q = brandt.q_matrix(points)
+            C = brandt.C_vector(points)
+            self.Q = brandt.Q_matrix(q, C, self.weights)
             self.Del2 = laplacian_operator(
-                points, triangles, self.weights, sparse=self.sparse
+                points, triangles, self.weights, sparse=sparse
             )
+            self.sparse = sparse
 
     def plot_polygons(
         self,
@@ -388,6 +386,10 @@ class Device(object):
         Returns:
             matplotlib axis
         """
+        if not self._mesh_is_valid:
+            raise RuntimeError(
+                "Mesh is not valid. Run device.make_mesh() to generate the mesh."
+            )
         x, y = self.points.T
         if ax is None:
             fig, ax = plt.subplots(1, 1)
