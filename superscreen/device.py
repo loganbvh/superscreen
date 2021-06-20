@@ -151,10 +151,10 @@ class Device(object):
 
     Args:
         name: Name of the device.
-        layers: A dict of named Layers.
-        films: A dict of named Polygons representing regions of superconductor.
-        holes: A dict of named Polygons representing holes in superconducting films.
-        flux_regions: A dict of named Polygons representing regions for which you
+        layers: A dict of named ``Layers``.
+        films: A dict of named ``Polygons`` representing regions of superconductor.
+        holes: A dict of named ``Polygons`` representing holes in superconducting films.
+        flux_regions: A dict of named ``Polygons`` representing regions for which you
             want to calculcate fluxes.
         units: Distance units for the coordinate system.
         origin: Location of the origina of the coordinate system.

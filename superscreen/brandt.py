@@ -151,13 +151,14 @@ def brandt_layer(
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y coordinates.
-        circulating_currents: A dict of {hole_name: hole_current}. If hole_current is
-            a float, then it is assumed to be in units of current_units. If hole_current
-            is a string, then it is converted to a pint.Quantity.
+        circulating_currents: A dict of ``{hole_name: circulating_current}``.
+            If circulating_current is a float, then it is assumed to be in units
+            of current_units. If circulating_current is a string, then it is
+            converted to a pint.Quantity.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
-        current_units: Units to use for current quantities. The applied field will be converted
-            to units of [current_units / device.units].
+        current_units: Units to use for current quantities. The applied field will be
+            converted to units of [current_units / device.units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
@@ -313,14 +314,15 @@ def solve(
         device: The Device to simulate.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y, z coordinates.
-        circulating_currents: A dict of {hole_name: hole_current}. If hole_current is
-            a float, then it is assumed to be in units of current_units. If hole_current
-            is a string, then it is converted to a pint.Quantity.
+        circulating_currents: A dict of ``{hole_name: circulating_current}``.
+            If circulating_current is a float, then it is assumed to be in units
+            of current_units. If circulating_current is a string, then it is
+            converted to a pint.Quantity.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
-        current_units: Units to use for current quantities. The applied field will be converted
-            to units of [current_units / device.units].
+        current_units: Units to use for current quantities. The applied field will be
+            converted to units of [current_units / device.units].
         coupled: Whether to account for the interactions between different layers
             (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
@@ -471,6 +473,16 @@ def solve(
 class BrandtSolution(object):
     """A container for the calculated stream functions and fields,
     with some convenient data processing methods.
+
+    Args:
+        device: The ``Device`` that was solved
+        streams: A dict of ``{layer_name: stream_function}``
+        fields: A dict of ``{layer_name: total_field}``
+        screening_fields: A dict of ``{layer_name: screening_field}``
+        applied_field: The function defining the applied field
+        field_units: Units of the applied field
+        current_units: Units used for current quantities.
+        circulating_currents: A dict of ``{hole_name: circulating_current}``
     """
 
     def __init__(
@@ -483,7 +495,9 @@ class BrandtSolution(object):
         applied_field: Callable,
         field_units: str,
         current_units: str,
-        circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
+        circulating_currents: Optional[
+            Dict[str, Union[float, str, pint.Quantity]]
+        ] = None,
     ):
         self.device = device
         self.streams = streams
@@ -497,7 +511,7 @@ class BrandtSolution(object):
     def grid_data(
         self,
         dataset: str,
-        grid_shape: Union[int, Tuple[int, int]],
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
         method: Optional[str] = "cubic",
         with_units: bool = False,
@@ -565,7 +579,7 @@ class BrandtSolution(object):
 
     def current_density(
         self,
-        grid_shape=Union[int, Tuple[int, int]],
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
         method: Optional[str] = "cubic",
         with_units: bool = False,
@@ -605,7 +619,7 @@ class BrandtSolution(object):
         self,
         polygons: Optional[Union[str, List[str]]] = None,
         with_units: bool = False,
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Union[float, pint.Quantity]]:
         """Compute the flux through all polygons (films, holes, and flux regions)
         by integrating the calculated fields.
 
