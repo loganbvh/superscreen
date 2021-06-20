@@ -62,13 +62,13 @@ def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     """Calculates the area of each triangle.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices
+        points: Shape (n, 2) array of x, y coordinates of vertices
         triangles: Shape (m, 3) array of triangles indices
 
     Returns:
         Shape (m, ) array of triangle areas
     """
-    a = np.zeros(triangles.shape[0])
+    a = np.zeros(triangles.shape[0], dtype=float)
     for i, t in enumerate(triangles):
         xy = points[t]
         # s1 = xy[2, :] - xy[1, :]
@@ -142,7 +142,7 @@ def calculcate_weights(
     # normalize row-by-row
     if sp.issparse(weights):
         # weights / weights.sum(axis=1) returns np.matrix,
-        # to convert back to lil.
+        # so convert back to lil.
         weights = sp.lil_matrix(weights / weights.sum(axis=1))
         weights.setdiag(1.0)
         weights = weights.tocsr()
@@ -159,7 +159,7 @@ def weights_inv_euclidean(
     """Weights edges by the inverse Euclidean distance of the edge lengths.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices.
+        points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangles indices.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
@@ -200,7 +200,7 @@ def weights_half_cotangent(
     """Weights edges by half of the cotangent of the two angles opposite the edge.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices.
+        points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangles indices.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
@@ -265,7 +265,7 @@ def mass_matrix(
     """The mass matrix defines an effective area for each vertex.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices.
+        points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangles indices.
         diagonal: Whether to return a diagonal mass matrix.
         sparse: Whether to return a sparse matrix or numpy ndarray.
@@ -326,7 +326,7 @@ def laplacian_operator(
     where M is the mass matrix and L is the Laplacian matrix.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices.
+        points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangles indices.
         weights: Shape (n, n) array of vertex weights.
         sparse: Whether to return a sparse matrix or numpy ndarray.

@@ -30,34 +30,34 @@ Lambda_str = "\u039b"
 def q_matrix(points: np.ndarray) -> np.ndarray:
     """Computes the denominator matrix, q.
 
-    Eq. 7 in [Brandt.], Eq. 8 in [Kirtley1], Eq. 8 in [Kirtley2].
+    Eq. 7 in [Brandt], Eq. 8 in [Kirtley1], Eq. 8 in [Kirtley2].
 
     Args:
         points: Shape (n, 2) array of x,y coordinates of vertices
 
     Returns:
-        Shape (n, n) array qij
+        Shape (n, n) array, qij
     """
-    # euclidean distance between points
+    # Euclidean distance between points
     distances = cdist(points, points, metric="euclidean")
     q = np.zeros_like(distances)
     # Diagonals of distances are zero by definition, so q[i,i] will diverge
     nz = np.nonzero(distances)
     q[nz] = 1 / (4 * np.pi * distances[nz] ** 3)
-    np.fill_diagonal(q, np.inf)  # diagonal elements diverge
+    np.fill_diagonal(q, np.inf)
     return q
 
 
 def C_vector(points: np.ndarray) -> np.ndarray:
     """Computes the edge vector, C.
 
-    Eq. 12 in [Brandt.], Eq. 16 in [Kirtley1], Eq. 15 in [Kirtley2].
+    Eq. 12 in [Brandt], Eq. 16 in [Kirtley1], Eq. 15 in [Kirtley2].
 
     Args:
         points: Shape (n, 2) array of x,y coordinates of vertices
 
     Returns:
-        Shape (n, ) array Ci
+        Shape (n, ) array, Ci
     """
     xmax = points[:, 0].max()
     xmin = points[:, 0].min()
@@ -81,13 +81,13 @@ def Q_matrix(
 ) -> np.ndarray:
     """Computes the kernel matrix, Q.
 
-    Eq. 10 in [Brandt.], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
+    Eq. 10 in [Brandt], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
 
     Args:
         points: Shape (n, 2) array of x,y coordinates of vertices
 
     Returns:
-        Shape (n, n) array Qij
+        Shape (n, n) array, Qij
     """
     if copy_q:
         q = q.copy()
@@ -131,7 +131,7 @@ def field_conversion(
     try:
         field = field.to(target_units)
     except pint.DimensionalityError:
-        # field_unit is flux density B = mu0 * H
+        # field_units is flux density B = mu0 * H
         field = (field / ureg("mu0")).to(target_units)
     return field / ureg(field_units)
 
@@ -161,7 +161,7 @@ def brandt_layer(
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
-        stream function, total field, film response field
+        stream function, total field, film screening field
     """
     circulating_currents = circulating_currents or {}
 
@@ -206,10 +206,11 @@ def brandt_layer(
         length_units=device.units,
         ureg=device.ureg,
     )
+    target_units = f"{current_units} / {device.units}"
     logger.info(
-        f"Converting applied field in units of {field_units} "
-        f"to units of {current_units} / {device.units}. "
-        f"Conversion factor: {field_conversion_factor}."
+        f"Converting applied field in units of {device.ureg(field_units).units:~P} "
+        f"to units of {device.ureg(target_units).units:~P}. "
+        f"Conversion factor: {field_conversion_factor:~P}."
     )
     Hz_applied *= field_conversion_factor.magnitude
     if isinstance(Lambda, (int, float)):
@@ -337,7 +338,7 @@ def solve(
     )
     logger.info(
         f"Conversion factor to recover fields in units of "
-        f"{field_units}: {field_conversion_factor}."
+        f"{device.ureg(field_units).units:~P}: {field_conversion_factor:~P}."
     )
 
     # Compute the stream functions and fields for each layer
@@ -397,7 +398,7 @@ def solve(
                     if name == other_name:
                         continue
                     logger.info(
-                        f"Calculcating response field at {name} "
+                        f"Calculcating screening field at {name} "
                         f"from {other_name} ({i+1}/{iterations})."
                     )
                     dz = other_layer.z0 - layer.z0
@@ -411,14 +412,14 @@ def solve(
                     Hzr += np.sign(dz) * np.sum(tri_areas * q * g, axis=1)
                 other_screening_fields[name] = Hzr
 
-            # Solve again with the response fields from all layers
+            # Solve again with the screening fields from all layers
             streams = {}
             fields = {}
             screening_fields = {}
             for name, layer in device.layers.items():
                 logger.info(
                     f"Calculating {name} response to applied field and "
-                    f"response field from other layers ({i+1}/{iterations})."
+                    f"screening field from other layers ({i+1}/{iterations})."
                 )
 
                 def layer_field(x, y):
