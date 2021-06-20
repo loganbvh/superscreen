@@ -271,6 +271,10 @@ class Device(object):
         mesh_info = triangle.MeshInfo()
         mesh_info.set_points(self.poly_points)
         mesh_info.set_facets(hull.simplices)
+        # Optimal angle is 60 degrees,
+        # meshpy quality meshing default is 20 degrees
+        min_angle = meshpy_kwargs.get("min_angle", 32.5)
+        meshpy_kwargs["min_angle"] = min_angle
         if min_triangles is None:
             mesh = triangle.build(mesh_info=mesh_info, **meshpy_kwargs)
             points = np.array(mesh.points)

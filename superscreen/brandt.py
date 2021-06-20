@@ -206,7 +206,7 @@ def brandt_layer(
         length_units=device.units,
         ureg=device.ureg,
     )
-    logger.debug(
+    logger.info(
         f"Converting applied field in units of {field_units} "
         f"to units of {current_units} / {device.units}. "
         f"Conversion factor: {field_conversion_factor}."
@@ -335,7 +335,7 @@ def solve(
         length_units=device.units,
         ureg=device.ureg,
     )
-    logger.debug(
+    logger.info(
         f"Conversion factor to recover fields in units of "
         f"{field_units}: {field_conversion_factor}."
     )

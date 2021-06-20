@@ -288,7 +288,7 @@ def plot_currents(
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     streamplot: bool = True,
-    min_stream_amp: float = 0.05,
+    min_stream_amp: float = 0.025,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the current density (sheet current) for each layer in a Device.
