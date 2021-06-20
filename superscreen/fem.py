@@ -20,8 +20,9 @@ def in_polygon(
     yp: Union[float, np.ndarray],
 ) -> Union[bool, np.ndarray]:
     """Returns a boolean array of the same shape as ``xq`` and ``yq`` indicating
-    whether each points lies within the polygon defined by ``xp`` and ``yp``.
-    If ``xq`` and ``yq`` are scalars, then a single boolean is returned.
+    whether each point ``xq[i], yq[i]`` lies within the polygon defined by
+    ``xp`` and ``yp``. If ``xq`` and ``yq`` are scalars,
+    then a single boolean is returned.
 
     Args:
         xq: x-coordinates of "query" points
