@@ -53,8 +53,7 @@ def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
         triangles: Shape (m, 3) array of triangle indices.
 
     Returns:
-        Shape (m, 2) array of triangle centroid (center of mass)
-        coordinates
+        Shape (m, 2) array of triangle centroid (center of mass) coordinates
     """
     return points[triangles].sum(axis=1) / 3
 
