@@ -5,7 +5,7 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Union, Tuple, List
+from typing import Optional, Union, Tuple, List, Dict
 
 import numpy as np
 import matplotlib.colors as cm
@@ -55,6 +55,57 @@ def grids_to_vecs(
         vector of x coordinates, vector of y coordinates
     """
     return xgrid[0, :], ygrid[:, 0]
+
+
+def setup_color_limits(
+    dict_of_arrays: Dict[str, np.ndarray],
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    share_color_scale: bool = False,
+    symmetric_color_scale: bool = False,
+) -> Dict[str, Tuple[float, float]]:
+    """Set up color limits (vmin, vmax) for a dictionary of numpy arrays.
+
+    Args:
+        dict_of_arrays: Dict of ``{name: array}`` for which to compute color limits.
+        vmin: If provided, this vmin will be used for all arrays. If vmin is not None,
+            then vmax must also not be None.
+        vmax: If provided, this vmax will be used for all arrays. If vmax is not None,
+            then vmin must also not be None.
+        share_color_scale: Whether to force all arrays to share the same color scale.
+            This option is ignored if vmin and vmax are provided.
+        symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
+            This option is ignored if vmin and vmax are provided.
+
+    Returns:
+        A dict of ``{name: (vmin, vmax)}``
+    """
+    if (vmin is not None and vmax is None) or (vmax is not None and vmin is None):
+        raise ValueError("If either vmin or max is provided, both must be provided.")
+    if vmin is not None:
+        return {name: (vmin, vmax) for name in dict_of_arrays}
+
+    clims = {
+        name: (np.nanmin(array), np.nanmax(array))
+        for name, array in dict_of_arrays.items()
+    }
+
+    if share_color_scale:
+        global_vmin = np.inf
+        global_vmax = -np.inf
+        for vmin, vmax in clims.values():
+            global_vmin = min(vmin, global_vmin)
+            global_vmax = max(vmax, global_vmax)
+        clims = {name: (global_vmin, global_vmax) for name in dict_of_arrays}
+
+    if symmetric_color_scale:
+        new_clims = {}
+        for name, (vmin, vmax) in clims.items():
+            new_vmax = max(vmax, -vmin)
+            new_clims[name] = (-new_vmax, new_vmax)
+        clims = new_clims
+
+    return clims
 
 
 def plot_streams_layer(
@@ -178,6 +229,7 @@ def plot_fields(
     cmap: str = "cividis",
     colorbar: bool = True,
     share_color_scale: bool = False,
+    symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     **kwargs,
@@ -202,10 +254,9 @@ def plot_fields(
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
         share_color_scale: Whether to force all layers to use the same color scale.
+        symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
-            (ignored if share_color_scale is True).
         vmax: Color scale maximum to use for all layers
-            (ignored if share_color_scale is True).
 
     Returns:
         matplotlib figure and axes
@@ -242,13 +293,13 @@ def plot_fields(
             new_fields[layer] = new_field.magnitude
         fields = new_fields
         clabel = clabel + f" [${device.ureg(units).units:~L}$]"
-    if share_color_scale:
-        vmin = np.inf
-        vmax = -np.inf
-        for array in fields.values():
-            vmin = min(vmin, np.nanmin(array))
-            vmax = max(vmax, np.nanmax(array))
-    clim_dict = {layer: (vmin, vmax) for layer in layers}
+    clim_dict = setup_color_limits(
+        fields,
+        vmin=vmin,
+        vmax=vmax,
+        share_color_scale=share_color_scale,
+        symmetric_color_scale=symmetric_color_scale,
+    )
     # Keep track of which axes are actually used,
     # and delete unused axes later
     used_axes = []
@@ -285,6 +336,7 @@ def plot_currents(
     cmap: str = "inferno",
     colorbar: bool = True,
     share_color_scale: bool = False,
+    symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     streamplot: bool = True,
@@ -308,6 +360,7 @@ def plot_currents(
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
         share_color_scale: Whether to force all layers to use the same color scale.
+        symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
             (ignored if share_color_scale is True).
         vmax: Color scale maximum to use for all layers
@@ -334,24 +387,26 @@ def plot_currents(
     )
     units = units or f"{solution.current_units} / {device.units}"
     jcs = {}
+    Js = {}
     for layer, jc in current_densities.items():
         old_units = f"{solution.current_units} / {device.units}"
-        jc = (jc * device.ureg(old_units)).to(units)
-        jcs[layer] = jc.magnitude
+        jc = jx, jy = (jc * device.ureg(old_units)).to(units).magnitude
+        jcs[layer] = jc
+        Js[layer] = np.sqrt(jx ** 2 + jy ** 2)
     clabel = "$|\\,\\vec{J}\\,|$" + f" [${device.ureg(units).units:~L}$]"
-    if share_color_scale:
-        vmin = np.inf
-        vmax = -np.inf
-        for array in jcs.values():
-            vmin = min(vmin, np.nanmin(array))
-            vmax = max(vmax, np.nanmax(array))
-    clim_dict = {layer: (vmin, vmax) for layer in layers}
+    clim_dict = setup_color_limits(
+        Js,
+        vmin=vmin,
+        vmax=vmax,
+        share_color_scale=share_color_scale,
+        symmetric_color_scale=symmetric_color_scale,
+    )
     # Keep track of which axes are actually used,
     # and delete unused axes later
     used_axes = []
     for ax, layer in zip(fig.axes, layers):
         Jx, Jy = jcs[layer]
-        J = np.sqrt(Jx ** 2 + Jy ** 2)
+        J = Js[layer]
         layer_vmin, layer_vmax = clim_dict[layer]
         norm = cm.Normalize(vmin=layer_vmin, vmax=layer_vmax)
         im = ax.pcolormesh(xgrid, ygrid, J, shading="auto", cmap=cmap, norm=norm)
