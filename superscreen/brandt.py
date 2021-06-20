@@ -76,29 +76,27 @@ def C_vector(points: np.ndarray) -> np.ndarray:
     return C / (4 * np.pi)
 
 
-def Q_matrix(
-    q: np.ndarray, C: np.ndarray, weights: np.ndarray, copy_q: bool = True
-) -> np.ndarray:
+def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """Computes the kernel matrix, Q.
 
     Eq. 10 in [Brandt], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices
+        q: Shape (n, n) matrix qij
+        C: Shape (n, ) vector Ci
+        weights: Shape (n, n) weight matrix
 
     Returns:
         Shape (n, n) array, Qij
     """
-    if copy_q:
-        q = q.copy()
     if not isinstance(weights, np.ndarray):
         # Convert sparse matrix to array
         weights = weights.toarray()
     # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
     # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
+    q = q.copy()
     np.fill_diagonal(q, 0)
-    Q = -np.triu(q)
-    Q = Q + Q.T
+    Q = -q
     np.fill_diagonal(Q, (C + np.sum(q * weights, axis=1)) / np.diag(weights))
     return Q
 
@@ -237,11 +235,12 @@ def brandt_layer(
         hole = hole_indices[name]
         g[hole] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
-        A = Q[:, hole] * weights[:, hole] - Lambda[hole] * Del2[:, hole]
-        # g is in [current_units], Lambda is in [device.units],
+        # current is in [current_units], Lambda is in [device.units],
         # and Del2 is in [device.units ** (-2)], so
         # Ha_eff has units of [current_unit / device.units]
-        Ha_eff += A @ g[hole]
+        Ha_eff += current * (
+            Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
+        ).sum(axis=1)
 
     # Now solve for the stream function inside the superconducting films
     for name in film_names:
@@ -251,9 +250,9 @@ def brandt_layer(
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
         # Form the linear system for the film:
-        # (Q * w - Lambda * Del2) @ gf = A @ gf = h
+        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d]
+        A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
         h = Hz_applied[ix1d] + Ha_eff[ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
         # slightly faster than gf = la.solve(A, h),
@@ -270,7 +269,7 @@ def brandt_layer(
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = -(Q * weights) @ g
+    screening_field = (Q * weights) @ g
     total_field = Hz_applied + screening_field
 
     return g, total_field, screening_field
