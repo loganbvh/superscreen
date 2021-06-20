@@ -139,7 +139,7 @@ def brandt_layer(
     device: Device,
     layer: str,
     applied_field: Callable,
-    circulating_currents: Optional[Dict[str, float]] = None,
+    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
     check_inversion: Optional[bool] = True,
@@ -151,7 +151,9 @@ def brandt_layer(
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y coordinates.
-        circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
+        circulating_currents: A dict of {hole_name: hole_current}. If hole_current is
+            a float, then it is assumed to be in units of current_units. If hole_current
+            is a string, then it is converted to a pint.Quantity.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be converted
@@ -233,12 +235,18 @@ def brandt_layer(
     Ha_eff = np.zeros_like(Hz_applied)
     for name, current in circulating_currents.items():
         hole = hole_indices[name]
+
+        if isinstance(current, str):
+            current = device.ureg(current)
+        if isinstance(current, pint.Quantity):
+            current = current.to(current_units).magnitude
+
         g[hole] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.units],
         # and Del2 is in [device.units ** (-2)], so
         # Ha_eff has units of [current_unit / device.units]
-        Ha_eff += current * (
+        Ha_eff += -current * (
             Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
         ).sum(axis=1)
 
@@ -253,7 +261,7 @@ def brandt_layer(
         # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
-        h = Hz_applied[ix1d] + Ha_eff[ix1d]
+        h = Hz_applied[ix1d] - Ha_eff[ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
         # slightly faster than gf = la.solve(A, h),
         # and much faster than gf = la.pinv(A) @ h.
@@ -279,7 +287,7 @@ def solve(
     *,
     device: Device,
     applied_field: Callable,
-    circulating_currents: Optional[Dict[str, float]] = None,
+    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
     check_inversion: Optional[bool] = True,
@@ -305,7 +313,9 @@ def solve(
         device: The Device to simulate.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y, z coordinates.
-        circulating_currents: A dict of {hole_name: hole_current}. Default: {}.
+        circulating_currents: A dict of {hole_name: hole_current}. If hole_current is
+            a float, then it is assumed to be in units of current_units. If hole_current
+            is a string, then it is converted to a pint.Quantity.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
@@ -473,7 +483,7 @@ class BrandtSolution(object):
         applied_field: Callable,
         field_units: str,
         current_units: str,
-        circulating_currents: Optional[Dict[str, float]] = None,
+        circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     ):
         self.device = device
         self.streams = streams
