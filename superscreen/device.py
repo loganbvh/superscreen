@@ -298,7 +298,7 @@ class Device(object):
                     f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
                     f"Target number of triangles: {min_triangles}."
                 )
-                max_vol *= 0.8
+                max_vol *= 0.9
                 i += 1
         if optimesh_steps:
             logger.info(f"Optimizing mesh with {triangles.shape[0]} triangles.")
