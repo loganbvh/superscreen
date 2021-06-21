@@ -276,11 +276,7 @@ numerically-tractable problem of solving a matrix equation
 :math:`\mathbf{\nabla}^2\mathbf{g}=\mathbf{f}`. As described in [Vaillant-Laplacian-2013]_
 and [Laplacian-SGP-2014]_ the Laplacian operator :math:`\mathbf{\nabla}^2` for a mesh is
 defined in terms of two matrices, the mass matrix :math:`\mathbf{M}` and the
-Laplacian matrix :math:`\mathbf{L}`:
-
-.. math::
-
-    \mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}.
+Laplacian matrix :math:`\mathbf{L}`: :math:`\mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}`.
 
 Mass matrix
 ***********
@@ -289,7 +285,11 @@ The mass matrix gives an effective area to each vertex in the mesh. There are mu
 ways to construct the mass matrix, but here we use a "lumped" mass matrix, which is diagonal
 with elements :math:`(\mathbf{M})_{ii} = \sum_{t\in\mathcal{N}(i)}\frac{1}{3}\mathrm{area}(t)`,
 where :math:`\mathcal{N}(i)` is the set of triangles :math:`t` adjacent to vertex :math:`i`.
-(See image above, where :math:`(\mathbf{M})_{ii} = \mathcal{A}_i`.)
+(See image below, where :math:`(\mathbf{M})_{ii} = A_i`. Image reference: [Vaillant-Laplacian-2013]_.)
+
+.. image:: http://rodolphe-vaillant.fr/images/2019-05/cotan_angles_.png
+    :width: 240
+    :align: center
 
 Weight matrix
 *************
@@ -336,11 +336,7 @@ There are several different methods for constructing the unnormalized weight mat
         \end{cases}
 
 3. Half-cotangent weighting: Each edge is weighted by the half the sum of the cotangents of the
-   two angles opposite to it (image reference: [Vaillant-Laplacian-2013]_).
-
-    .. image:: http://rodolphe-vaillant.fr/images/2019-05/cotan_angles_.png
-        :width: 200
-        :align: center
+   two angles opposite to it (see image above).
 
     .. math::
 
@@ -359,4 +355,10 @@ The Laplacian matrix :math:`\mathbf{L}` is defined in terms of the weight matrix
 
 .. math::
 
-    (\mathbf{L})_{ij} = (\mathbf{w})_{ij} - \delta_{ij}\sum_{j}w_{ij}
+    (\mathbf{L})_{ij} = (\mathbf{w})_{ij} - \delta_{ij}\sum_{\ell}w_{i\ell}.
+
+Finally, the Laplacian operator is given by:
+
+.. math::
+
+    \mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}.
