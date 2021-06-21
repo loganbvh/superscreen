@@ -6,7 +6,7 @@ on a triangular mesh using a matrix inversion method described in the following 
 
 1. Phys. Rev. B 72, 024529 (2005) [Brandt].
 2. Rev. Sci. Instrum. 87, 093702 (2016). [Kirtley1]
-3. Supercond. Sci. Technol. 29 (2016) 124001 [Kirtley2].
+3. Supercond. Sci. Technol. 29 (2016) 124001. [Kirtley2].
 
 Pre-prints of the above references can be found in the [references](docs/references) directory
 in this repo.
