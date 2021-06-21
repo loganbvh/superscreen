@@ -4,12 +4,9 @@ SuperScreen is a package for simulating Meissner screening in multiplanar thin f
 superconducting devices. SuperScreen solves the coupled Maxwell's and London equations
 on a triangular mesh using a matrix inversion method described in the following references:
 
-1. Phys. Rev. B 72, 024529 (2005) [Brandt].
-2. Rev. Sci. Instrum. 87, 093702 (2016). [Kirtley1]
-3. Supercond. Sci. Technol. 29 (2016) 124001. [Kirtley2].
-
-Pre-prints of the above references can be found in the [references](docs/references) directory
-in this repo.
+1. Phys. Rev. B 72, 024529 (2005) [[arXiv:cond-mat/0506144](https://arxiv.org/abs/cond-mat/0506144)]
+2. Rev. Sci. Instrum. 87, 093702 (2016) [[arXiv:1605.09483](https://arxiv.org/abs/1605.09483)]
+3. Supercond. Sci. Technol. 29 (2016) 124001 [[arXiv:1607.03950](https://arxiv.org/abs/1607.03950)]
 
 ## Installing from source
 
