@@ -71,6 +71,8 @@ nbsphinx_execute_arguments = [
     "--InlineBackend.rc figure.dpi=96",
 ]
 
+math_eqref_format = "Eq. {number}"
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("http://docs.scipy.org/doc/numpy", None),

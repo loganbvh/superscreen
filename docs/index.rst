@@ -20,14 +20,12 @@ and circulating currents.
 - Flux-focusing and Meissner screening effects in superconducting devices
 - Vector magnetic fields resulting from currents in 2D superconducting structures
 
-
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
    installation.rst
    background.rst
-   notebooks/quickstart.ipynb
 
 .. toctree::
    :maxdepth: 2
@@ -53,8 +51,6 @@ and circulating currents.
 
    license.rst
    references.rst
-
-
 
 .. Indices and tables
 .. ==================

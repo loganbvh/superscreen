@@ -7,6 +7,12 @@
 Devices & Parameters
 ********************
 
+The classes defined in ``superscreen.device`` and ``superscreen.parameters``
+are used to set up the inputs to a ``SuperScreen`` simulation, namely:
+
+- The geometry and penetration depth of all superconducting films
+- The spatial distribution of the applied magnetic field
+
 Layer
 -----
 

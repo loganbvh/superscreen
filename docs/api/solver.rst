@@ -7,6 +7,9 @@
 Solver
 ******
 
+The ``superscreen.brandt`` module contains the actual implementation
+of Brandt's method, as described :ref:`here <background>`.
+
 Brandt Solver
 -------------
 

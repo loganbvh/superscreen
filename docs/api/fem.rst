@@ -7,7 +7,7 @@
 Finite Element Methods
 **********************
 
-The ``superscreen.fem`` module contains functions useful performing computations
+The ``superscreen.fem`` module contains functions useful for performing computations
 on a triangular mesh. Many of the functions take as arguments two arrays, ``points``
 and ``triangles``, which together define the mesh. ``points``, which has shape ``(n, 2)``,
 defines the coordinates of the triangle vertices. Each row in ``triangles``, which has shape ``(m, 3)``
