@@ -7,6 +7,17 @@
 SuperScreen
 ***********
 
+.. image:: https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main
+   :alt: GitHub Workflow Status (branch)
+
+.. image:: https://readthedocs.org/projects/superscreen/badge/?version=latest
+   :target: https://superscreen.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
+.. image:: https://img.shields.io/github/license/loganbvh/superscreen
+   :alt: GitHub
+
+
 ``SuperScreen`` is an open-source Python package for simulating Meissner screening
 in 2D superconductors and multiplanar superconducting devices of arbitrary geometry.
 Using a matrix inversion method introduced by Brandt [Brandt-PRB-2005]_, ``SuperScreen`` solves
