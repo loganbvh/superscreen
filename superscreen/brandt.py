@@ -59,7 +59,7 @@ def C_vector(points: np.ndarray) -> np.ndarray:
     Returns:
         Shape (n, ) array, Ci
     """
-    x, y = points[:, 0], points[:, 1]
+    x, y = points.T
     a = np.ptp(x) / 2
     b = np.ptp(y) / 2
     with np.errstate(divide="ignore"):
