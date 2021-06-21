@@ -95,12 +95,17 @@ def adjacency_matrix(
         Shape (n, n) adjacency matrix, where n = triangles.max() + 1
 
     """
-    A = np.concatenate(
+    # shape (m * 3, 2) array of graph edges
+    edges = np.concatenate(
         [triangles[:, [0, 1]], triangles[:, [1, 2]], triangles[:, [2, 0]]]
     )
+    row, col = edges[:, 0], edges[:, 1]
+    nrow, ncol = row.max() + 1, col.max() + 1
+    data = np.ones_like(row, dtype=int)
     # This is the (data, (row_ind, col_ind)) format for csr_matrix,
     # meaning that adj[row_ind[k], col_ind[k]] = data[k]
-    adj = sp.csr_matrix((np.ones(A.shape[0]), (A[:, 0], A[:, 1])))
+    adj = sp.csr_matrix((data, (row, col)), shape=(nrow, ncol))
+    # Undirected graph -> symmetric adjacency matrix
     adj = adj + adj.T
     adj = (adj > 0).astype(int)
     if sparse:
@@ -128,8 +133,7 @@ def calculcate_weights(
     method = method.lower()
     if method == "uniform":
         # Uniform weights are just the adjacency matrix.
-        adj = adjacency_matrix(triangles, sparse=sparse)
-        weights = adj.astype(float)
+        weights = adjacency_matrix(triangles, sparse=sparse).astype(float)
     elif method == "inv_euclidean":
         weights = weights_inv_euclidean(points, triangles, sparse=sparse)
     elif method == "half_cotangent":
@@ -169,12 +173,12 @@ def weights_inv_euclidean(
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
-
+    N = points.shape[0]
     if sparse:
         # Use lil_matrix for operations that change matrix sparsity
-        weights = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
+        weights = sp.lil_matrix((N, N), dtype=float)
     else:
-        weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+        weights = np.zeros((N, N), dtype=float)
 
     # Compute the three vectors of each triangle and their norms
     vec10 = points[triangles[:, 1]] - points[triangles[:, 0]]
@@ -210,8 +214,8 @@ def weights_half_cotangent(
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
-
-    weights = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+    N = points.shape[0]
+    weights = np.zeros((N, N), dtype=float)
 
     # First vertex
     vec1 = points[triangles[:, 1]] - points[triangles[:, 0]]
@@ -259,7 +263,7 @@ def weights_half_cotangent(
 def mass_matrix(
     points: np.ndarray,
     triangles: np.ndarray,
-    diagonal: bool = True,
+    lumped: bool = True,
     sparse: bool = False,
 ) -> Union[np.ndarray, sp.csc_matrix]:
     """The mass matrix defines an effective area for each vertex.
@@ -267,7 +271,7 @@ def mass_matrix(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangles indices.
-        diagonal: Whether to return a diagonal mass matrix.
+        lumped: Whether to compute the lumped mass matrix (which is diagonal).
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -276,34 +280,37 @@ def mass_matrix(
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
-
+    N = points.shape[0]
     if sparse:
-        mass = sp.lil_matrix((points.shape[0], points.shape[0]), dtype=float)
+        mass = sp.lil_matrix((N, N), dtype=float)
     else:
-        mass = np.zeros((points.shape[0], points.shape[0]), dtype=float)
+        mass = np.zeros((N, N), dtype=float)
 
     tri_areas = areas(points, triangles)
 
-    if diagonal:
+    if lumped:
         for a, t in zip(tri_areas / 3, triangles):
             mass[t[0], t[0]] += a
             mass[t[1], t[1]] += a
             mass[t[2], t[2]] += a
     else:
-        for a, t in zip(tri_areas / 6, triangles):
-            # Add A / 12 to every edge in t
-            a2 = a / 2
-            mass[t[0], t[1]] += a2
-            mass[t[1], t[0]] = mass[t[0], t[1]]
-            mass[t[0], t[2]] += a2
-            mass[t[2], t[0]] = mass[t[0], t[2]]
-            mass[t[1], t[2]] += a2
-            mass[t[2], t[1]] = mass[t[1], t[2]]
+        raise NotImplementedError("Non-lumped mass matrix is not implemented.")
+        # I can't find a good reference for this, so we'll just use
+        # the lumped mass matrix.
+        # for a, t in zip(tri_areas / 6, triangles):
+        #     # Add A / 6 to every vertex in t
+        #     mass[t[0], t[0]] += a
+        #     mass[t[1], t[1]] += a
+        #     mass[t[2], t[2]] += a
 
-            # Add A / 6 to every point in t
-            mass[t[0], t[0]] += a
-            mass[t[1], t[1]] += a
-            mass[t[2], t[2]] += a
+        #     # Add A / 12 to every edge in t
+        #     a2 = a / 2
+        #     mass[t[0], t[1]] += a2
+        #     mass[t[1], t[0]] = mass[t[0], t[1]]
+        #     mass[t[0], t[2]] += a2
+        #     mass[t[2], t[0]] = mass[t[0], t[2]]
+        #     mass[t[1], t[2]] += a2
+        #     mass[t[2], t[1]] = mass[t[1], t[2]]
 
     if sparse:
         # Use csc_matrix because we will eventually invert the mass matrix,
