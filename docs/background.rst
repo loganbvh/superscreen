@@ -13,9 +13,9 @@ to an applied inhomogeneous out-of-plane magnetic field
 
 Given :math:`H_{z,\,\mathrm{applied}}(x, y, z)` and information about the geometry and magnetic
 penetration depth of all films in a superconducting structure, we aim
-to calculcate the sheet current (or thickness-integrated current density) :math:`\vec{J}(x, y)`
-at all points inside the film(s), from which one can calculcate the vector magnetic field
-:math:`\vec{H}(x, y, z)` at all points both inside and outside the film(s).
+to calculcate the thickness-integrated current density :math:`\vec{J}(x, y)`
+at all points inside the films, from which one can calculcate the vector magnetic field
+:math:`\vec{H}(x, y, z)` at all points both inside and outside the films.
 
 Brandt's Method
 ---------------
@@ -34,9 +34,9 @@ depth :math:`\lambda(\vec{r})` obey the second London equation:
 :math:`\nabla=\left(\frac{\partial}{\partial x}, \frac{\partial}{\partial y}, \frac{\partial}{\partial z}\right)`.
 
 Brandt's model assumes that the current density :math:`\vec{j}` is approximately independent of :math:`z`,
-such :math:`\vec{j}(x, y, z)\approx\vec{j}_{z_0}(x, y)` for a film lying in the :math:`x-y` plane at vertical
-position :math:`z_0`. Working now with the thickness-integrated current density (or "sheet current")
-:math:`\vec{J}(x, y)=\vec{j}_{z_0}(x, y)\cdot d`, where :math:`d`
+such :math:`\vec{j}(x, y, z)\approx\vec{j}_{z_0}(x, y)` for a film lying parallel to the :math:`x-y` plane
+at vertical position :math:`z_0`. Working now with the thickness-integrated current density
+(or "sheet current") :math:`\vec{J}(x, y)=\vec{j}_{z_0}(x, y)\cdot d`, where :math:`d`
 is the thickness of the film, the second London equation
 reduces to
 
@@ -81,11 +81,10 @@ density of tiny dipole sources. We can re-write :eq:`eq1` for a 2D film in terms
     &=\Lambda\nabla^2g(x,y)\hat{z},
 
 where :math:`\nabla^2=\nabla\cdot\nabla` is the Laplace operator. (The last line follows from the
-fact that :math:`\nabla\cdot\left(g(x,y)\hat{z}\right) = 0`).
-
-From Ampere's Law, the :math:`z`-component of the magnetic field at position
-:math:`(\vec{r}, z)=(x, y, z)` due to a sheet of current lying in the :math:`x-y`
-plane (:math:`z=0`) with stream function :math:`g(x', y')=g(\vec{r}')` is given by
+fact that :math:`\nabla\cdot\left(g(x,y)\hat{z}\right) = 0`). From Ampere's Law, the
+:math:`z`-component of the magnetic field at position :math:`(\vec{r}, z)=(x, y, z)` due to a
+sheet of current lying in the :math:`x-y` plane (:math:`z=0`) with stream function
+:math:`g(x', y')=g(\vec{r}')` is given by:
 
 .. math::
     :label: eq4
@@ -197,7 +196,7 @@ Discretized model
 =================
     
 In order to numerically solve :eq:`eq4` and :eq:`eq9`, we have to discretize
-the film(s), hole(s), and the vacuum regions surrounding them. Here, we use a triangular
+the films, holes, and the vacuum regions surrounding them. Here, we use a triangular
 (Delaunay) mesh, consisting of :math:`n` points (or vertices)
 which together form :math:`m` triangles.
 
@@ -222,9 +221,9 @@ The kernel matrix :math:`\mathbf{Q}` and weight matrix :math:`\mathbf{w}` togeth
 kernel function :math:`Q(\vec{r},\vec{r}')` for all points lying in the plane of the film.
 They are both :math:`n\times n` matrices and are determined by the geometry of the films.
 :math:`\mathbf{h}_z`, :math:`\mathbf{h}_{z,\,\mathrm{applied}}`, and :math:`\mathbf{g}` are all
-:math:`n\times 1` vectors with each row representing the value of the quantity at the
+:math:`n\times 1` vectors, with each row representing the value of the quantity at the
 corresponding vertex in the mesh. There are several different methods for constructing the
-weight matrix :math:`\mathbf{w}`, which discussed :ref:`below <weight-matrix>`. The kernel
+weight matrix :math:`\mathbf{w}`, which are discussed :ref:`below <weight-matrix>`. The kernel
 matrix :math:`\mathbf{Q}` is defined in terms of a matrix with
 :math:`(\mathbf{q})_{ij} = \left(4\pi|\vec{r}_i-\vec{r}_j|^3\right)^{-1}`,
 and a vector :math:`\mathbf{C}`:
@@ -245,7 +244,7 @@ where :math:`\delta_{ij}` is the Kronecker delta function. The diagonal terms in
     C_i = \frac{1}{4\pi}\sum_{p,q=\pm1}\sqrt{(\Delta x - px_i)^{-2} + (\Delta y - qy_i)^{-2}},
 
 where :math:`\Delta x=(x_\mathrm{max}-x_\mathrm{min})/2` and :math:`\Delta y=(y_\mathrm{max}-y_\mathrm{min})/2`
-are half the size lengths of a rectangle bounding the modeled film. The matrix version of :eq:`eq9`
+are half the side lengths of a rectangle bounding the modeled film. The matrix version of :eq:`eq9`
 is:
 
 .. math::
@@ -257,15 +256,15 @@ is:
 (where we exclude points in the mesh lying outside of the superconducting film, but keep points
 inside holes in the film). :math:`\mathbf{\Lambda}` is either a scalar or a vector defining the
 effective penetration depth at every included vertex in the mesh, and :math:`\mathbf{\nabla}^2`
-is the Laplace operator, an :math:`n\times n` matrix defined such that
+is the :ref:`Laplace operator <laplace-operator>`, an :math:`n\times n` matrix defined such that
 :math:`\mathbf{\nabla}^2\mathbf{f}` computes the Laplacian :math:`\nabla^2f(x,y)` of a
 function :math:`f(x,y)` defined on the mesh.
 
 :eq:`eq13` is a matrix equation relating the applied field to the stream function
 inside a superconducting film, which can efficiently be solved (e.g. by matrix inversion)
 for the unknown vector :math:`\mathbf{g}`, the stream function inside the film. Since the stream
-function outside the film and inside holes in the film is already known, this gives us the stream
-function for the full mesh:
+function outside the film and inside holes in the film is already known, solving :eq:`eq13`
+gives us the stream function for the full mesh:
 
 .. math::
     :label: eq14
@@ -287,6 +286,8 @@ from :eq:`eq10`, and the full vector magnetic field :math:`\vec{H}(x, y, z)`
 at any point in space can be computed from :eq:`eq4` (and its analogs for
 the :math:`x` and :math:`y` components of the field).
 
+.. _laplace-operator:
+
 Laplace operator
 ================
 
@@ -306,7 +307,10 @@ The mass matrix gives an effective area to each vertex in the mesh. There are mu
 ways to construct the mass matrix, but here we use a "lumped" mass matrix, which is diagonal
 with elements :math:`(\mathbf{M})_{ii} = \sum_{t\in\mathcal{N}(i)}\frac{1}{3}\mathrm{area}(t)`,
 where :math:`\mathcal{N}(i)` is the set of triangles :math:`t` adjacent to vertex :math:`i`.
-(See image below, where :math:`(\mathbf{M})_{ii} = A_i`. Image reference: [Vaillant-Laplacian-2013]_.)
+(See :ref:`image below <img-weights>`, where :math:`(\mathbf{M})_{ii} = A_i`.
+Image reference: [Vaillant-Laplacian-2013]_.)
+
+.. _img-weights:
 
 .. image:: http://rodolphe-vaillant.fr/images/2019-05/cotan_angles_.png
     :width: 240
@@ -317,12 +321,11 @@ where :math:`\mathcal{N}(i)` is the set of triangles :math:`t` adjacent to verte
 Weight matrix
 *************
 
-Each element :math:`(\mathbf{w})_{ij}=w_{ij}` assigns a weight to the edge connecting
-vertex :math:`i` and vertex :math:`j` in the mesh. We use a normalized version of the
-weight matrix, where the sum of all off-diagonal elements in each row (or column,
-as :math:`\mathbf{w}` is symmetric) is :math:`1`
-(:math:`\sum_i w_{ij} = \sum_j w_{ij} = 1`) and all diagonal elements are
-:math:`1` (:math:`w_{ii} = 1`), that is:
+Each element :math:`w_{ij}` of the symmetric weight matrix :math:`\mathbf{w}` assigns a weight
+to the edge connecting vertex :math:`i` and vertex :math:`j` in the mesh.
+We use a normalized version of the weight matrix, where the sum of all off-diagonal
+elements in each row (or column) is :math:`1`, and each diagonal element is :math:`1`.
+Thus we can write :math:`\mathbf{w}` in terms of an unnormalized weight matrix :math:`\mathbf{W}`:
 
 .. math::
 
@@ -339,19 +342,19 @@ There are several different methods for constructing the unnormalized weight mat
    
     .. math::
 
-        (\mathbf{W})_{ij} =
+        W_{ij} =
         \begin{cases}
             0&\text{if }i=j\\
             1&\text{if }i\text{ is adjacent to }j\\
             0&\text{otherwise}
         \end{cases}
 
-2. Inverse-Euclidean weighting: Each edge is weighted by the inverse of the length of the edge,
+2. Inverse-Euclidean weighting: Each edge is weighted by the inverse of its length:
    :math:`|\vec{r}_i-\vec{r}_j|^{-1}`, where :math:`\vec{r}_i` is the position of vertex :math:`i`.
 
     .. math::
 
-        (\mathbf{W})_{ij} =
+        W_{ij} =
         \begin{cases}
             0&\text{if }i=j\\
             |\vec{r}_i-\vec{r}_j|^{-1}&\text{if }i\text{ is adjacent to }j\\
@@ -359,14 +362,15 @@ There are several different methods for constructing the unnormalized weight mat
         \end{cases}
 
 3. Half-cotangent weighting: Each edge is weighted by the half the sum of the cotangents of the
-   two angles opposite to it (see image above).
+   two angles opposite to it. Ssee :ref:`image above <img-weights>`.
+   Image reference: [Vaillant-Laplacian-2013]_.).
 
     .. math::
 
-        (\mathbf{W})_{ij} =
+        W_{ij} =
         \begin{cases}
             0&\text{if }i=j\\
-            \frac{1}{2}\left(\cot\alpha_{ij}+\cot\beta_{/ij}\right)&\text{if }i\text{ is adjacent to }j\\
+            \frac{1}{2}\left(\cot\alpha_{ij}+\cot\beta_{ij}\right)&\text{if }i\text{ is adjacent to }j\\
             0&\text{otherwise}
         \end{cases}
 
