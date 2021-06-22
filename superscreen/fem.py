@@ -63,7 +63,7 @@ def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
 
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices
-        triangles: Shape (m, 3) array of triangles indices
+        triangles: Shape (m, 3) array of triangle indices
 
     Returns:
         Shape (m, ) array of triangle areas
@@ -88,7 +88,7 @@ def adjacency_matrix(
     """Computes the adjacency matrix for a given set of triangles.
 
     Args:
-        triangles: Shape (m, 3) array of triangles indices
+        triangles: Shape (m, 3) array of triangle indices
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -164,7 +164,7 @@ def weights_inv_euclidean(
 
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
-        triangles: Shape (m, 3) array of triangles indices.
+        triangles: Shape (m, 3) array of triangle indices.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -205,7 +205,7 @@ def weights_half_cotangent(
 
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
-        triangles: Shape (m, 3) array of triangles indices.
+        triangles: Shape (m, 3) array of triangle indices.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -270,7 +270,7 @@ def mass_matrix(
 
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
-        triangles: Shape (m, 3) array of triangles indices.
+        triangles: Shape (m, 3) array of triangle indices.
         lumped: Whether to compute the lumped mass matrix (which is diagonal).
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
@@ -334,7 +334,7 @@ def laplacian_operator(
 
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
-        triangles: Shape (m, 3) array of triangles indices.
+        triangles: Shape (m, 3) array of triangle indices.
         weights: Shape (n, n) array of vertex weights.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
