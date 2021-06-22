@@ -28,9 +28,14 @@ Lambda_str = "\u039b"
 
 
 def q_matrix(points: np.ndarray) -> np.ndarray:
-    """Computes the denominator matrix, q.
+    """Computes the denominator matrix, q:
 
-    Eq. 7 in [Brandt], Eq. 8 in [Kirtley1], Eq. 8 in [Kirtley2].
+    .. math::
+
+        q_{ij} = \\frac{1}{4\\pi|\\vec{r}_i-\\vec{r}_j|^3}
+
+    See Eq. 7 in [Brandt-PRB-2005]_, Eq. 8 in [Kirtley-RSI-2016]_,
+    and Eq. 8 in [Kirtley-SST-2016]_.
 
     Args:
         points: Shape (n, 2) array of x,y coordinates of vertices
@@ -49,9 +54,16 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
 
 
 def C_vector(points: np.ndarray) -> np.ndarray:
-    """Computes the edge vector, C.
+    """Computes the edge vector, C:
 
-    Eq. 12 in [Brandt], Eq. 16 in [Kirtley1], Eq. 15 in [Kirtley2].
+    .. math::
+        C_i &= \\frac{1}{4\\pi}\\sum_{p,q=\\pm1}\\sqrt{(\\Delta x - px_i)^{-2}
+            + (\\Delta y - qy_i)^{-2}}\\\\
+        \\Delta x &= \\frac{1}{2}(\\mathrm{max}(x) - \\mathrm{min}(x))\\\\
+        \\Delta y &= \\frac{1}{2}(\\mathrm{max}(y) - \\mathrm{min}(y))
+
+    See Eq. 12 in [Brandt-PRB-2005]_, Eq. 16 in [Kirtley-RSI-2016]_,
+    and Eq. 15 in [Kirtley-SST-2016]_.
 
     Args:
         points: Shape (n, 2) array of x,y coordinates of vertices
@@ -74,9 +86,16 @@ def C_vector(points: np.ndarray) -> np.ndarray:
 
 
 def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    """Computes the kernel matrix, Q.
+    """Computes the kernel matrix, Q:
 
-    Eq. 10 in [Brandt], Eq. 11 in [Kirtley1], Eq. 11 in [Kirtley2].
+    .. math::
+
+        Q_{ij} = (\\delta_{ij}-1)q_{ij}
+        + \\delta_{ij}\\frac{1}{w_{ij}}\\left(C_i
+        + \\sum_{l\\neq i}q_{il}w_{il}\\right)
+
+    See Eq. 10 in [Brandt-PRB-2005]_, Eq. 11 in [Kirtley-RSI-2016]_,
+    and Eq. 11 in [Kirtley-SST-2016]_.
 
     Args:
         q: Shape (n, n) matrix qij

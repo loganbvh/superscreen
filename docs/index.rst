@@ -56,7 +56,7 @@ and circulating currents.
 
    api/device.rst
    api/fem.rst
-   api/solver.rst
+   api/brandt.rst
    api/visualization.rst
 
 .. toctree::

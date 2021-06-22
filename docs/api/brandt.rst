@@ -1,10 +1,10 @@
 .. superscreen
 
-.. _api-solver:
+.. _api-brandt:
 
 
 ******
-Solver
+Brandt
 ******
 
 The ``superscreen.brandt`` module contains the actual implementation
