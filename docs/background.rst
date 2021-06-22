@@ -181,7 +181,7 @@ using the following recipe:
         H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell) \to
         H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell)
         + \sum_{k\neq\ell}\mathrm{sgn}(z_k-z_\ell)
-        + \int_S Q(\vec{r},\vec{r}',z_k-z_\ell)g_k(\vec{r}')\,\mathrm{d}^2r'.
+        \int_S Q(\vec{r},\vec{r}',z_k-z_\ell)g_k(\vec{r}')\,\mathrm{d}^2r'.
 
     
 4. Repeat steps 1-3 until the stream functions and fields converge.
