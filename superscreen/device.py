@@ -405,27 +405,27 @@ class Device(object):
         ax.grid(grid)
         return ax
 
-    def to_dict(self, include_mesh: Optional[bool] = False) -> Dict:
-        """Returns a dict of device metadata."""
-        attrs = [
-            "name",
-            "layers",
-            "films",
-            "holes",
-            "flux_regions",
-            "units",
-            "origin",
-        ]
-        metadata = {attr: getattr(self, attr) for attr in attrs}
-        metadata["n_points"] = len(self.points)
-        metadata["n_triangles"] = len(self.triangles)
-        if include_mesh:
-            metadata["points"] = self.points
-            metadata["triangles"] = self.triangles
-        else:
-            metadata["points"] = {}
-            metadata["triangles"] = {}
-        return metadata
+    # def to_dict(self, include_mesh: Optional[bool] = False) -> Dict:
+    #     """Returns a dict of device metadata."""
+    #     attrs = [
+    #         "name",
+    #         "layers",
+    #         "films",
+    #         "holes",
+    #         "flux_regions",
+    #         "units",
+    #         "origin",
+    #     ]
+    #     metadata = {attr: getattr(self, attr) for attr in attrs}
+    #     metadata["n_points"] = len(self.points)
+    #     metadata["n_triangles"] = len(self.triangles)
+    #     if include_mesh:
+    #         metadata["points"] = self.points
+    #         metadata["triangles"] = self.triangles
+    #     else:
+    #         metadata["points"] = {}
+    #         metadata["triangles"] = {}
+    #     return metadata
 
     def __repr__(self) -> str:
         # Normal tab "\t" renders a bit too big in jupyter if you ask me.
