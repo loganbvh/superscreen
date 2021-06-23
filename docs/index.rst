@@ -55,8 +55,8 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
    :caption: Getting Started
 
    installation.rst
-   background.rst
    notebooks/quickstart.ipynb
+   background.rst
 
 .. toctree::
    :maxdepth: 2
