@@ -362,7 +362,7 @@ There are several different methods for constructing the unnormalized weight mat
         \end{cases}
 
 3. Half-cotangent weighting: Each edge is weighted by the half the sum of the cotangents of the
-   two angles opposite to it. Ssee :ref:`image above <img-weights>`.
+   two angles opposite to it. See :ref:`image above <img-weights>`.
    Image reference: [Vaillant-Laplacian-2013]_.).
 
     .. math::
