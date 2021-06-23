@@ -117,7 +117,64 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     return Q
 
 
-def field_conversion(
+def convert_field(
+    value: Union[np.ndarray, float, str, pint.Quantity],
+    new_units: Union[str, pint.Unit],
+    old_units: Optional[Union[str, pint.Unit]] = None,
+    ureg: Optional[pint.UnitRegistry] = None,
+    magnitude: bool = False,
+) -> Union[pint.Quantity, np.ndarray, float]:
+    """Converts a value between different field units, either magnetic field H
+    [current] / [length] or flux density B = mu0 * H [mass] / ([curret] [time]^2)).
+
+    Args:
+        value: The value to convert. It can either be a numpy array (no units),
+            a float (no units), a string like "1 uA/um", or a scalar or array
+            ``pint.Quantity``. If value is not a string wiht units or a ``pint.Quantity``,
+            then old_units must specify the units of the float or array.
+        new_units: The units to convert to.
+        old_units: The old units of ``value``. This argument is required if ``value``
+            is not a string with units or a ``pint.Quantity``.
+        ureg: The ``pint.UnitRegistry`` to use for conversion. If None is given,
+            a new instance is created.
+        magnitude: Whether to return just the magnitude instead of a full ``pint.Quantity``
+
+    Returns:
+        The converted value, either a pint.Quantity (scalar or array with units),
+        or an array or float without units, depending on the ``magnitude`` argument.
+    """
+    if ureg is None:
+        ureg = pint.UnitRegistry()
+    if isinstance(value, str):
+        value = ureg(value)
+    if isinstance(value, pint.Quantity):
+        old_units = value.units
+    if old_units is None:
+        raise ValueError(
+            "Old units must be specified if value is not a string or pint.Quantity."
+        )
+    if isinstance(old_units, str):
+        old_units = ureg(old_units)
+    if isinstance(new_units, str):
+        new_units = ureg(new_units)
+    if not isinstance(value, pint.Quantity):
+        value = value * old_units
+    if new_units.dimensionality == old_units.dimensionality:
+        value = value.to(new_units)
+    elif "[length]" in old_units.dimensionality:
+        # value is H in units with dimensionality [current] / [length]
+        # and we want B = mu0 * H
+        value = (value * ureg("mu0")).to(new_units)
+    else:
+        # value is B = mu0 * H in units with dimensionality
+        # [mass] / ([current] [time]^2) and we want H = B / mu0
+        value = (value / ureg("mu0")).to(new_units)
+    if magnitude:
+        value = value.magnitude
+    return value
+
+
+def field_conversion_factor(
     field_units: str,
     current_units: str,
     length_units: str = "m",
@@ -174,7 +231,7 @@ def brandt_layer(
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be
-            converted to units of [current_units / device.units].
+            converted to units of [current_units / device.length_units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
@@ -184,11 +241,6 @@ def brandt_layer(
 
     if device.weights is None:
         device.make_mesh(compute_arrays=True)
-
-    if not device._mesh_is_valid:
-        raise RuntimeError(
-            "Device mesh is not valid. Run device.make_mesh() to generate the mesh."
-        )
 
     weights = device.weights
     Del2 = device.Del2
@@ -206,30 +258,30 @@ def brandt_layer(
 
     if isinstance(london_lambda, (int, float)) and london_lambda <= d:
         warnings.warn(
-            f"Layer '{layer}': The film thickness, d = {d:.4f} {device.units}, "
+            f"Layer '{layer}': The film thickness, d = {d:.4f} {device.length_units}, "
             f"is greater than or equal to the London penetration depth "
-            f"({lambda_str} = {london_lambda:.4f} {device.units}), resulting "
+            f"({lambda_str} = {london_lambda:.4f} {device.length_units}), resulting "
             f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
-            f"{device.units} <= {lambda_str}. The assumption that the current density "
+            f"{device.length_units} <= {lambda_str}. The assumption that the current density "
             f"is nearly constant over the thickness of the film may not be valid. "
         )
 
     film_names = [name for name, film in device.films.items() if film.layer == layer]
 
     Hz_applied = applied_field(points[:, 0], points[:, 1])
-    field_conversion_factor = field_conversion(
+    field_conversion = field_conversion_factor(
         field_units,
         current_units,
-        length_units=device.units,
+        length_units=device.length_units,
         ureg=device.ureg,
     )
-    target_units = f"{current_units} / {device.units}"
+    target_units = f"{current_units} / {device.length_units}"
     logger.info(
         f"Converting applied field in units of {device.ureg(field_units).units:~P} "
         f"to units of {device.ureg(target_units).units:~P}. "
-        f"Conversion factor: {field_conversion_factor:~P}."
+        f"Conversion factor: {field_conversion:~P}."
     )
-    Hz_applied *= field_conversion_factor.magnitude
+    Hz_applied *= field_conversion.magnitude
     if isinstance(Lambda, (int, float)):
         # Make Lambda a callable
         Lambda = Constant(Lambda)
@@ -260,9 +312,9 @@ def brandt_layer(
 
         g[hole] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
-        # current is in [current_units], Lambda is in [device.units],
-        # and Del2 is in [device.units ** (-2)], so
-        # Ha_eff has units of [current_unit / device.units]
+        # current is in [current_units], Lambda is in [device.length_units],
+        # and Del2 is in [device.length_units ** (-2)], so
+        # Ha_eff has units of [current_unit / device.length_units]
         Ha_eff += -current * (
             Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
         ).sum(axis=1)
@@ -338,7 +390,7 @@ def solve(
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be
-            converted to units of [current_units / device.units].
+            converted to units of [current_units / device.length_units].
         coupled: Whether to account for the interactions between different layers
             (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
@@ -357,15 +409,15 @@ def solve(
     fields = {}
     screening_fields = {}
 
-    field_conversion_factor = 1 / field_conversion(
+    field_conversion = 1 / field_conversion_factor(
         field_units,
         current_units,
-        length_units=device.units,
+        length_units=device.length_units,
         ureg=device.ureg,
     )
     logger.info(
         f"Conversion factor to recover fields in units of "
-        f"{device.ureg(field_units).units:~P}: {field_conversion_factor:~P}."
+        f"{device.ureg(field_units).units:~P}: {field_conversion:~P}."
     )
 
     # Compute the stream functions and fields for each layer
@@ -393,11 +445,10 @@ def solve(
         device=device,
         streams=streams,
         fields={
-            layer: field * field_conversion_factor.magnitude
-            for layer, field in fields.items()
+            layer: field * field_conversion.magnitude for layer, field in fields.items()
         },
         screening_fields={
-            layer: screening_field * field_conversion_factor.magnitude
+            layer: screening_field * field_conversion.magnitude
             for layer, screening_field in screening_fields.items()
         },
         applied_field=applied_field,
@@ -469,11 +520,11 @@ def solve(
                 device=device,
                 streams=streams,
                 fields={
-                    layer: field * field_conversion_factor.magnitude
+                    layer: field * field_conversion.magnitude
                     for layer, field in fields.items()
                 },
                 screening_fields={
-                    layer: screening_field * field_conversion_factor.magnitude
+                    layer: screening_field * field_conversion.magnitude
                     for layer, screening_field in screening_fields.items()
                 },
                 applied_field=applied_field,
@@ -582,8 +633,8 @@ class BrandtSolution(object):
                 zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
                 zgrids[name] = zgrid
         if with_units:
-            xgrid = xgrid * self.device.ureg(self.device.units)
-            ygrid = ygrid * self.device.ureg(self.device.units)
+            xgrid = xgrid * self.device.ureg(self.device.length_units)
+            ygrid = ygrid * self.device.ureg(self.device.length_units)
             if dataset in ("fields", "screening_fields"):
                 units = self.field_units
             else:
@@ -637,7 +688,8 @@ class BrandtSolution(object):
     def polygon_flux(
         self,
         polygons: Optional[Union[str, List[str]]] = None,
-        with_units: bool = False,
+        units: Optional[Union[str, pint.Unit]] = None,
+        with_units: bool = True,
     ) -> Dict[str, Union[float, pint.Quantity]]:
         """Compute the flux through all polygons (films, holes, and flux regions)
         by integrating the calculated fields.
@@ -648,7 +700,7 @@ class BrandtSolution(object):
             with_units: Whether to a dict of pint.Quantities with units attached.
 
         Returns:
-            dict of flux for each polygon in units of ``[self.field_units * device.units**2]``.
+            dict of flux for each polygon in units of ``[self.field_units * device.length_units**2]``.
         """
         films = list(self.device.films)
         holes = list(self.device.holes)
@@ -664,23 +716,18 @@ class BrandtSolution(object):
                 if poly not in all_polygons:
                     raise ValueError(f"Unknown polygon, {poly}.")
 
-        if with_units:
-            ureg = self.device.ureg
-            units = ureg(self.field_units) * ureg(self.device.units) ** 2
-            try:
-                _ = units.to("Wb")
-            except pint.DimensionalityError:
-                units = units * ureg("mu0")
-        else:
-            units = 1
+        ureg = self.device.ureg
+        new_units = units or f"{self.field_units} * {self.device.length_units}**2"
+        if isinstance(new_units, str):
+            new_units = ureg(new_units)
 
         points = self.device.points
         triangles = self.device.triangles
 
-        tri_areas = areas(points, triangles)
+        tri_areas = areas(points, triangles) * ureg(f"{self.device.length_units}") ** 2
         xt, yt = centroids(points, triangles).T
         mesh = Triangulation(*points.T, triangles=triangles)
-        flux = {}
+        fluxes = {}
         for name in polygons:
             if name in films:
                 poly = self.device.films[name]
@@ -688,8 +735,17 @@ class BrandtSolution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.abstract_regions[name]
+            ix = poly.contains_points(xt, yt, index=True)
             h_interp = LinearTriInterpolator(mesh, self.fields[poly.layer])
             field = h_interp(xt, yt)
-            ix = poly.contains_points(xt, yt, index=True)
-            flux[name] = np.sum(field[ix] * tri_areas[ix]) * units
-        return flux
+            # LinearTriInterpolator returns a masked array
+            field = np.asarray(field[ix]) * ureg(self.field_units)
+            area = tri_areas[ix]
+            # Convert field to B = mu0 * H
+            field = convert_field(field, "mT")
+            flux = np.sum(field * area).to(new_units)
+            if with_units:
+                fluxes[name] = flux
+            else:
+                fluxes[name] = flux.magnitude
+        return fluxes
