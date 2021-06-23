@@ -407,7 +407,7 @@ def solve(
     )
     solutions.append(solution)
 
-    if coupled:
+    if coupled and len(device.layers) > 1:
         if iterations < 1:
             raise ValueError(f"Iterations ({iterations}) cannot be less than 1.")
 
@@ -627,8 +627,11 @@ class BrandtSolution(object):
         for name, g in streams.items():
             # J = [dg/dy, -dg/dx]
             # y is axis 0 (rows), x is axis 1 (columns)
-            gy, gx = np.gradient(g, ygrid[:, 0], xgrid[0, :])
-            Js[name] = np.array([gy, -gx])
+            dg_dy, dg_dx = np.gradient(g, ygrid[:, 0], xgrid[0, :])
+            if with_units:
+                Js[name] = np.array([dg_dy.magnitude, -dg_dx.magnitude]) * dg_dx.units
+            else:
+                Js[name] = np.array([dg_dy, -dg_dx])
         return xgrid, ygrid, Js
 
     def polygon_flux(
@@ -649,8 +652,8 @@ class BrandtSolution(object):
         """
         films = list(self.device.films)
         holes = list(self.device.holes)
-        flux_regions = list(self.device.flux_regions)
-        all_polygons = films + holes + flux_regions
+        abstract_regions = list(self.device.abstract_regions)
+        all_polygons = films + holes + abstract_regions
 
         if isinstance(polygons, str):
             polygons = [polygons]
@@ -664,6 +667,10 @@ class BrandtSolution(object):
         if with_units:
             ureg = self.device.ureg
             units = ureg(self.field_units) * ureg(self.device.units) ** 2
+            try:
+                _ = units.to("Wb")
+            except pint.DimensionalityError:
+                units = units * ureg("mu0")
         else:
             units = 1
 
@@ -680,7 +687,7 @@ class BrandtSolution(object):
             elif name in holes:
                 poly = self.device.holes[name]
             else:
-                poly = self.device.flux_regions[name]
+                poly = self.device.abstract_regions[name]
             h_interp = LinearTriInterpolator(mesh, self.fields[poly.layer])
             field = h_interp(xt, yt)
             ix = poly.contains_points(xt, yt, index=True)

@@ -6,7 +6,7 @@
 #     LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Union, Dict, Optional, Tuple
+from typing import Union, List, Optional, Tuple
 
 import numpy as np
 from pint import UnitRegistry
@@ -151,11 +151,12 @@ class Device(object):
 
     Args:
         name: Name of the device.
-        layers: A dict of named ``Layers``.
-        films: A dict of named ``Polygons`` representing regions of superconductor.
-        holes: A dict of named ``Polygons`` representing holes in superconducting films.
-        flux_regions: A dict of named ``Polygons`` representing regions for which you
-            want to calculcate fluxes.
+        layers: A list of ``Layers``.
+        films: A list of ``Polygons`` representing regions of superconductor.
+        holes: A list of ``Polygons`` representing holes in superconducting films.
+        abstract_regions: A list of ``Polygons`` representing abstract regions in
+            a device. Abstract regions will be meshed, and one can calculcate
+            the flux through them.
         units: Distance units for the coordinate system.
         origin: Location of the origina of the coordinate system.
     """
@@ -164,19 +165,21 @@ class Device(object):
         self,
         name: str,
         *,
-        layers: Dict[str, Layer],
-        films: Dict[str, Polygon],
-        holes: Optional[Dict[str, Polygon]] = None,
-        flux_regions: Optional[Dict[str, Polygon]] = None,
+        layers: List[Layer],
+        films: List[Polygon],
+        holes: Optional[List[Polygon]] = None,
+        abstract_regions: Optional[List[Polygon]] = None,
         units: str = "um",
         origin: Tuple[float, float, float] = (0, 0, 0),
         **mesh_kwargs,
     ):
         self.name = name
-        self.layers = layers
-        self.films = films
-        self.holes = holes or {}
-        self.flux_regions = flux_regions or {}
+        self.layers = {layer.name: layer for layer in layers}
+        self.films = {film.name: film for film in films}
+        holes = holes or []
+        self.holes = {hole.name: hole for hole in holes}
+        abstract_regions = abstract_regions or []
+        self.abstract_regions = {region.name: region for region in abstract_regions}
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._units = units
@@ -187,7 +190,10 @@ class Device(object):
         self.poly_points = np.concatenate(
             [film.points for film in self.films.values()]
             + [hole.points for hole in self.holes.values()]
-            + [flux_region.points for flux_region in self.flux_regions.values()]
+            + [
+                abstract_region.points
+                for abstract_region in self.abstract_regions.values()
+            ]
         )
         # Remove duplicate points to avoid meshing issues
         self.poly_points = np.unique(self.poly_points, axis=0)
@@ -234,9 +240,9 @@ class Device(object):
             for hole in self.holes.values():
                 hole.points[:, 0] += dx
                 hole.points[:, 1] += dy
-            for flux_region in self.flux_regions.values():
-                flux_region.points[:, 0] += dx
-                flux_region.points[:, 1] += dy
+            for abstract_region in self.abstract_regions.values():
+                abstract_region.points[:, 0] += dx
+                abstract_region.points[:, 1] += dy
             self._mesh_is_valid = False
 
     def make_mesh(
@@ -360,7 +366,7 @@ class Device(object):
         for name, hole in self.holes.items():
             points = np.concatenate([hole.points, hole.points[:1]], axis=0)
             ax.plot(*points.T, ".-.", label=name, **kwargs)
-        for name, region in self.flux_regions.items():
+        for name, region in self.abstract_regions.items():
             points = np.concatenate([region.points, region.points[:1]], axis=0)
             ax.plot(*points.T, "--.", label=name, **kwargs)
         ax.set_aspect("equal")
@@ -412,7 +418,7 @@ class Device(object):
     #         "layers",
     #         "films",
     #         "holes",
-    #         "flux_regions",
+    #         "abstract_regions",
     #         "units",
     #         "origin",
     #     ]
@@ -444,7 +450,7 @@ class Device(object):
             f"layers={format_dict(self.layers)}",
             f"films={format_dict(self.films)}",
             f"holes={format_dict(self.holes)}",
-            f"flux_regions={format_dict(self.flux_regions)}",
+            f"abstract_regions={format_dict(self.abstract_regions)}",
             f'units="{self.units}"',
             f"origin={self.origin}",
         ]
