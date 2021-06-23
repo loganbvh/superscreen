@@ -312,7 +312,7 @@ Image reference: [Vaillant-Laplacian-2013]_.)
 
 .. _img-weights:
 
-.. image:: http://rodolphe-vaillant.fr/images/2019-05/cotan_angles_.png
+.. image:: /images/cotan_angles_.png
     :align: center
     :width: 30%
 
