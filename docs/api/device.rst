@@ -3,15 +3,29 @@
 .. _api-device:
 
 
-********************
-Devices & Parameters
-********************
+******************
+Devices & Geometry
+******************
 
-The classes defined in ``superscreen.device`` and ``superscreen.parameters``
-are used to set up the inputs to a ``SuperScreen`` simulation, namely:
+The classes defined in ``superscreen.device``, ``superscreen.geometry``,
+and ``superscreen.parameters`` are used to set up the inputs to a
+``SuperScreen`` simulation, namely:
 
 - The geometry and penetration depth of all superconducting films
 - The spatial distribution of the applied magnetic field
+
+Geometry
+--------
+
+.. autofunction:: superscreen.geometry.rotate
+
+.. autofunction:: superscreen.geometry.ellipse
+
+.. autofunction:: superscreen.geometry.circle
+
+.. autofunction:: superscreen.geometry.rectangle
+
+.. autofunction:: superscreen.geometry.square
 
 Layer
 -----

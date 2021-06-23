@@ -196,11 +196,11 @@ Discretized model
 =================
     
 In order to numerically solve :eq:`eq4` and :eq:`eq9`, we have to discretize
-the films, holes, and the vacuum regions surrounding them. Here, we use a triangular
+the films, holes, and the vacuum regions surrounding them. We use a triangular
 (Delaunay) mesh, consisting of :math:`n` points (or vertices)
 which together form :math:`m` triangles.
 
-Below, we denote column vectors and matrices using bold font. :math:`\mathbf{A}\mathbf{B}`
+Below we denote column vectors and matrices using bold font. :math:`\mathbf{A}\mathbf{B}`
 denotes matrix multiplication, with :math:`(\mathbf{A}\mathbf{B})_{ij}=\sum_{k=1}^\ell A_{ik}B_{kj}`
 (:math:`\ell` being the number of columns in :math:`\mathbf{A}` and the number of
 rows in :math:`\mathbf{B}`). Column vectors are treated as matrices with

@@ -25,7 +25,9 @@ BrandtSolution
 Supporting Functions
 --------------------
 
-.. autofunction:: superscreen.brandt.field_conversion
+.. autofunction:: superscreen.brandt.convert_field
+
+.. autofunction:: superscreen.brandt.field_conversion_factor
 
 .. autofunction:: superscreen.brandt.brandt_layer
 
