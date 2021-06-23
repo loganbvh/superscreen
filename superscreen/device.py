@@ -6,7 +6,7 @@
 #     LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Union, List, Optional, Tuple
+from typing import Union, List, Optional
 
 import numpy as np
 from pint import UnitRegistry
@@ -15,7 +15,7 @@ from scipy.spatial import ConvexHull
 from meshpy import triangle
 import optimesh
 
-from .fem import calculcate_weights, laplacian_operator
+from .fem import calculcate_weights, laplace_operator
 from .parameter import Parameter
 
 
@@ -157,8 +157,7 @@ class Device(object):
         abstract_regions: A list of ``Polygons`` representing abstract regions in
             a device. Abstract regions will be meshed, and one can calculcate
             the flux through them.
-        units: Distance units for the coordinate system.
-        origin: Location of the origina of the coordinate system.
+        length_units: Distance units for the coordinate system.
     """
 
     def __init__(
@@ -169,8 +168,7 @@ class Device(object):
         films: List[Polygon],
         holes: Optional[List[Polygon]] = None,
         abstract_regions: Optional[List[Polygon]] = None,
-        units: str = "um",
-        origin: Tuple[float, float, float] = (0, 0, 0),
+        length_units: str = "um",
         **mesh_kwargs,
     ):
         self.name = name
@@ -182,8 +180,7 @@ class Device(object):
         self.abstract_regions = {region.name: region for region in abstract_regions}
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
-        self._units = units
-        self._origin = tuple(origin)
+        self._length_units = length_units
         self.sparse = None
         self.ureg = ureg
 
@@ -205,45 +202,13 @@ class Device(object):
         self.Q = None
         self.Del2 = None
 
-        self._mesh_is_valid = False
         if mesh_kwargs:
             self.make_mesh(**mesh_kwargs)
 
     @property
-    def units(self):
+    def length_units(self):
         """Length units used for the device geometry."""
-        return self._units
-
-    @property
-    def origin(self) -> Tuple[float, float, float]:
-        """Location of the origin of the coordinate system."""
-        return self._origin
-
-    @origin.setter
-    def origin(self, new_origin: Tuple[float, float, float]) -> None:
-        xp, yp, zp = new_origin
-        self._update_origin(xp, yp, zp)
-
-    def _update_origin(self, xp: float, yp: float, zp: float) -> None:
-        x0, y0, z0 = self._origin
-        dx = xp - x0
-        dy = yp - y0
-        self._origin = (xp, yp, zp)
-        if dx or dy:
-            points = self.points
-            points[:, 0] += dx
-            points[:, 1] += dy
-            self.points = points
-            for film in self.films.values():
-                film.points[:, 0] += dx
-                film.points[:, 1] += dy
-            for hole in self.holes.values():
-                hole.points[:, 0] += dx
-                hole.points[:, 1] += dy
-            for abstract_region in self.abstract_regions.values():
-                abstract_region.points[:, 0] += dx
-                abstract_region.points[:, 1] += dy
-            self._mesh_is_valid = False
+        return self._length_units
 
     def make_mesh(
         self,
@@ -322,21 +287,20 @@ class Device(object):
         )
         self.points = points
         self.triangles = triangles
-        self._mesh_is_valid = True
 
         if compute_arrays:
             from . import brandt
 
-            logger.info("Computing field-independent matrices.")
+            logger.info("Calculcating weight matrix.")
             self.weights = calculcate_weights(
                 points, triangles, weight_method, sparse=sparse
             )
+            logging.info("Calculating Laplace operator.")
+            self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
+            logging.info("Calculating kernel matrix.")
             q = brandt.q_matrix(points)
             C = brandt.C_vector(points)
             self.Q = brandt.Q_matrix(q, C, self.weights)
-            self.Del2 = laplacian_operator(
-                points, triangles, self.weights, sparse=sparse
-            )
             self.sparse = sparse
 
     def plot_polygons(
@@ -362,17 +326,20 @@ class Device(object):
             fig, ax = plt.subplots(1, 1)
         for name, film in self.films.items():
             points = np.concatenate([film.points, film.points[:1]], axis=0)
-            ax.plot(*points.T, "-", label=name, **kwargs)
+            ax.plot(*points.T, label=name, **kwargs)
         for name, hole in self.holes.items():
             points = np.concatenate([hole.points, hole.points[:1]], axis=0)
-            ax.plot(*points.T, ".-.", label=name, **kwargs)
+            ax.plot(*points.T, label=name, **kwargs)
         for name, region in self.abstract_regions.items():
             points = np.concatenate([region.points, region.points[:1]], axis=0)
-            ax.plot(*points.T, "--.", label=name, **kwargs)
+            ax.plot(*points.T, label=name, **kwargs)
         ax.set_aspect("equal")
         ax.grid(grid)
         if legend:
             ax.legend(loc="best")
+        units = self.ureg(self.length_units).units
+        ax.set_xlabel(f"$x$ $[{units:~L}]$")
+        ax.set_ylabel(f"$y$ $[{units:~L}]$")
         return ax
 
     def plot_mesh(
@@ -396,7 +363,7 @@ class Device(object):
         Returns:
             matplotlib axis
         """
-        if not self._mesh_is_valid:
+        if self.triangles is None:
             raise RuntimeError(
                 "Mesh is not valid. Run device.make_mesh() to generate the mesh."
             )
@@ -409,29 +376,10 @@ class Device(object):
             ax.plot(x, y, "k.")
         ax.set_aspect("equal")
         ax.grid(grid)
+        units = self.ureg(self.length_units).units
+        ax.set_xlabel(f"$x$ $[{units:~L}]$")
+        ax.set_ylabel(f"$y$ $[{units:~L}]$")
         return ax
-
-    # def to_dict(self, include_mesh: Optional[bool] = False) -> Dict:
-    #     """Returns a dict of device metadata."""
-    #     attrs = [
-    #         "name",
-    #         "layers",
-    #         "films",
-    #         "holes",
-    #         "abstract_regions",
-    #         "units",
-    #         "origin",
-    #     ]
-    #     metadata = {attr: getattr(self, attr) for attr in attrs}
-    #     metadata["n_points"] = len(self.points)
-    #     metadata["n_triangles"] = len(self.triangles)
-    #     if include_mesh:
-    #         metadata["points"] = self.points
-    #         metadata["triangles"] = self.triangles
-    #     else:
-    #         metadata["points"] = {}
-    #         metadata["triangles"] = {}
-    #     return metadata
 
     def __repr__(self) -> str:
         # Normal tab "\t" renders a bit too big in jupyter if you ask me.
@@ -451,7 +399,6 @@ class Device(object):
             f"films={format_dict(self.films)}",
             f"holes={format_dict(self.holes)}",
             f"abstract_regions={format_dict(self.abstract_regions)}",
-            f'units="{self.units}"',
-            f"origin={self.origin}",
+            f'length_units="{self.length_units}"',
         ]
         return "Device(" + nt + (", " + nt).join(args) + ",\n)"
