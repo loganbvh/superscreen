@@ -1,0 +1,162 @@
+from typing import Tuple
+
+import numpy as np
+
+
+def rotation_matrix(angle_radians: float) -> np.ndarray:
+    """Returns a 2D rotation matrix."""
+    c = np.cos(angle_radians)
+    s = np.sin(angle_radians)
+    return np.array([[c, -s], [s, c]])
+
+
+def rotate(coords: np.ndarray, angle_degrees: float) -> np.ndarray:
+    """Rotates an array of (x, y) coordinates counterclockwise by
+    the specified angle.
+
+    Args:
+        coords: Shape (n, 2) array of (x, y) coordinates.
+        angle_degrees: The angle by which to rotate the coordinates.
+
+    Returns:
+        Shape (n, 2) array of rotated coordinates (x', y')
+    """
+    R = rotation_matrix(np.radians(angle_degrees))
+    return (R @ coords.T).T
+
+
+def ellipse(
+    a: float,
+    b: float,
+    points: int = 100,
+    origin: Tuple[float, float] = (0, 0),
+    angle: float = 0,
+):
+    """Returns the coordinates for an ellipse with major axis a and semimajor axis b,
+    rotated by the specified angle about (0, 0), then translated to the specified origin.
+
+    Args:
+        a: Major axis length
+        b: Semi-major axis length
+        points: Number of points in the circle
+        origin: Coordinates of the center of the circle
+        angle: Angle (in degrees) by which to rotate counterclockwise about (0, 0)
+            **before** translating to the specified origin.
+
+    Returns:
+        A shape ``(points, 2)`` array of (x, y) coordinates
+    """
+    if a < b:
+        raise ValueError("Expected a >= b for an ellipse.")
+    x0, y0 = origin
+    theta = np.linspace(0, 2 * np.pi, points, endpoint=False)
+    xs = a * np.cos(theta)
+    ys = b * np.sin(theta)
+    coords = np.stack([xs, ys], axis=1)
+    if angle:
+        coords = rotate(coords, angle)
+    coords[:, 0] += x0
+    coords[:, 1] += y0
+    return coords
+
+
+def circle(
+    radius: float, points: int = 100, origin: Tuple[float, float] = (0, 0)
+) -> np.ndarray:
+    """Returns the coordinates for a circle with a given radius, centered at the
+    specified origin.
+
+    Args:
+        radius: Radius of the circle
+        points: Number of points in the circle
+        origin: Coordinates of the center of the circle
+
+    Returns:
+        A shape ``(points, 2)`` array of (x, y) coordinates
+    """
+    return ellipse(
+        radius,
+        radius,
+        points=points,
+        origin=origin,
+        angle=0,
+    )
+
+
+def rectangle(
+    width: float,
+    height: float,
+    x_points: int = 25,
+    y_points: int = 25,
+    origin: Tuple[float, float] = (0, 0),
+    angle: float = 0,
+) -> np.ndarray:
+    """Returns the coordinates for a rectangle with a given width and height,
+    centered at the specified origin.
+
+    Args:
+        width: Width of the rectangle (in the x direction)
+        height: Height of the rectangle (in the y direction)
+        x_points: Number of points in the top and bottom of the rectangle.
+        y_points: Number of points in the sides of the rectangle.
+        origin: Coordinates of the center of the rectangle
+        angle: Angle (in degrees) by which to rotate counterclockwise about (0, 0)
+            **before** translating to the specified origin.
+
+    Returns:
+        A shape ``(2 * (x_points + y_points), 2)`` array of (x, y) coordinates
+    """
+    width = abs(width)
+    height = abs(height)
+    x0, y0 = origin
+    xs = np.concatenate(
+        [
+            np.linspace(-width / 2, width / 2, x_points),
+            width / 2 * np.ones(y_points),
+            np.linspace(width / 2, -width / 2, x_points),
+            -width / 2 * np.ones(y_points),
+        ]
+    )
+    ys = np.concatenate(
+        [
+            height / 2 * np.ones(x_points),
+            np.linspace(height / 2, -height / 2, y_points),
+            -height / 2 * np.ones(x_points),
+            np.linspace(-height / 2, height / 2, y_points),
+        ]
+    )
+    coords = np.stack([xs, ys], axis=1)
+    if angle:
+        coords = rotate(coords, angle)
+    coords[:, 0] += x0
+    coords[:, 1] += y0
+    return coords
+
+
+def square(
+    side_length: float,
+    points_per_side: int = 25,
+    origin: Tuple[float, float] = (0, 0),
+    angle: float = 0,
+) -> np.ndarray:
+    """Returns the coordinates for a square with the given side length, centered at the
+    specified origin.
+
+    Args:
+        side_length: The width and height of the square
+        points_per_side: Number of points in each side of the square.
+        origin: Coordinates of the center of the square
+        angle: Angle by which to rotate counterclockwise about (0, 0)
+            **before** translating to the specified origin.
+
+    Returns:
+        A shape ``(4 * points_per_side, 2)`` array of (x, y) coordinates
+    """
+    return rectangle(
+        side_length,
+        side_length,
+        x_points=points_per_side,
+        y_points=points_per_side,
+        origin=origin,
+        angle=angle,
+    )

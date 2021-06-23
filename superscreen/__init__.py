@@ -11,10 +11,12 @@ from .parameter import Parameter, Constant
 from .visualization import (
     auto_grid,
     grids_to_vecs,
+    cross_section,
     plot_streams_layer,
     plot_streams,
     plot_fields,
     plot_currents,
 )
+from . import geometry
 from . import sources
 from .version import __version__, __version_info__
