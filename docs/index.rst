@@ -40,6 +40,7 @@ and circulating currents.
 
    installation.rst
    background.rst
+   notebooks/quickstart.ipynb
 
 .. toctree::
    :maxdepth: 2
