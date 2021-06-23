@@ -320,7 +320,7 @@ def mass_matrix(
     return mass
 
 
-def laplacian_operator(
+def laplace_operator(
     points: Union[np.ndarray, sp.csr_matrix],
     triangles: Union[np.ndarray, sp.csr_matrix],
     weights: Union[np.ndarray, sp.csr_matrix],
