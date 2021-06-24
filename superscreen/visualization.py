@@ -524,12 +524,10 @@ def plot_fields(
             cax = ax_divider.append_axes("right", size=cbar_size, pad=cbar_pad)
             cbar = fig.colorbar(im, cax=cax, orientation="vertical")
             cbar.set_label(clabel)
-            fig.add_axes(cax)
             used_axes.append(cbar.ax)
         if cross_section_xs is not None or cross_section_ys is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            fig.add_axes(cax)
             coords, axis, cross_sections = image_cross_section(
                 xgrid,
                 ygrid,
@@ -669,7 +667,6 @@ def plot_currents(
         if cross_section_xs is not None or cross_section_ys is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            fig.add_axes(cax)
             coords, axis, cross_sections = image_cross_section(
                 xgrid,
                 ygrid,
