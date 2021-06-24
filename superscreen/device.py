@@ -6,7 +6,7 @@
 #     LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Union, List, Optional
+from typing import Optional, Union, List, Tuple
 
 import numpy as np
 from pint import UnitRegistry
@@ -15,7 +15,6 @@ from scipy.spatial import ConvexHull
 from meshpy import triangle
 import optimesh
 
-from .fem import calculcate_weights, laplace_operator
 from .parameter import Parameter
 
 
@@ -212,7 +211,7 @@ class Device(object):
 
     def make_mesh(
         self,
-        compute_arrays: bool = True,
+        compute_matrices: bool = True,
         sparse: bool = True,
         weight_method: str = "half_cotangent",
         min_triangles: Optional[int] = None,
@@ -225,8 +224,8 @@ class Device(object):
         """Computes or refines the triangular mesh.
 
         Args:
-            compute_arrays: Whether to compute the field-indepentsn arrays
-                needed for Brandt simulations.
+            compute_matrices: Whether to compute the field-independent matrices
+                (weights, Q, Laplace operator) needed for Brandt simulations.
             sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent", or "inv_euclidian".
             min_triangles: Minimum number of triangles in the mesh. If None, then the
@@ -288,7 +287,8 @@ class Device(object):
         self.points = points
         self.triangles = triangles
 
-        if compute_arrays:
+        if compute_matrices:
+            from .fem import calculcate_weights, laplace_operator
             from . import brandt
 
             logger.info("Calculcating weight matrix.")
@@ -308,6 +308,7 @@ class Device(object):
         ax: Optional[plt.Axes] = None,
         grid: Optional[bool] = False,
         legend: Optional[bool] = True,
+        figsize: Optional[Tuple[float, float]] = None,
         **kwargs,
     ) -> plt.Axes:
         """Plot all of the device's polygons.
@@ -318,12 +319,13 @@ class Device(object):
             ax: matplotlib axis on which to plot. If None, a new figure is created.
             grid: Whether to add grid lines.
             legend: Whether to add a legend.
+            figsize: matplotlib figsize, only used if ax is None.
 
         Returns:
             matplotlib axis
         """
         if ax is None:
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = plt.subplots(figsize=figsize)
         for name, film in self.films.items():
             points = np.concatenate([film.points, film.points[:1]], axis=0)
             ax.plot(*points.T, label=name, **kwargs)
@@ -348,6 +350,7 @@ class Device(object):
         edges: Optional[bool] = True,
         vertices: Optional[bool] = False,
         grid: Optional[bool] = True,
+        figsize: Optional[Tuple[float, float]] = None,
         **kwargs,
     ) -> plt.Axes:
         """Plots the device's mesh.
@@ -359,6 +362,7 @@ class Device(object):
             edges: Whether to plot the triangle edges.
             vertices: Whether to plot the triangle vertices.
             grid: Whether to add grid lines.
+            figsize: matplotlib figsize, only used if ax is None.
 
         Returns:
             matplotlib axis
@@ -369,7 +373,7 @@ class Device(object):
             )
         x, y = self.points.T
         if ax is None:
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = plt.subplots(figsize=figsize)
         if edges:
             ax.triplot(x, y, self.triangles, **kwargs)
         if vertices:
