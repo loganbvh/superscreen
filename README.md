@@ -23,7 +23,8 @@ Click the badge below to try `SuperScreen` interactively online via [Binder](htt
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD?filepath=docs%2Fnotebooks)
 
-(Note: Binder instances are [limited to 2 GB of memory](https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder), so you can only solve models with few than ~10,000 triangles online.)
+(Note: Binder instances are [limited to 2 GB of memory](https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder), so you can only solve models with up to approximately
+10,000 triangles online.)
 
 ## Install `SuperScreen`
 
