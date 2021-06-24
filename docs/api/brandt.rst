@@ -15,9 +15,10 @@ Brandt Solver
 
 .. autofunction:: superscreen.brandt.solve
 
+.. autofunction:: superscreen.brandt.brandt_layer
 
 BrandtSolution
---------------
+==============
 
 .. autoclass:: superscreen.brandt.BrandtSolution
     :members:
@@ -28,8 +29,6 @@ Supporting Functions
 .. autofunction:: superscreen.brandt.convert_field
 
 .. autofunction:: superscreen.brandt.field_conversion_factor
-
-.. autofunction:: superscreen.brandt.brandt_layer
 
 .. autofunction:: superscreen.brandt.q_matrix
 
