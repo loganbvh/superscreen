@@ -487,7 +487,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                    Hzr += np.sign(dz) * np.sum(tri_areas * q * g, axis=1)
+                    Hzr += np.sum(tri_areas * q * g, axis=1)
                 other_screening_fields[name] = Hzr
 
             # Solve again with the screening fields from all layers
@@ -749,3 +749,127 @@ class BrandtSolution(object):
             else:
                 fluxes[name] = flux.magnitude
         return fluxes
+
+    def field_at_position(
+        self,
+        positions: np.ndarray,
+        zs: Optional[Union[float, np.ndarray]] = None,
+        vector: bool = False,
+        units: Optional[str] = None,
+        with_units: Optional[bool] = True,
+        return_sum: bool = True,
+    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        """Calculate the field due to currents in the device at any point(s) in space.
+
+        Args:
+            positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
+                coordinates at which to calculcate the magnetic field. A single list like [x, y]
+                or [x, y, z] is also allowed.
+            zs: z coordinates at which to calculcate the field. If positions has shape (m, 3), then
+                this argument is not allowed. If zs is a scalar, then the fields are calculated in
+                a plane parallel to the x-y plane. If zs is any array, then it must be same length
+                as positions.
+            vector: Whether to return the full vector magnetic field or just the z component.
+            units: Units to which to convert the fields (can be either magnetic field H or
+                magnetic flux density B = mu0 * H). If not give, then the fields are returned in
+                units of ``self.field_units``.
+            with_units: Whether to return the fields as ``pint.Quantity`` with units attached.
+            return_sum: Whether to return the sum of the fields from all layers in the device,
+                or a dict of ``{layer_name: field_from_layer}``.
+
+        Returns:
+            An np.ndarray if return_sum is True, otherwise a dict of ``{layer_name: field_from_layer}``.
+            If with_units is True, then the array(s) will contain pint.Quantities. ``field_from_layer``
+            will have shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
+        """
+        device = self.device
+        ureg = device.ureg
+        points = device.points
+        triangles = device.triangles
+
+        units = units or self.field_units
+        old_units = f"{self.current_units} / {device.length_units}"
+
+        # In case something like a list [x, y] or [x, y, z] is given
+        positions = np.atleast_2d(positions)
+        # If positions includes z coordinates, peel those off here
+        if positions.shape[1] == 3:
+            if zs is not None:
+                raise ValueError(
+                    "If positions has shape (m, 3) then zs cannot be specified."
+                )
+            zs = positions[:, 2]
+            positions = positions[:, :2]
+        elif isinstance(zs, (int, float)):
+            # constant zs
+            zs = zs * np.ones(points.shape[0], dtype=float)
+        if not isinstance(zs, np.ndarray):
+            raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
+        if zs.ndim == 1:
+            # We need zs to be shape (m, 1)
+            zs = zs[:, np.newaxis]
+
+        tri_points = centroids(points, triangles)
+        tri_areas = areas(points, triangles)
+        # Compute ||(x, y) - (xt, yt)||^2
+        rho2 = cdist(positions, tri_points, metric="sqeuclidean")
+        mesh = Triangulation(*points.T, triangles=triangles)
+
+        Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
+        Hz_applied = convert_field(
+            Hz_applied,
+            units,
+            old_units=old_units,
+            ureg=ureg,
+            magnitude=(not with_units),
+        )
+
+        fields = {}
+        # Compute the fields at the specified positions from the currents in each layer
+        for name, layer in device.layers.items():
+            dz = zs - layer.z0
+            if np.any(dz == 0):
+                raise ValueError(
+                    f"Cannot calculate fields in the same plane as layer {name}."
+                )
+            g_interp = LinearTriInterpolator(mesh, self.streams[name])
+            # g has units of [current]
+            g = g_interp(*tri_points.T)
+            # Q is the dipole kernel for the z component, Hz
+            # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
+            Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+            # tri_areas has units of [length]^2
+            # So here Hz is in units of [current] * [length]^(-1)
+            Hz = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+            if vector:
+                # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
+                # Pairwise difference between all x positions
+                d = np.subtract.outer(positions[:, 0], tri_points[:, 0])
+                # Kernel for x component, Hx
+                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                Hx = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+
+                # Pairwise difference between all y positions
+                d = np.subtract.outer(positions[:, 1], tri_points[:, 1])
+                # Kernel for y component, Hy
+                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                Hy = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+
+                H = np.stack([Hx, Hy, Hz], axis=1)
+            else:
+                H = Hz
+            fields[name] = convert_field(
+                H,
+                units,
+                old_units=old_units,
+                ureg=ureg,
+                magnitude=(not with_units),
+            )
+
+        if return_sum:
+            fields = sum(fields.values())
+            fields[:, 2] += Hz_applied
+        else:
+            fields["Hz_applied"] = Hz_applied
+
+        return fields
