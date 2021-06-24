@@ -192,6 +192,16 @@ Finite Element Implementation
 
 Here we describe the numerical implementation of the model described above.
 
+.. .. _brandt-strategy:
+
+.. .. figure:: /images/brandt.jpg
+..    :scale: 30%
+..    :align: center
+..    :alt: Simulation strategy
+
+..    Schematic of the numerical implementation of Brandt's method.
+
+
 Discretized model
 =================
     
