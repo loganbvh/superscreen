@@ -295,9 +295,9 @@ class Device(object):
             self.weights = calculcate_weights(
                 points, triangles, weight_method, sparse=sparse
             )
-            logging.info("Calculating Laplace operator.")
+            logger.info("Calculating Laplace operator.")
             self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
-            logging.info("Calculating kernel matrix.")
+            logger.info("Calculating kernel matrix.")
             q = brandt.q_matrix(points)
             C = brandt.C_vector(points)
             self.Q = brandt.Q_matrix(q, C, self.weights)

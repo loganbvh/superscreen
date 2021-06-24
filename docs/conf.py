@@ -67,7 +67,7 @@ autodoc_typehints = "description"
 nbsphinx_execute = "always"
 
 nbsphinx_execute_arguments = [
-    "--InlineBackend.figure_formats={'retina', 'svg', 'pdf'}",
+    "--InlineBackend.figure_formats={'retina', 'png'}",
 ]
 
 math_eqref_format = "Eq. {number}"
