@@ -83,7 +83,7 @@ def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
 
 
 def adjacency_matrix(
-    triangles: np.ndarray, sparse: bool = False
+    triangles: np.ndarray, sparse: bool = True
 ) -> Union[np.ndarray, sp.csr_matrix]:
     """Computes the adjacency matrix for a given set of triangles.
 
@@ -117,7 +117,7 @@ def calculcate_weights(
     points: np.ndarray,
     triangles: np.ndarray,
     method: str,
-    sparse: bool = False,
+    sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:
     """Returns the weight matrix, calculated using the specified method.
 
@@ -158,7 +158,7 @@ def calculcate_weights(
 
 
 def weights_inv_euclidean(
-    points: np.ndarray, triangles: np.ndarray, sparse: bool = False
+    points: np.ndarray, triangles: np.ndarray, sparse: bool = True
 ) -> Union[np.ndarray, sp.lil_matrix]:
     """Weights edges by the inverse Euclidean distance of the edge lengths.
 
@@ -199,7 +199,7 @@ def weights_inv_euclidean(
 
 
 def weights_half_cotangent(
-    points: np.ndarray, triangles: np.ndarray, sparse: bool = False
+    points: np.ndarray, triangles: np.ndarray, sparse: bool = True
 ) -> Union[np.ndarray, sp.lil_matrix]:
     """Weights edges by half of the cotangent of the two angles opposite the edge.
 
@@ -215,7 +215,11 @@ def weights_half_cotangent(
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
     N = points.shape[0]
-    weights = np.zeros((N, N), dtype=float)
+    if sparse:
+        # Use lil_matrix for operations that change matrix sparsity
+        weights = sp.lil_matrix((N, N), dtype=float)
+    else:
+        weights = np.zeros((N, N), dtype=float)
 
     # First vertex
     vec1 = points[triangles[:, 1]] - points[triangles[:, 0]]
@@ -253,10 +257,6 @@ def weights_half_cotangent(
     weights[triangles[:, 0], triangles[:, 1]] += w
     weights[triangles[:, 1], triangles[:, 0]] += w
 
-    if sparse:
-        # Convert to sparse after building the matrix (it is faster in this case).
-        weights = sp.lil_matrix(weights)
-
     return weights
 
 
@@ -264,7 +264,7 @@ def mass_matrix(
     points: np.ndarray,
     triangles: np.ndarray,
     lumped: bool = True,
-    sparse: bool = False,
+    sparse: bool = True,
 ) -> Union[np.ndarray, sp.csc_matrix]:
     """The mass matrix defines an effective area for each vertex.
 
@@ -324,7 +324,7 @@ def laplace_operator(
     points: Union[np.ndarray, sp.csr_matrix],
     triangles: Union[np.ndarray, sp.csr_matrix],
     weights: Union[np.ndarray, sp.csr_matrix],
-    sparse: bool = False,
+    sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:
     """Laplacian operator for the mesh (sometimes called
     Laplace-Beltrami operator).
