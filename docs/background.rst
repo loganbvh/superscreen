@@ -82,55 +82,62 @@ density of tiny dipole sources. We can re-write :eq:`eq1` for a 2D film in terms
 
 where :math:`\nabla^2=\nabla\cdot\nabla` is the Laplace operator. (The last line follows from the
 fact that :math:`\nabla\cdot\left(g(x,y)\hat{z}\right) = 0`). From Ampere's Law, the
-:math:`z`-component of the magnetic field at position :math:`(\vec{r}, z)=(x, y, z)` due to a
-sheet of current lying in the :math:`x-y` plane (:math:`z=0`) with stream function
-:math:`g(x', y')=g(\vec{r}')` is given by:
+three components of the magnetic field at position :math:`\vec{r}=(x, y, z)` due to a
+sheet of current lying in the :math:`x-y` plane (at height :math:`z'`) with stream function
+:math:`g(x', y')` are given by:
 
 .. math::
     :label: eq4
 
-    H_z(\vec{r}) = H_{z,\,\mathrm{applied}}(\vec{r})
-    + \int_S Q(\vec{r},\vec{r}',z)g(\vec{r}')\,\mathrm{d}^2r'.
+    H_x(\vec{r}) &= \int_S Q_x(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'\\
+    H_y(\vec{r}) &= \int_S Q_y(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'\\
+    H_z(\vec{r}) &= H_{z,\,\mathrm{applied}}(\vec{r})
+    + \int_S Q_z(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'
 
-:math:`H_{z,\,\mathrm{applied}}(\vec{r})` is an externally-applied magnetic field, :math:`S`
-is the film area (with :math:`g = 0` outside of the film), and :math:`Q(\vec{r},\vec{r}',z)`
-is a dipole kernel function which gives the :math:`z` component of the magnetic field at position :math:`\vec{r}`
-due to a dipole of unit strength at poition :math:`(\vec{r}', z)=(x', y', z)`:
+:math:`H_{z,\,\mathrm{applied}}(\vec{r})` is an externally-applied magnetic field (which we assume to have
+no :math:`x` or :math:`y` component), :math:`S` is the film area (with :math:`g = 0` outside of the film),
+and :math:`Q_x(\vec{r},\vec{r}')`, :math:`Q_y(\vec{r},\vec{r}')`, and :math:`Q_z(\vec{r},\vec{r}')`
+are dipole kernel functions which give the relevant component of the magnetic field at position :math:`\vec{r}=(x, y, z)`
+due to a dipole of unit strength at poition :math:`\vec{r}'=(x', y', z')`:
 
 .. math::
     :label: eq5
 
-    Q(\vec{r}, \vec{r}', z) =  \frac{2z^2-|\vec{r}-\vec{r}'|^2}{4\pi(z^2+|\vec{r}-\vec{r}'|^2)^{5/2}}.
+    Q_x(\vec{r}, \vec{r}') &=  3\Delta z\frac{x-x'}
+    {4\pi[(\Delta z)^2+\rho^2]^{5/2}}\\
+    Q_y(\vec{r}, \vec{r}') &=  3\Delta z\frac{y-y'}
+    {4\pi[(\Delta z)^2+\rho^2]^{5/2}}\\
+    Q_z(\vec{r}, \vec{r}') &=  \frac{2(\Delta z)^2-\rho^2}
+    {4\pi[(\Delta z)^2+\rho^2]^{5/2}},
 
-Note that the :math:`x` and :math:`y` components of the field can be calculcated from :math:`g`
-using different kernels.
-
-Comparing :eq:`eq3` and :eq:`eq4`, we have:
+where :math:`\Delta z = z - z'` and :math:`\rho=\sqrt{(x-x')^2 + (y-y')^2}`.
+Comparing :eq:`eq3` and :eq:`eq4`, we have in the plane of the film:
 
 .. math::
     :label: eq6
 
     \underbrace{H_z(\vec{r}) = \vec{H}(\vec{r})\cdot\hat{z}
-    = \Lambda\nabla^2g(\vec{r})}_{z-\text{component of the total field}}
+    = \Lambda\nabla^2g(x, y)}_{z-\text{component of the total field}}
     = \underbrace{H_{z,\,\mathrm{applied}}(\vec{r})}_{\text{applied field}}
-    + \underbrace{\int_S Q(\vec{r},\vec{r}',z)g(\vec{r}')\,\mathrm{d}^2r'}_{\text{screening field}}.
+    + \underbrace{\int_S Q_z(\vec{r},\vec{r}')g(\vec{r}')\,\mathrm{d}^2r'}_{\text{screening field}},
 
-From :eq:`eq6`, we arrive at an integral equation relating the stream function :math:`g` for
-points inside the superconductor to the applied field :math:`H_{z,\,\mathrm{applied}}`:
+(where now :math:`\vec{r}` and :math:`\vec{r}'` are 2D vectors, i.e. :math:`\Delta z=0`, since the film is
+in the same plane as itself). From :eq:`eq6`, we arrive at an integral equation relating the stream function
+:math:`g` for points inside the superconductor to the applied field :math:`H_{z,\,\mathrm{applied}}`:
 
 .. math::
     :label: eq7
 
     H_{z,\,\mathrm{applied}}(\vec{r})
     = -\int_S\left[
-        Q(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
     ]g(\vec{r}')\,\mathrm{d}^2r'
 
 The goal, then, is to solve (invert) :eq:`eq7` for a given :math:`H_{z,\,\mathrm{applied}}`
 and film geometry :math:`S` to obtain :math:`g` for all points inside the film
 (with :math:`g=0` enforced outside the film). Once :math:`g(\vec{r})` is known,
-the full vector magnetic field :math:`\vec{H}` can be calculcated at any point :math:`\vec{r}`,
-(and in particular :math:`H_z(\vec{r})` is given by :eq:`eq4`).
+the full vector magnetic field :math:`\vec{H}` can be calculcated at any point :math:`\vec{r}`
+from :eq:`eq4`.
 
 Films with holes
 ================
@@ -145,7 +152,7 @@ such a circulating current is given by :eq:`eq7` if we set
     :label: eq8
 
     H_{z,\,\mathrm{eff},\,k}(\vec{r}) = -\int_{\mathrm{hole}\,k}[
-        Q(\vec{r},\vec{r}')-\Lambda(\vec{r}')\nabla^2
+        Q_z(\vec{r},\vec{r}')-\Lambda(\vec{r}')\nabla^2
     ] I_{\mathrm{circ},\,k} \,\mathrm{d}^2r'.
 
 In this case, we modify the left-hand side of :eq:`eq7` as follows:
@@ -155,7 +162,7 @@ In this case, we modify the left-hand side of :eq:`eq7` as follows:
 
     H_{z,\,\mathrm{applied}}(\vec{r}) - \sum_k H_{z,\,\mathrm{eff},\,k}(\vec{r})
     = -\int_S\left[
-        Q(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
     ]g(\vec{r}')\,\mathrm{d}^2r'
 
 Films in multiple planes
@@ -179,9 +186,8 @@ using the following recipe:
 
         H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell) \to
         H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell)
-        + \sum_{k\neq\ell}\mathrm{sgn}(z_k-z_\ell)
-        \int_S Q(\vec{r},\vec{r}',z_k-z_\ell)g_k(\vec{r}')\,\mathrm{d}^2r'.
-
+        + \sum_{k\neq\ell}
+        \int_S Q_z(\vec{r},\vec{r}')g_k(\vec{r}')\,\mathrm{d}^2r.
     
 4. Repeat steps 1-3 until the stream functions and fields converge.
 
@@ -228,14 +234,15 @@ The matrix version of :eq:`eq4` is:
     + \underbrace{(\mathbf{Q}\cdot\mathbf{w})\mathbf{g}}_\text{screening field}.
 
 The kernel matrix :math:`\mathbf{Q}` and weight matrix :math:`\mathbf{w}` together play the role of the
-kernel function :math:`Q(\vec{r},\vec{r}')` for all points lying in the plane of the film.
+kernel function :math:`Q_z(\vec{r},\vec{r}')` for all points lying in the plane of the film.
 They are both :math:`n\times n` matrices and are determined by the geometry of the films.
 :math:`\mathbf{h}_z`, :math:`\mathbf{h}_{z,\,\mathrm{applied}}`, and :math:`\mathbf{g}` are all
 :math:`n\times 1` vectors, with each row representing the value of the quantity at the
 corresponding vertex in the mesh. There are several different methods for constructing the
 weight matrix :math:`\mathbf{w}`, which are discussed :ref:`below <weight-matrix>`. The kernel
 matrix :math:`\mathbf{Q}` is defined in terms of a matrix with
-:math:`(\mathbf{q})_{ij} = \left(4\pi|\vec{r}_i-\vec{r}_j|^3\right)^{-1}`,
+:math:`(\mathbf{q})_{ij} = \left(4\pi|\vec{r}_i-\vec{r}_j|^3\right)^{-1}`
+(which is :math:`\lim_{\Delta z\to 0}Q_z(\vec{r},\vec{r}')` cf. :eq:`eq5`),
 and a vector :math:`\mathbf{C}`:
 
 .. math::
