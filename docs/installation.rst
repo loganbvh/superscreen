@@ -13,8 +13,8 @@ We recommend creating a new
 for ``SuperScreen`` to avoid dependency conflicts with other packages. To create a new conda environment called
 ``superscreen``, run ``conda create --name superscreen python=<3.6, 3.7, 3.8, or 3.9>``.
 
-Installing from source
-----------------------
+Install from source
+-------------------
 
 - `Clone <https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/cloning-a-repository-from-github/cloning-a-repository>`_
   or download the `superscreen repository <https://github.com/loganbvh/superscreen>`_ on GitHub
@@ -24,7 +24,7 @@ Installing from source
 
       pip install -e .
 
-Installing with pip
--------------------
+Install with pip
+----------------
 
 - Coming soon...
