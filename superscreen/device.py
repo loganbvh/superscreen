@@ -171,10 +171,14 @@ class Device(object):
         **mesh_kwargs,
     ):
         self.name = name
-        self.layers_list = layers
-        self.films_list = films
-        self.holes_list = holes or []
-        self.abstract_regions_list = abstract_regions
+        self.layers_list = list(layers)
+        self.films_list = list(films)
+        if holes is None:
+            holes = []
+        self.holes_list = list(holes)
+        if abstract_regions is None:
+            abstract_regions = []
+        self.abstract_regions_list = list(abstract_regions)
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
@@ -392,7 +396,7 @@ class Device(object):
         """
         if self.triangles is None:
             raise RuntimeError(
-                "Mesh is not valid. Run device.make_mesh() to generate the mesh."
+                "Mesh does not exist. Run device.make_mesh() to generate the mesh."
             )
         x, y = self.points.T
         if ax is None:
