@@ -6,7 +6,6 @@
 #     LICENSE file in the root directory of this source tree.
 
 import logging
-import warnings
 from typing import Union, Callable, Optional, Dict, Tuple, List
 
 import pint
@@ -213,9 +212,9 @@ def brandt_layer(
     layer: str,
     applied_field: Callable,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
-    field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: Optional[bool] = True,
+    check_inversion: bool = True,
+    check_lambda: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
@@ -228,11 +227,10 @@ def brandt_layer(
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
-        field_units: Units of the applied field. Can either be magnetic field H
-            or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
+        check_lambda: Whether to generate a warning if Lambda <= london_lambda.
 
     Returns:
         stream function, total field, film screening field
@@ -256,32 +254,23 @@ def brandt_layer(
     d = device.layers[layer].thickness
     Lambda = device.layers[layer].Lambda
 
-    if isinstance(london_lambda, (int, float)) and london_lambda <= d:
-        warnings.warn(
-            f"Layer '{layer}': The film thickness, d = {d:.4f} {device.length_units}, "
-            f"is greater than or equal to the London penetration depth "
-            f"({lambda_str} = {london_lambda:.4f} {device.length_units}), resulting "
-            f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
-            f"{device.length_units} <= {lambda_str}. The assumption that the current density "
-            f"is nearly constant over the thickness of the film may not be valid. "
-        )
+    if check_lambda:
+        if isinstance(london_lambda, (int, float)) and london_lambda <= d:
+            logger.warn(
+                f"Layer '{layer}': The film thickness, d = {d:.4f} {device.length_units}"
+                f", is greater than or equal to the London penetration depth "
+                f"({lambda_str} = {london_lambda:.4f} {device.length_units}), resulting "
+                f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
+                f"{device.length_units} <= {lambda_str}. The assumption that the current density "
+                f"is nearly constant over the thickness of the film may not be valid. "
+            )
 
     film_names = [name for name, film in device.films.items() if film.layer == layer]
+    hole_names = [name for name, hole in device.holes.items() if hole.layer == layer]
 
+    # Units for field are {current_units} / {device.length_units}
     Hz_applied = applied_field(points[:, 0], points[:, 1])
-    field_conversion = field_conversion_factor(
-        field_units,
-        current_units,
-        length_units=device.length_units,
-        ureg=device.ureg,
-    )
-    target_units = f"{current_units} / {device.length_units}"
-    logger.info(
-        f"Converting applied field in units of {device.ureg(field_units).units:~P} "
-        f"to units of {device.ureg(target_units).units:~P}. "
-        f"Conversion factor: {field_conversion:~P}."
-    )
-    Hz_applied *= field_conversion.magnitude
+
     if isinstance(Lambda, (int, float)):
         # Make Lambda a callable
         Lambda = Constant(Lambda)
@@ -290,7 +279,9 @@ def brandt_layer(
     # Identify holes in the superconductor
     hole_indices = {}
     in_hole = np.zeros(len(x), dtype=int)
-    for name, hole in device.holes.items():
+    holes = device.holes
+    for name in hole_names:
+        hole = holes[name]
         ix = hole.contains_points(x, y)
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
@@ -302,14 +293,17 @@ def brandt_layer(
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(x)
     Ha_eff = np.zeros_like(Hz_applied)
-    for name, current in circulating_currents.items():
-        hole = hole_indices[name]
+    for name in hole_names:
+        current = circulating_currents.get(name, None)
+        if current is None:
+            continue
 
         if isinstance(current, str):
             current = device.ureg(current)
         if isinstance(current, pint.Quantity):
             current = current.to(current_units).magnitude
 
+        hole = hole_indices[name]
         g[hole] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
@@ -341,7 +335,7 @@ def brandt_layer(
             # Validate solution
             errors = (A @ gf) - h
             if not np.allclose(errors, 0):
-                warnings.warn(
+                logger.warn(
                     f"Unable to solve for stream function in {layer} ({name}), "
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
@@ -409,35 +403,38 @@ def solve(
     fields = {}
     screening_fields = {}
 
-    field_conversion = 1 / field_conversion_factor(
+    field_conversion = field_conversion_factor(
         field_units,
         current_units,
         length_units=device.length_units,
         ureg=device.ureg,
     )
-    logger.info(
-        f"Conversion factor to recover fields in units of "
-        f"{device.ureg(field_units).units:~P}: {field_conversion:~P}."
+    logger.debug(
+        f"Conversion factor from {device.ureg(field_units).units:~P} to "
+        f"{device.ureg(current_units) / device.ureg(device.length_units):~P}: "
+        f"{field_conversion:~P}."
     )
-
+    field_conversion_magnitude = field_conversion.magnitude
     # Compute the stream functions and fields for each layer
     # given only the applied field.
     for name, layer in device.layers.items():
         logger.info(f"Calculating {name} response to applied field.")
 
         def layer_field(x, y):
-            return applied_field(x, y, layer.z0)
+            # Units: current_units / device.length_units
+            return applied_field(x, y, layer.z0) * field_conversion_magnitude
 
         g, total_field, screening_field = brandt_layer(
             device=device,
             layer=name,
             applied_field=layer_field,
             circulating_currents=circulating_currents,
-            field_units=field_units,
             current_units=current_units,
             check_inversion=check_inversion,
         )
+        # Units: current_units
         streams[name] = g
+        # Units: current_units / device.length_units
         fields[name] = total_field
         screening_fields[name] = screening_field
 
@@ -445,10 +442,10 @@ def solve(
         device=device,
         streams=streams,
         fields={
-            layer: field * field_conversion.magnitude for layer, field in fields.items()
+            layer: field / field_conversion_magnitude for layer, field in fields.items()
         },
         screening_fields={
-            layer: screening_field * field_conversion.magnitude
+            layer: screening_field / field_conversion_magnitude
             for layer, screening_field in screening_fields.items()
         },
         applied_field=applied_field,
@@ -501,16 +498,20 @@ def solve(
                 )
 
                 def layer_field(x, y):
-                    return applied_field(x, y, layer.z0) + other_screening_fields[name]
+                    # Units: current_units / device.length_units
+                    return (
+                        applied_field(x, y, layer.z0) * field_conversion_magnitude
+                        + other_screening_fields[name]
+                    )
 
                 g, total_field, screening_field = brandt_layer(
                     device=device,
                     layer=name,
                     applied_field=layer_field,
                     circulating_currents=circulating_currents,
-                    field_units=field_units,
                     current_units=current_units,
                     check_inversion=check_inversion,
+                    check_lambda=False,
                 )
                 streams[name] = g
                 fields[name] = total_field
@@ -520,11 +521,11 @@ def solve(
                 device=device,
                 streams=streams,
                 fields={
-                    layer: field * field_conversion.magnitude
+                    layer: field / field_conversion_magnitude
                     for layer, field in fields.items()
                 },
                 screening_fields={
-                    layer: screening_field * field_conversion.magnitude
+                    layer: screening_field / field_conversion_magnitude
                     for layer, screening_field in screening_fields.items()
                 },
                 applied_field=applied_field,
@@ -742,7 +743,7 @@ class BrandtSolution(object):
             field = np.asarray(field[ix]) * ureg(self.field_units)
             area = tri_areas[ix]
             # Convert field to B = mu0 * H
-            field = convert_field(field, "mT")
+            field = convert_field(field, "mT", ureg=ureg)
             flux = np.sum(field * area).to(new_units)
             if with_units:
                 fluxes[name] = flux
