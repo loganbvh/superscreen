@@ -6,7 +6,7 @@
 #     LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Dict
 
 import numpy as np
 from pint import UnitRegistry
@@ -171,28 +171,15 @@ class Device(object):
         **mesh_kwargs,
     ):
         self.name = name
-        self.layers = {layer.name: layer for layer in layers}
-        self.films = {film.name: film for film in films}
-        holes = holes or []
-        self.holes = {hole.name: hole for hole in holes}
-        abstract_regions = abstract_regions or []
-        self.abstract_regions = {region.name: region for region in abstract_regions}
+        self.layers_list = layers
+        self.films_list = films
+        self.holes_list = holes or []
+        self.abstract_regions_list = abstract_regions
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
         self.sparse = None
         self.ureg = ureg
-
-        self.poly_points = np.concatenate(
-            [film.points for film in self.films.values()]
-            + [hole.points for hole in self.holes.values()]
-            + [
-                abstract_region.points
-                for abstract_region in self.abstract_regions.values()
-            ]
-        )
-        # Remove duplicate points to avoid meshing issues
-        self.poly_points = np.unique(self.poly_points, axis=0)
 
         self.points = None
         self.triangles = None
@@ -208,6 +195,40 @@ class Device(object):
     def length_units(self):
         """Length units used for the device geometry."""
         return self._length_units
+
+    @property
+    def layers(self) -> Dict[str, Layer]:
+        """Dict of ``{layer_name: layer}``"""
+        return {layer.name: layer for layer in self.layers_list}
+
+    @property
+    def films(self) -> Dict[str, Polygon]:
+        """Dict of ``{film_name: film_polygon}``"""
+        return {film.name: film for film in self.films_list}
+
+    @property
+    def holes(self) -> Dict[str, Polygon]:
+        """Dict of ``{hole_name: hole_polygon}``"""
+        return {hole.name: hole for hole in self.holes_list}
+
+    @property
+    def abstract_regions(self) -> Dict[str, Polygon]:
+        """Dict of ``{region_name: region_polygon}``"""
+        return {region.name: region for region in self.abstract_regions_list}
+
+    @property
+    def poly_points(self) -> np.ndarray:
+        """Shape (n, 2) array of (x, y) coordinates of all polygons in the Device."""
+        points = np.concatenate(
+            [film.points for film in self.films.values()]
+            + [hole.points for hole in self.holes.values()]
+            + [region.points for region in self.abstract_regions.values()]
+        )
+        # Remove duplicate points to avoid meshing issues.
+        # If you don't do this and there are dupliate points,
+        # meshpy.triangle will segfault.
+        points = np.unique(points, axis=0)
+        return points
 
     def make_mesh(
         self,
@@ -237,9 +258,11 @@ class Device(object):
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         logger.info("Generating mesh...")
-        hull = ConvexHull(self.poly_points)
+        # Mesh the entire convex hull of poly_points
+        poly_points = self.poly_points
+        hull = ConvexHull(poly_points)
         mesh_info = triangle.MeshInfo()
-        mesh_info.set_points(self.poly_points)
+        mesh_info.set_points(poly_points)
         mesh_info.set_facets(hull.simplices)
         # Optimal angle is 60 degrees,
         # meshpy quality meshing default is 20 degrees
