@@ -15,6 +15,8 @@ Fields
 
 .. autofunction:: superscreen.visualization.plot_fields
 
+.. autofunction:: superscreen.visualization.plot_field_at_positions
+
 Currents
 --------
 

@@ -9,6 +9,7 @@ from typing import Optional, Union, Tuple, List, Dict
 
 import numpy as np
 import scipy.ndimage
+from scipy.interpolate import griddata
 import matplotlib.colors as cm
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtrans
@@ -692,5 +693,150 @@ def plot_currents(
     for ax in fig.axes:
         if ax not in used_axes:
             fig.delaxes(ax)
+    fig.tight_layout()
+    return fig, axes
+
+
+def plot_field_at_positions(
+    solution: BrandtSolution,
+    positions: np.ndarray,
+    zs: Optional[Union[float, np.ndarray]] = None,
+    vector: bool = False,
+    units: Optional[str] = None,
+    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+    grid_method: str = "cubic",
+    cmap: str = "cividis",
+    colorbar: bool = True,
+    share_color_scale: bool = False,
+    symmetric_color_scale: bool = False,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    cross_section_xs: Optional[Union[float, List[float]]] = None,
+    cross_section_ys: Optional[Union[float, List[float]]] = None,
+    cross_section_angle: Optional[float] = None,
+    **kwargs,
+) -> Tuple[plt.Figure, np.ndarray]:
+    """Plots the total field (either all three components or just the
+    z component) at a given set of positions (x, y, z) outside of the device.
+
+    Additional keyword arguments are passed to plt.subplots().
+
+    Args:
+        solution: The BrandtSolution from which to extract fields.
+        positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
+            coordinates at which to calculcate the magnetic field. A single list like [x, y]
+            or [x, y, z] is also allowed.
+        zs: z coordinates at which to calculcate the field. If positions has shape (m, 3), then
+            this argument is not allowed. If zs is a scalar, then the fields are calculated in
+            a plane parallel to the x-y plane. If zs is any array, then it must be same length
+            as positions.
+        vector: Whether to return the full vector magnetic field or just the z component.
+        units: Units in which to plot the fields. Defaults to solution.field_units.
+            This argument is ignored if normalize is True.
+        grid_shape: Shape of the desired rectangular grid. If a single integer n
+            is given, then the grid will be square, shape = (n, n).
+        grid_method: Interpolation method to use (see scipy.interpolate.griddata).
+        max_cols: Maximum number of columns in the grid of subplots.
+        cmap: Name of the matplotlib colormap to use.
+        colorbar: Whether to add a colorbar to each subplot.
+        share_color_scale: Whether to force all layers to use the same color scale.
+        symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
+        vmin: Color scale minimum to use for all layers
+        vmax: Color scale maximum to use for all layers
+        cross_section_xs: x coordinate(s) for vertical cross-section(s)
+        cross_section_ys: y coordinate(s) for horizontal cross_sections(s)
+        cross_section_angle: Angle in degrees by which to rotate the cross-section
+            lines above the center of the grid.
+
+    Returns:
+        matplotlib figure and axes
+    """
+    device = solution.device
+    # Length units from the Device
+    length_units = device.ureg(device.length_units).units
+    # The units the fields are currently in
+    old_units = device.ureg(solution.field_units).units
+    # The units we want to convert to
+    if units is None:
+        units = old_units
+    if isinstance(units, str):
+        units = device.ureg(units).units
+
+    fields = solution.field_at_position(
+        positions,
+        zs=zs,
+        vector=vector,
+        units=units,
+        with_units=False,
+    )
+    if fields.ndim == 1:
+        fields = fields[:, np.newaxis]
+    if vector:
+        num_subplots = 3
+    else:
+        num_subplots = 1
+    fig, axes = plt.subplots(1, num_subplots, **kwargs)
+    if not isinstance(axes, (list, np.ndarray)):
+        axes = [axes]
+    x, y, *_ = positions.T
+    xs = np.linspace(x.min(), x.max(), grid_shape[1])
+    ys = np.linspace(y.min(), y.max(), grid_shape[0])
+    xgrid, ygrid = np.meshgrid(xs, ys)
+    # Shape grid_shape or (grid_shape + (3, ))
+    fields = griddata(positions[:, :2], fields, (xgrid, ygrid), method=grid_method)
+    clabels = [f"{label} [${units:~L}$]" for label in ["$H_x$ ", "$H_y$ ", "$H_z$ "]]
+    if "[mass]" in units.dimensionality:
+        # We want flux density, B = mu0 * H
+        clabels = ["$\\mu_0$" + clabel for clabel in clabels]
+    if not vector:
+        clabels = clabels[-1:]
+    fields_dict = {label: fields[:, :, i] for i, label in enumerate(clabels)}
+    clim_dict = setup_color_limits(
+        fields_dict,
+        vmin=vmin,
+        vmax=vmax,
+        share_color_scale=share_color_scale,
+        symmetric_color_scale=symmetric_color_scale,
+    )
+    for ax, label in zip(fig.axes, clabels):
+        field = fields_dict[label]
+        layer_vmin, layer_vmax = clim_dict[label]
+        norm = cm.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+        im = ax.pcolormesh(xgrid, ygrid, field, shading="auto", cmap=cmap, norm=norm)
+        ax.set_title(f"{label.split('[')[0].strip()}")
+        ax.set_aspect("equal")
+        ax.set_xlabel(f"$x$ [${length_units:~L}$]")
+        ax.set_ylabel(f"$y$ [${length_units:~L}$]")
+        ax.set_xlim(xgrid.min(), xgrid.max())
+        ax.set_ylim(ygrid.min(), ygrid.max())
+        if colorbar:
+            if cross_section_xs is not None or cross_section_ys is not None:
+                cbar_size = "5%"
+                cbar_pad = "4%"
+            else:
+                cbar_size = "8%"
+                cbar_pad = "4%"
+            ax_divider = make_axes_locatable(ax)
+            cax = ax_divider.append_axes("right", size=cbar_size, pad=cbar_pad)
+            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
+            cbar.set_label(label)
+        if cross_section_xs is not None or cross_section_ys is not None:
+            ax_divider = make_axes_locatable(ax)
+            cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
+            coords, axis, cross_sections = image_cross_section(
+                xgrid,
+                ygrid,
+                field,
+                xs=cross_section_xs,
+                ys=cross_section_ys,
+                angle=cross_section_angle,
+            )
+            cross_xs = axis - axis.min()
+            for coord, cross in zip(coords, cross_sections):
+                ax.plot(*coord.T, ls="--", lw=2)
+                cax.plot(cross_xs, cross, lw=2)
+            cax.grid(True)
+            cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
+            cax.set_ylabel(label)
     fig.tight_layout()
     return fig, axes

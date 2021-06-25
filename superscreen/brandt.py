@@ -816,8 +816,15 @@ class BrandtSolution(object):
         mesh = Triangulation(*points.T, triangles=triangles)
 
         Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
-        Hz_applied = convert_field(
-            Hz_applied,
+        if vector:
+            H_applied = np.stack(
+                [np.zeros_like(Hz_applied), np.zeros_like(Hz_applied), Hz_applied],
+                axis=1,
+            )
+        else:
+            H_applied = Hz_applied
+        H_applied = convert_field(
+            H_applied,
             units,
             old_units=old_units,
             ureg=ureg,
@@ -865,11 +872,8 @@ class BrandtSolution(object):
                 ureg=ureg,
                 magnitude=(not with_units),
             )
-
         if return_sum:
-            fields = sum(fields.values())
-            fields[:, 2] += Hz_applied
+            fields = sum(fields.values()) + H_applied
         else:
-            fields["Hz_applied"] = Hz_applied
-
+            fields["applied_field"] = H_applied
         return fields

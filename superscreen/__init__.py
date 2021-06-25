@@ -16,6 +16,7 @@ from .visualization import (
     plot_streams,
     plot_fields,
     plot_currents,
+    plot_field_at_positions,
 )
 from . import fem
 from . import geometry
