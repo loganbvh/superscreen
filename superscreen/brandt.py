@@ -278,13 +278,13 @@ def brandt_layer(
 
     # Identify holes in the superconductor
     hole_indices = {}
-    in_hole = np.zeros(len(x), dtype=int)
+    in_hole = {name: np.zeros(len(x), dtype=bool) for name in device.layers}
     holes = device.holes
     for name in hole_names:
         hole = holes[name]
         ix = hole.contains_points(x, y)
         hole_indices[name] = np.where(ix)[0]
-        in_hole = np.logical_or(in_hole, ix)
+        in_hole[hole.layer] = np.logical_or(in_hole[hole.layer], ix)
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -292,7 +292,8 @@ def brandt_layer(
     # See Section II(a) in [Brandt], Eqs. 18-19 in [Kirtley1],
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(x)
-    Ha_eff = np.zeros_like(Hz_applied)
+    Ha_eff = {name: np.zeros_like(Hz_applied) for name in device.layers}
+    holes = device.holes
     for name in hole_names:
         current = circulating_currents.get(name, None)
         if current is None:
@@ -309,7 +310,7 @@ def brandt_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
-        Ha_eff += -current * (
+        Ha_eff[holes[name].layer] += -current * (
             Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
         ).sum(axis=1)
 
@@ -317,14 +318,16 @@ def brandt_layer(
     for name in film_names:
         film = device.films[name]
         # We want all points that are in a film and not in a hole.
-        ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
+        ix1d = np.logical_and(
+            film.contains_points(x, y), np.logical_not(in_hole[film.layer])
+        )
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
         # Form the linear system for the film:
         # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
-        h = Hz_applied[ix1d] - Ha_eff[ix1d]
+        h = Hz_applied[ix1d] - Ha_eff[film.layer][ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
         # slightly faster than gf = la.solve(A, h),
         # and much faster than gf = la.pinv(A) @ h.
@@ -365,7 +368,7 @@ def solve(
     only the applied field.
 
     2. If coupled is True and there are multiple layers, then for each layer,
-    calculcate the screening field from all other layers and recompute the
+    calculate the screening field from all other layers and recompute the
     stream function and fields based on the sum of the applied field
     and the screening fields from all other layers.
 
@@ -463,9 +466,10 @@ def solve(
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
-        mesh = Triangulation(*points.T, triangles=triangles)
+        # Cache the calculated kernel matrices.
+        kernels = {}
         for i in range(iterations):
-            # Calculcate the screening fields at each layer from every other layer
+            # Calculate the screening fields at each layer from every other layer
             other_screening_fields = {}
             for name, layer in device.layers.items():
                 Hzr = np.zeros(points.shape[0], dtype=float)
@@ -473,17 +477,21 @@ def solve(
                     if name == other_name:
                         continue
                     logger.info(
-                        f"Calculcating screening field at {name} "
+                        f"Calculating screening field at {name} "
                         f"from {other_name} ({i+1}/{iterations})."
                     )
                     dz = other_layer.z0 - layer.z0
-                    # Interpolate other_layer's stream function to the triangle coordinates
-                    # so that we can do a surface integral using triangle areas.
-                    g_interp = LinearTriInterpolator(mesh, streams[other_name])
-                    g = g_interp(*tri_points.T)
+                    # Average stream function over all vertices in each triangle to
+                    # estimate the stream function value at the centroid of the triangle.
+                    g = streams[other_name][triangles].mean(axis=1)
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                    q = kernels.get((name, other_name), None)
+                    if q is None:
+                        q = (2 * dz ** 2 - rho2) / (
+                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                        )
+                        kernels[(name, other_name)] = q
                     Hzr += np.sum(tri_areas * q * g, axis=1)
                 other_screening_fields[name] = Hzr
 
@@ -650,6 +658,7 @@ class BrandtSolution(object):
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
         method: Optional[str] = "cubic",
+        units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
@@ -662,6 +671,8 @@ class BrandtSolution(object):
                 then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate current density.
             method: Interpolation method to use (see scipy.interpolate.griddata).
+            units: The desired units for the current density. Defaults to
+                ``self.current_units / self.device.length_units``.
             with_units: Whether to return arrays of pint.Quantities with units attached.
 
         Returns:
@@ -672,18 +683,24 @@ class BrandtSolution(object):
             layers=layers,
             grid_shape=grid_shape,
             method=method,
-            with_units=with_units,
+            with_units=True,
             **kwargs,
         )
+        units = units or f"{self.current_units} / {self.device.length_units}"
         Js = {}
         for name, g in streams.items():
             # J = [dg/dy, -dg/dx]
             # y is axis 0 (rows), x is axis 1 (columns)
-            dg_dy, dg_dx = np.gradient(g, ygrid[:, 0], xgrid[0, :])
-            if with_units:
-                Js[name] = np.array([dg_dy.magnitude, -dg_dx.magnitude]) * dg_dx.units
-            else:
-                Js[name] = np.array([dg_dy, -dg_dx])
+            dg_dy, dg_dx = np.gradient(
+                g.magnitude, ygrid[:, 0].magnitude, xgrid[0, :].magnitude
+            )
+            J = (np.array([dg_dy, -dg_dx]) * g.units / xgrid.units).to(units)
+            if not with_units:
+                J = J.magnitude
+            Js[name] = J
+        if not with_units:
+            xgrid = xgrid.magnitude
+            ygrid = ygrid.magnitude
         return xgrid, ygrid, Js
 
     def polygon_flux(
@@ -764,9 +781,9 @@ class BrandtSolution(object):
 
         Args:
             positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
-                coordinates at which to calculcate the magnetic field. A single list like [x, y]
+                coordinates at which to calculate the magnetic field. A single list like [x, y]
                 or [x, y, z] is also allowed.
-            zs: z coordinates at which to calculcate the field. If positions has shape (m, 3), then
+            zs: z coordinates at which to calculate the field. If positions has shape (m, 3), then
                 this argument is not allowed. If zs is a scalar, then the fields are calculated in
                 a plane parallel to the x-y plane. If zs is any array, then it must be same length
                 as positions.
