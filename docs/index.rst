@@ -28,7 +28,7 @@ the coupled London's and Maxwell's equations in and around superconducting films
 with spatially-varying penetration depth in the presence of applied magnetic fields
 and trapped flux.
 
-``SuperScreen`` can be used to calculcate:
+``SuperScreen`` can be used to calculate:
 
 - Self- and mutual-inductances in thin film superconducting structures
 - Flux-focusing and Meissner screening effects in superconducting devices
