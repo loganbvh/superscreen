@@ -318,7 +318,7 @@ class Device(object):
             from .fem import calculate_weights, laplace_operator
             from . import brandt
 
-            logger.info("Calculcating weight matrix.")
+            logger.info("Calculating weight matrix.")
             self.weights = calculate_weights(
                 points, triangles, weight_method, sparse=sparse
             )
