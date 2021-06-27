@@ -113,7 +113,7 @@ def adjacency_matrix(
     return adj.toarray()
 
 
-def calculcate_weights(
+def calculate_weights(
     points: np.ndarray,
     triangles: np.ndarray,
     method: str,

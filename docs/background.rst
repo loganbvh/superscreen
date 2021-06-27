@@ -13,8 +13,8 @@ to an applied inhomogeneous out-of-plane magnetic field
 
 Given :math:`H_{z,\,\mathrm{applied}}(x, y, z)` and information about the geometry and magnetic
 penetration depth of all films in a superconducting structure, we aim
-to calculcate the thickness-integrated current density :math:`\vec{J}(x, y)`
-at all points inside the films, from which one can calculcate the vector magnetic field
+to calculate the thickness-integrated current density :math:`\vec{J}(x, y)`
+at all points inside the films, from which one can calculate the vector magnetic field
 :math:`\vec{H}(x, y, z)` at all points both inside and outside the films.
 
 Brandt's Method
@@ -136,7 +136,7 @@ in the same plane as itself). From :eq:`eq6`, we arrive at an integral equation 
 The goal, then, is to solve (invert) :eq:`eq7` for a given :math:`H_{z,\,\mathrm{applied}}`
 and film geometry :math:`S` to obtain :math:`g` for all points inside the film
 (with :math:`g=0` enforced outside the film). Once :math:`g(\vec{r})` is known,
-the full vector magnetic field :math:`\vec{H}` can be calculcated at any point :math:`\vec{r}`
+the full vector magnetic field :math:`\vec{H}` can be calculated at any point :math:`\vec{r}`
 from :eq:`eq4`.
 
 Films with holes

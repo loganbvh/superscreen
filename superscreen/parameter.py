@@ -79,7 +79,7 @@ class Parameter(object):
     ``CompositeParameter`` object.
 
     Args:
-        func: A callable/function that actually calculcates the parameter's value.
+        func: A callable/function that actually calculates the parameter's value.
             The function must take x, y (and optionally z) as the first and only
             positional arguments, and all other arguments must be keyword arguments.
             Therefore func should have a signature like ``func(x, y, z, a=1, b=2, c=True)``,

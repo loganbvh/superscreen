@@ -194,9 +194,9 @@ def image_cross_section(
 
     Args:
         xgrid: xgrid to use. If not given, xgrid, ygrid, and zgrids
-            will be calculcated using ``solution.grid_data()``.
+            will be calculated using ``solution.grid_data()``.
         ygrid: ygrid to use. If not given, xgrid, ygrid, and zgrids
-            will be calculcated using ``solution.grid_data()``.
+            will be calculated using ``solution.grid_data()``.
         zgrids: Either a dict of zgrids to slice, or a single zgrid.
         xs: x value(s) for a vertical cross-section(s) (required if ys is None).
         ys: y value(s) for a horizontal cross-section(s) (required if x is None).
@@ -724,9 +724,9 @@ def plot_field_at_positions(
     Args:
         solution: The BrandtSolution from which to extract fields.
         positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
-            coordinates at which to calculcate the magnetic field. A single list like [x, y]
+            coordinates at which to calculate the magnetic field. A single list like [x, y]
             or [x, y, z] is also allowed.
-        zs: z coordinates at which to calculcate the field. If positions has shape (m, 3), then
+        zs: z coordinates at which to calculate the field. If positions has shape (m, 3), then
             this argument is not allowed. If zs is a scalar, then the fields are calculated in
             a plane parallel to the x-y plane. If zs is any array, then it must be same length
             as positions.

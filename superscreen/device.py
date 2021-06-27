@@ -154,7 +154,7 @@ class Device(object):
         films: A list of ``Polygons`` representing regions of superconductor.
         holes: A list of ``Polygons`` representing holes in superconducting films.
         abstract_regions: A list of ``Polygons`` representing abstract regions in
-            a device. Abstract regions will be meshed, and one can calculcate
+            a device. Abstract regions will be meshed, and one can calculate
             the flux through them.
         length_units: Distance units for the coordinate system.
     """
@@ -315,11 +315,11 @@ class Device(object):
         self.triangles = triangles
 
         if compute_matrices:
-            from .fem import calculcate_weights, laplace_operator
+            from .fem import calculate_weights, laplace_operator
             from . import brandt
 
             logger.info("Calculcating weight matrix.")
-            self.weights = calculcate_weights(
+            self.weights = calculate_weights(
                 points, triangles, weight_method, sparse=sparse
             )
             logger.info("Calculating Laplace operator.")
@@ -418,18 +418,34 @@ class Device(object):
         t = " " * indent
         nt = "\n" + t
 
-        def format_dict(d):
-            if not d:
+        # def format_dict(d):
+        #     if not d:
+        #         return None
+        #     items = [f'{t}"{key}": {value}' for key, value in d.items()]
+        #     return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
+
+        # args = [
+        #     f'"{self.name}"',
+        #     f"layers={format_dict(self.layers)}",
+        #     f"films={format_dict(self.films)}",
+        #     f"holes={format_dict(self.holes)}",
+        #     f"abstract_regions={format_dict(self.abstract_regions)}",
+        #     f'length_units="{self.length_units}"',
+        # ]
+
+        def format_list(L):
+            if not L:
                 return None
-            items = [f'{t}"{key}": {value}' for key, value in d.items()]
-            return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
+            items = [f"{t}{value}" for value in L]
+            return "[" + nt + (", " + nt).join(items) + "," + nt + "]"
 
         args = [
             f'"{self.name}"',
-            f"layers={format_dict(self.layers)}",
-            f"films={format_dict(self.films)}",
-            f"holes={format_dict(self.holes)}",
-            f"abstract_regions={format_dict(self.abstract_regions)}",
+            f"layers={format_list(self.layers_list)}",
+            f"films={format_list(self.films_list)}",
+            f"holes={format_list(self.holes_list)}",
+            f"abstract_regions={format_list(self.abstract_regions_list)}",
             f'length_units="{self.length_units}"',
         ]
+
         return "Device(" + nt + (", " + nt).join(args) + ",\n)"
