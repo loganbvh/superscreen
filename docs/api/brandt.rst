@@ -17,10 +17,10 @@ Brandt Solver
 
 .. autofunction:: superscreen.brandt.brandt_layer
 
-BrandtSolution
-==============
+Brandt Solution
+---------------
 
-.. autoclass:: superscreen.brandt.BrandtSolution
+.. autoclass:: superscreen.solution.BrandtSolution
     :members:
 
 Supporting Functions

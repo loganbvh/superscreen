@@ -17,7 +17,8 @@ from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 
-from .brandt import convert_field, BrandtSolution
+from .brandt import convert_field
+from .solution import BrandtSolution
 
 
 def auto_grid(

@@ -12,13 +12,12 @@ import pint
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse as sp
-from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
-from matplotlib.tri import Triangulation, LinearTriInterpolator
 
 from .device import Device
 from .fem import areas, centroids
 from .parameter import Constant
+from .solution import BrandtSolution
 
 logger = logging.getLogger(__name__)
 
@@ -278,13 +277,13 @@ def brandt_layer(
 
     # Identify holes in the superconductor
     hole_indices = {}
-    in_hole = {name: np.zeros(len(x), dtype=bool) for name in device.layers}
+    in_hole = np.zeros(len(x), dtype=bool)
     holes = device.holes
     for name in hole_names:
         hole = holes[name]
         ix = hole.contains_points(x, y)
         hole_indices[name] = np.where(ix)[0]
-        in_hole[hole.layer] = np.logical_or(in_hole[hole.layer], ix)
+        in_hole = np.logical_or(in_hole, ix)
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -292,13 +291,11 @@ def brandt_layer(
     # See Section II(a) in [Brandt], Eqs. 18-19 in [Kirtley1],
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(x)
-    Ha_eff = {name: np.zeros_like(Hz_applied) for name in device.layers}
-    holes = device.holes
+    Ha_eff = np.zeros_like(Hz_applied)
     for name in hole_names:
         current = circulating_currents.get(name, None)
         if current is None:
             continue
-
         if isinstance(current, str):
             current = device.ureg(current)
         if isinstance(current, pint.Quantity):
@@ -310,7 +307,7 @@ def brandt_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
-        Ha_eff[holes[name].layer] += -current * (
+        Ha_eff += -current * (
             Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
         ).sum(axis=1)
 
@@ -318,16 +315,14 @@ def brandt_layer(
     for name in film_names:
         film = device.films[name]
         # We want all points that are in a film and not in a hole.
-        ix1d = np.logical_and(
-            film.contains_points(x, y), np.logical_not(in_hole[film.layer])
-        )
+        ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
         # Form the linear system for the film:
         # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
-        h = Hz_applied[ix1d] - Ha_eff[film.layer][ix1d]
+        h = Hz_applied[ix1d] - Ha_eff[ix1d]
         # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
         # slightly faster than gf = la.solve(A, h),
         # and much faster than gf = la.pinv(A) @ h.
@@ -359,7 +354,7 @@ def solve(
     check_inversion: Optional[bool] = True,
     coupled: Optional[bool] = True,
     iterations: Optional[int] = 1,
-) -> List["BrandtSolution"]:
+) -> List[BrandtSolution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
     The simulation strategy is:
@@ -544,354 +539,3 @@ def solve(
             solutions.append(solution)
 
     return solutions
-
-
-class BrandtSolution(object):
-    """A container for the calculated stream functions and fields,
-    with some convenient data processing methods.
-
-    Args:
-        device: The ``Device`` that was solved
-        streams: A dict of ``{layer_name: stream_function}``
-        fields: A dict of ``{layer_name: total_field}``
-        screening_fields: A dict of ``{layer_name: screening_field}``
-        applied_field: The function defining the applied field
-        field_units: Units of the applied field
-        current_units: Units used for current quantities.
-        circulating_currents: A dict of ``{hole_name: circulating_current}``
-    """
-
-    def __init__(
-        self,
-        *,
-        device: Device,
-        streams: Dict[str, np.ndarray],
-        fields: Dict[str, np.ndarray],
-        screening_fields: Dict[str, np.ndarray],
-        applied_field: Callable,
-        field_units: str,
-        current_units: str,
-        circulating_currents: Optional[
-            Dict[str, Union[float, str, pint.Quantity]]
-        ] = None,
-    ):
-        self.device = device
-        self.streams = streams
-        self.fields = fields
-        self.screening_fields = screening_fields
-        self.applied_field = applied_field
-        self.field_units = field_units
-        self.current_units = current_units
-        self.circulating_currents = circulating_currents
-
-    def grid_data(
-        self,
-        dataset: str,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        layers: Optional[Union[str, List[str]]] = None,
-        method: Optional[str] = "cubic",
-        with_units: bool = False,
-        **kwargs,
-    ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
-        """Interpolates results from the triangular mesh to a rectangular grid.
-
-        Keyword arguments are passed to scipy.interpolate.griddata().
-
-        Args:
-            dataset: Name of the dataset to interpolate
-                (one of "streams", "fields", or "screening_fields").
-            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
-                then the grid will be square, shape = (N, N).
-            layers: Name(s) of the layer(s) for which to interpolate results.
-            method: Interpolation method to use (see scipy.interpolate.griddata).
-            with_units: Whether to return arrays of pint.Quantities with units attached.
-
-        Returns:
-            x grid, y grid, dict of interpolated data for each layer
-        """
-        valid_data = ("streams", "fields", "screening_fields")
-        if dataset not in valid_data:
-            raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
-        datasets = getattr(self, dataset)
-
-        if isinstance(layers, str):
-            layers = [layers]
-        if layers is None:
-            layers = list(self.device.layers)
-        else:
-            for layer in layers:
-                if layer not in self.device.layers:
-                    raise ValueError(f"Unknown layer, {layer}.")
-
-        if isinstance(grid_shape, int):
-            grid_shape = (grid_shape, grid_shape)
-        if not isinstance(grid_shape, (tuple, list)) or len(grid_shape) != 2:
-            raise TypeError(
-                f"Expected a tuple of length 2, but got {grid_shape} ({type(grid_shape)})."
-            )
-
-        points = self.device.points
-        x, y = points.T
-        xgrid, ygrid = np.meshgrid(
-            np.linspace(x.min(), x.max(), grid_shape[1]),
-            np.linspace(y.min(), y.max(), grid_shape[0]),
-        )
-        zgrids = {}
-        for name, array in datasets.items():
-            if name in layers:
-                zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
-                zgrids[name] = zgrid
-        if with_units:
-            xgrid = xgrid * self.device.ureg(self.device.length_units)
-            ygrid = ygrid * self.device.ureg(self.device.length_units)
-            if dataset in ("fields", "screening_fields"):
-                units = self.field_units
-            else:
-                units = self.current_units
-            zgrids = {
-                layer: data * self.device.ureg(units) for layer, data in zgrids.items()
-            }
-        return xgrid, ygrid, zgrids
-
-    def current_density(
-        self,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        layers: Optional[Union[str, List[str]]] = None,
-        method: Optional[str] = "cubic",
-        units: Optional[str] = None,
-        with_units: bool = False,
-        **kwargs,
-    ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
-        """Computes the current density ``J = [dg/dy, -dg/dx]`` on a rectangular grid.
-
-        Keyword arguments are passed to scipy.interpolate.griddata().
-
-        Args:
-            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
-                then the grid will be square, shape = (N, N).
-            layers: Name(s) of the layer(s) for which to interpolate current density.
-            method: Interpolation method to use (see scipy.interpolate.griddata).
-            units: The desired units for the current density. Defaults to
-                ``self.current_units / self.device.length_units``.
-            with_units: Whether to return arrays of pint.Quantities with units attached.
-
-        Returns:
-            x grid, y grid, dict of interpolated current density for each layer
-        """
-        xgrid, ygrid, streams = self.grid_data(
-            dataset="streams",
-            layers=layers,
-            grid_shape=grid_shape,
-            method=method,
-            with_units=True,
-            **kwargs,
-        )
-        units = units or f"{self.current_units} / {self.device.length_units}"
-        Js = {}
-        for name, g in streams.items():
-            # J = [dg/dy, -dg/dx]
-            # y is axis 0 (rows), x is axis 1 (columns)
-            dg_dy, dg_dx = np.gradient(
-                g.magnitude, ygrid[:, 0].magnitude, xgrid[0, :].magnitude
-            )
-            J = (np.array([dg_dy, -dg_dx]) * g.units / xgrid.units).to(units)
-            if not with_units:
-                J = J.magnitude
-            Js[name] = J
-        if not with_units:
-            xgrid = xgrid.magnitude
-            ygrid = ygrid.magnitude
-        return xgrid, ygrid, Js
-
-    def polygon_flux(
-        self,
-        polygons: Optional[Union[str, List[str]]] = None,
-        units: Optional[Union[str, pint.Unit]] = None,
-        with_units: bool = True,
-    ) -> Dict[str, Union[float, pint.Quantity]]:
-        """Compute the flux through all polygons (films, holes, and flux regions)
-        by integrating the calculated fields.
-
-        Args:
-            polygons: Name(s) of the polygon(s) for which to compute the flux.
-                Default: All polygons.
-            with_units: Whether to a dict of pint.Quantities with units attached.
-
-        Returns:
-            dict of flux for each polygon in units of ``[self.field_units * device.length_units**2]``.
-        """
-        films = list(self.device.films)
-        holes = list(self.device.holes)
-        abstract_regions = list(self.device.abstract_regions)
-        all_polygons = films + holes + abstract_regions
-
-        if isinstance(polygons, str):
-            polygons = [polygons]
-        if polygons is None:
-            polygons = all_polygons
-        else:
-            for poly in polygons:
-                if poly not in all_polygons:
-                    raise ValueError(f"Unknown polygon, {poly}.")
-
-        ureg = self.device.ureg
-        new_units = units or f"{self.field_units} * {self.device.length_units}**2"
-        if isinstance(new_units, str):
-            new_units = ureg(new_units)
-
-        points = self.device.points
-        triangles = self.device.triangles
-
-        tri_areas = areas(points, triangles) * ureg(f"{self.device.length_units}") ** 2
-        xt, yt = centroids(points, triangles).T
-        mesh = Triangulation(*points.T, triangles=triangles)
-        fluxes = {}
-        for name in polygons:
-            if name in films:
-                poly = self.device.films[name]
-            elif name in holes:
-                poly = self.device.holes[name]
-            else:
-                poly = self.device.abstract_regions[name]
-            ix = poly.contains_points(xt, yt, index=True)
-            h_interp = LinearTriInterpolator(mesh, self.fields[poly.layer])
-            field = h_interp(xt, yt)
-            # LinearTriInterpolator returns a masked array
-            field = np.asarray(field[ix]) * ureg(self.field_units)
-            area = tri_areas[ix]
-            # Convert field to B = mu0 * H
-            field = convert_field(field, "mT", ureg=ureg)
-            flux = np.sum(field * area).to(new_units)
-            if with_units:
-                fluxes[name] = flux
-            else:
-                fluxes[name] = flux.magnitude
-        return fluxes
-
-    def field_at_position(
-        self,
-        positions: np.ndarray,
-        zs: Optional[Union[float, np.ndarray]] = None,
-        vector: bool = False,
-        units: Optional[str] = None,
-        with_units: Optional[bool] = True,
-        return_sum: bool = True,
-    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
-        """Calculate the field due to currents in the device at any point(s) in space.
-
-        Args:
-            positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
-                coordinates at which to calculate the magnetic field. A single list like [x, y]
-                or [x, y, z] is also allowed.
-            zs: z coordinates at which to calculate the field. If positions has shape (m, 3), then
-                this argument is not allowed. If zs is a scalar, then the fields are calculated in
-                a plane parallel to the x-y plane. If zs is any array, then it must be same length
-                as positions.
-            vector: Whether to return the full vector magnetic field or just the z component.
-            units: Units to which to convert the fields (can be either magnetic field H or
-                magnetic flux density B = mu0 * H). If not give, then the fields are returned in
-                units of ``self.field_units``.
-            with_units: Whether to return the fields as ``pint.Quantity`` with units attached.
-            return_sum: Whether to return the sum of the fields from all layers in the device,
-                or a dict of ``{layer_name: field_from_layer}``.
-
-        Returns:
-            An np.ndarray if return_sum is True, otherwise a dict of ``{layer_name: field_from_layer}``.
-            If with_units is True, then the array(s) will contain pint.Quantities. ``field_from_layer``
-            will have shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
-        """
-        device = self.device
-        ureg = device.ureg
-        points = device.points
-        triangles = device.triangles
-
-        units = units or self.field_units
-        old_units = f"{self.current_units} / {device.length_units}"
-
-        # In case something like a list [x, y] or [x, y, z] is given
-        positions = np.atleast_2d(positions)
-        # If positions includes z coordinates, peel those off here
-        if positions.shape[1] == 3:
-            if zs is not None:
-                raise ValueError(
-                    "If positions has shape (m, 3) then zs cannot be specified."
-                )
-            zs = positions[:, 2]
-            positions = positions[:, :2]
-        elif isinstance(zs, (int, float)):
-            # constant zs
-            zs = zs * np.ones(points.shape[0], dtype=float)
-        if not isinstance(zs, np.ndarray):
-            raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
-        if zs.ndim == 1:
-            # We need zs to be shape (m, 1)
-            zs = zs[:, np.newaxis]
-
-        tri_points = centroids(points, triangles)
-        tri_areas = areas(points, triangles)
-        # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = cdist(positions, tri_points, metric="sqeuclidean")
-        mesh = Triangulation(*points.T, triangles=triangles)
-
-        Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
-        if vector:
-            H_applied = np.stack(
-                [np.zeros_like(Hz_applied), np.zeros_like(Hz_applied), Hz_applied],
-                axis=1,
-            )
-        else:
-            H_applied = Hz_applied
-        H_applied = convert_field(
-            H_applied,
-            units,
-            old_units=old_units,
-            ureg=ureg,
-            magnitude=(not with_units),
-        )
-
-        fields = {}
-        # Compute the fields at the specified positions from the currents in each layer
-        for name, layer in device.layers.items():
-            dz = zs - layer.z0
-            if np.any(dz == 0):
-                raise ValueError(
-                    f"Cannot calculate fields in the same plane as layer {name}."
-                )
-            g_interp = LinearTriInterpolator(mesh, self.streams[name])
-            # g has units of [current]
-            g = g_interp(*tri_points.T)
-            # Q is the dipole kernel for the z component, Hz
-            # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
-            Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-            # tri_areas has units of [length]^2
-            # So here Hz is in units of [current] * [length]^(-1)
-            Hz = np.asarray(np.sum(tri_areas * Q * g, axis=1))
-            if vector:
-                # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
-                # Pairwise difference between all x positions
-                d = np.subtract.outer(positions[:, 0], tri_points[:, 0])
-                # Kernel for x component, Hx
-                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hx = np.asarray(np.sum(tri_areas * Q * g, axis=1))
-
-                # Pairwise difference between all y positions
-                d = np.subtract.outer(positions[:, 1], tri_points[:, 1])
-                # Kernel for y component, Hy
-                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hy = np.asarray(np.sum(tri_areas * Q * g, axis=1))
-
-                H = np.stack([Hx, Hy, Hz], axis=1)
-            else:
-                H = Hz
-            fields[name] = convert_field(
-                H,
-                units,
-                old_units=old_units,
-                ureg=ureg,
-                magnitude=(not with_units),
-            )
-        if return_sum:
-            fields = sum(fields.values()) + H_applied
-        else:
-            fields["applied_field"] = H_applied
-        return fields
