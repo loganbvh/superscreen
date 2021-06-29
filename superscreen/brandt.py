@@ -51,7 +51,7 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
     return q
 
 
-def C_vector(points: np.ndarray) -> np.ndarray:
+def C_vector(points: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
     """Computes the edge vector, C:
 
     .. math::
@@ -64,14 +64,20 @@ def C_vector(points: np.ndarray) -> np.ndarray:
     and Eq. 15 in [Kirtley-SST-2016]_.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        mask: A shape (n, ) boolean mask for points, which determines which
+            coordinates are used to caluclate C.
 
     Returns:
         Shape (n, ) array, Ci
     """
     x, y = points.T
-    a = np.ptp(x) / 2
-    b = np.ptp(y) / 2
+    if mask is None:
+        mask = np.ones_like(x, dtype=bool)
+    x = x - x[mask].mean()
+    y = y - y[mask].mean()
+    a = np.ptp(x[mask]) / 2
+    b = np.ptp(y[mask]) / 2
     with np.errstate(divide="ignore"):
         C = (
             np.sqrt((a - x) ** (-2) + (b - y) ** (-2))
@@ -80,6 +86,7 @@ def C_vector(points: np.ndarray) -> np.ndarray:
             + np.sqrt((a + x) ** (-2) + (b + y) ** (-2))
         )
     C[np.isinf(C)] = 1e30
+    C[~mask] = 0
     return C / (4 * np.pi)
 
 
@@ -246,7 +253,7 @@ def brandt_layer(
         weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
-    Q = device.Q
+    Q = device.Q(layer)
     points = device.points
     x, y = points.T
     london_lambda = device.layers[layer].london_lambda
@@ -301,14 +308,14 @@ def brandt_layer(
         if isinstance(current, pint.Quantity):
             current = current.to(current_units).magnitude
 
-        hole = hole_indices[name]
-        g[hole] = current  # g[hole] = I_circ
+        ix = hole_indices[name]
+        g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
         Ha_eff += -current * (
-            Q[:, hole] * weights[:, hole] - Lambda[:, np.newaxis] * Del2[:, hole]
+            Q[:, ix] * weights[:, ix] - Lambda[:, np.newaxis] * Del2[:, ix]
         ).sum(axis=1)
 
     # Now solve for the stream function inside the superconducting films
@@ -318,6 +325,7 @@ def brandt_layer(
         ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
+
         # Form the linear system for the film:
         # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].

@@ -150,12 +150,11 @@ class Device(object):
 
     Args:
         name: Name of the device.
-        layers: A list of ``Layers``.
-        films: A list of ``Polygons`` representing regions of superconductor.
-        holes: A list of ``Polygons`` representing holes in superconducting films.
-        abstract_regions: A list of ``Polygons`` representing abstract regions in
-            a device. Abstract regions will be meshed, and one can calculate
-            the flux through them.
+        layers: ``Layers`` making up the device.
+        films: ``Polygons`` representing regions of superconductor.
+        holes: ``Holes`` representing holes in superconducting films.
+        abstract_regions: ``Polygons`` representing abstract regions in a device.
+            Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
     """
 
@@ -163,22 +162,33 @@ class Device(object):
         self,
         name: str,
         *,
-        layers: List[Layer],
-        films: List[Polygon],
-        holes: Optional[List[Polygon]] = None,
-        abstract_regions: Optional[List[Polygon]] = None,
+        layers: Union[List[Layer], Dict[str, Layer]],
+        films: Union[List[Polygon], Dict[str, Polygon]],
+        holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
+        abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
-        **mesh_kwargs,
     ):
         self.name = name
-        self.layers_list = list(layers)
-        self.films_list = list(films)
+        if isinstance(layers, dict):
+            self.layers = layers
+        else:
+            self.layers_list = list(layers)
+        if isinstance(films, dict):
+            self.films = films
+        else:
+            self.films_list = list(films)
         if holes is None:
             holes = []
-        self.holes_list = list(holes)
+        if isinstance(holes, dict):
+            self.holes = holes
+        else:
+            self.holes_list = list(holes)
         if abstract_regions is None:
             abstract_regions = []
-        self.abstract_regions_list = list(abstract_regions)
+        if isinstance(abstract_regions, dict):
+            self.abstract_regions = abstract_regions
+        else:
+            self.abstract_regions_list = list(abstract_regions)
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
@@ -192,9 +202,6 @@ class Device(object):
         self.Q = None
         self.Del2 = None
 
-        if mesh_kwargs:
-            self.make_mesh(**mesh_kwargs)
-
     @property
     def length_units(self):
         """Length units used for the device geometry."""
@@ -205,28 +212,58 @@ class Device(object):
         """Dict of ``{layer_name: layer}``"""
         return {layer.name: layer for layer in self.layers_list}
 
+    @layers.setter
+    def layers(self, layers_dict: Dict[str, Layer]) -> None:
+        """Dict of ``{layer_name: layer}``"""
+        if not all(isinstance(obj, Layer) for obj in layers_dict.values()):
+            raise TypeError("Layers must be a dict of {layer_name: Layer}.")
+        self.layers_list = list(layers_dict.values())
+
     @property
     def films(self) -> Dict[str, Polygon]:
         """Dict of ``{film_name: film_polygon}``"""
         return {film.name: film for film in self.films_list}
+
+    @films.setter
+    def films(self, films_dict: Dict[str, Polygon]) -> None:
+        """Dict of ``{film_name: film_polygon}``"""
+        if not all(isinstance(obj, Polygon) for obj in films_dict.values()):
+            raise TypeError("Films must be a dict of {film_name: Polygon}.")
+        self.films_list = list(films_dict.values())
 
     @property
     def holes(self) -> Dict[str, Polygon]:
         """Dict of ``{hole_name: hole_polygon}``"""
         return {hole.name: hole for hole in self.holes_list}
 
+    @holes.setter
+    def holes(self, holes_dict: Dict[str, Polygon]) -> None:
+        """Dict of ``{hole_name: hole_polygon}``"""
+        if not all(isinstance(obj, Polygon) for obj in holes_dict.values()):
+            raise TypeError("Holes must be a dict of {hole_name: Polygon}.")
+        self.holes_list = list(holes_dict.values())
+
     @property
     def abstract_regions(self) -> Dict[str, Polygon]:
         """Dict of ``{region_name: region_polygon}``"""
         return {region.name: region for region in self.abstract_regions_list}
 
+    @abstract_regions.setter
+    def abstract_regions(self, regions_dict: Dict[str, Polygon]) -> None:
+        """Dict of ``{region_name: region_polygon}``"""
+        if not all(isinstance(obj, Polygon) for obj in regions_dict.values()):
+            raise TypeError(
+                "Abstract regions must be a dict of {region_name: Polygon}."
+            )
+        self.abstract_regions_list = list(regions_dict.values())
+
     @property
     def poly_points(self) -> np.ndarray:
         """Shape (n, 2) array of (x, y) coordinates of all polygons in the Device."""
         points = np.concatenate(
-            [film.points for film in self.films.values()]
-            + [hole.points for hole in self.holes.values()]
-            + [region.points for region in self.abstract_regions.values()]
+            [film.points for film in self.films_list]
+            + [hole.points for hole in self.holes_list]
+            + [region.points for region in self.abstract_regions_list]
         )
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are dupliate points,
@@ -326,8 +363,22 @@ class Device(object):
             self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
             logger.info("Calculating kernel matrix.")
             q = brandt.q_matrix(points)
-            C = brandt.C_vector(points)
-            self.Q = brandt.Q_matrix(q, C, self.weights)
+            # Each layer has its own edge vector C, so each layer's kernal matrix Q
+            # will have different diagonals.
+            C_vectors = {}
+            films = self.films
+            x, y = points.T
+            for layer_name in self.layers:
+                films = [film for film in self.films_list if film.layer == layer_name]
+                mask = np.logical_or.reduce(
+                    [film.contains_points(x, y) for film in films]
+                )
+                C_vectors[layer_name] = brandt.C_vector(points, mask=mask)
+
+            def Q_matrix(layer):
+                return brandt.Q_matrix(q, C_vectors[layer], self.weights)
+
+            self.Q = Q_matrix
             self.sparse = sparse
 
     def plot_polygons(

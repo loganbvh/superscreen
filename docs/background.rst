@@ -258,10 +258,11 @@ where :math:`\delta_{ij}` is the Kronecker delta function. The diagonal terms in
 .. math::
     :label: eq12
 
-    C_i = \frac{1}{4\pi}\sum_{p,q=\pm1}\sqrt{(\Delta x - px_i)^{-2} + (\Delta y - qy_i)^{-2}},
+    C_i = \frac{1}{4\pi}\sum_{p,q=\pm1}\sqrt{[\Delta x - p(x_i-\bar{x})]^{-2} + [\Delta y - q(y_i-\bar{y})]^{-2}},
 
 where :math:`\Delta x=(x_\mathrm{max}-x_\mathrm{min})/2` and :math:`\Delta y=(y_\mathrm{max}-y_\mathrm{min})/2`
-are half the side lengths of a rectangle bounding the modeled film. The matrix version of :eq:`eq9`
+are half the side lengths of a rectangle bounding the modeled film(s) and :math:`(\bar{x}, \bar{y})` are the
+coordinates of the center of the rectangle. The matrix version of :eq:`eq9`
 is:
 
 .. math::
