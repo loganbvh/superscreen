@@ -295,7 +295,7 @@ class BrandtSolution(object):
             positions = positions[:, :2]
         elif isinstance(zs, (int, float)):
             # constant zs
-            zs = zs * np.ones(points.shape[0], dtype=float)
+            zs = zs * np.ones(positions.shape[0], dtype=float)
         if not isinstance(zs, np.ndarray):
             raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
         if zs.ndim == 1:
