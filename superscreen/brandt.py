@@ -262,13 +262,14 @@ def brandt_layer(
 
     if check_lambda:
         if isinstance(london_lambda, (int, float)) and london_lambda <= d:
+            length_units = device.ureg(device.length_units).units
             logger.warn(
-                f"Layer '{layer}': The film thickness, d = {d:.4f} {device.length_units}"
-                f", is greater than or equal to the London penetration depth "
-                f"({lambda_str} = {london_lambda:.4f} {device.length_units}), resulting "
+                f"Layer '{layer}': The film thickness, d = {d:.4f} {length_units:~P}"
+                f", is greater than or equal to the London penetration depth, resulting "
                 f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
-                f"{device.length_units} <= {lambda_str}. The assumption that the current density "
-                f"is nearly constant over the thickness of the film may not be valid. "
+                f"{length_units:~P} <= {lambda_str} = {london_lambda:.4f} {length_units:~P}. "
+                f"The assumption that the current density is nearly constant over the "
+                f"thickness of the film may not be valid. "
             )
 
     film_names = [name for name, film in device.films.items() if film.layer == layer]

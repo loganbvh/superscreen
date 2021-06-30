@@ -14,6 +14,28 @@ and ``superscreen.parameters`` are used to set up the inputs to a
 - The geometry and penetration depth of all superconducting films
 - The spatial distribution of the applied magnetic field
 
+Devices
+-------
+
+Device
+======
+
+.. autoclass:: superscreen.device.Device
+    :members:
+
+Layer
+=====
+
+.. autoclass:: superscreen.device.Layer
+    :members:
+
+Polygon
+=======
+
+.. autoclass:: superscreen.device.Polygon
+    :members:
+
+
 Geometry
 --------
 
@@ -27,32 +49,17 @@ Geometry
 
 .. autofunction:: superscreen.geometry.square
 
-Layer
------
-
-.. autoclass:: superscreen.device.Layer
-    :members:
-
-Polygon
--------
-
-.. autoclass:: superscreen.device.Polygon
-    :members:
-
-Device
-------
-
-.. autoclass:: superscreen.device.Device
-    :members:
+Parameters
+----------
 
 Parameter
----------
+=========
 
 .. autoclass:: superscreen.parameter.Parameter
     :members:
 
 CompositeParameter
-------------------
+==================
 
 .. autoclass:: superscreen.parameter.CompositeParameter
     :members:
@@ -60,7 +67,7 @@ CompositeParameter
     :inherited-members:
 
 Constant
---------
+========
 
 .. autoclass:: superscreen.parameter.Constant
     :members:

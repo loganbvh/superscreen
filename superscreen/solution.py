@@ -5,10 +5,13 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
+import os
+import json
 from typing import Optional, Union, Callable, Dict, Tuple, List
 
-import numpy as np
+import dill
 import pint
+import numpy as np
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
 
@@ -365,3 +368,101 @@ class BrandtSolution(object):
         else:
             fields["applied_field"] = H_applied
         return fields
+
+    def to_file(self, directory: str) -> None:
+        """Saves a BrandtSolution to disk.
+
+        Args:
+            directory: The name of the directory in which to save the solution
+                (must either be empty or not yet exist).
+        """
+        if os.path.isdir(directory) and len(os.listdir(directory)):
+            raise IOError(f"Directory '{directory}' already exists and is not empty.")
+        else:
+            os.makedirs(directory)
+
+        # Save device
+        device_path = "device"
+        self.device.to_file(os.path.join(directory, device_path))
+
+        # Save arrays
+        array_paths = []
+        for layer in self.device.layers:
+            path = f"{layer}_arrays.npz"
+            np.savez(
+                os.path.join(directory, path),
+                streams=self.streams[layer],
+                fields=self.fields[layer],
+                screening_fields=self.screening_fields[layer],
+            )
+            array_paths.append(path)
+
+        # Save applied field function
+        applied_field_path = "applied_field.dill"
+        with open(os.path.join(directory, applied_field_path), "wb") as f:
+            dill.dump(self.applied_field, f)
+
+        # Handle circulating current formatting
+        circ_currents = {}
+        for name, val in self.circulating_currents.items():
+            if isinstance(val, pint.Quantity):
+                val = str(val)
+            circ_currents[name] = val
+
+        metadata = {
+            "device": device_path,
+            "arrays": array_paths,
+            "applied_field": applied_field_path,
+            "circulating_currents": circ_currents,
+            "field_units": self.field_units,
+            "current_units": self.current_units,
+        }
+
+        with open(os.path.join(directory, "metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=4)
+
+    @classmethod
+    def from_file(
+        cls, directory: str, compute_matrices: bool = False
+    ) -> "BrandtSolution":
+        """Loads a BrandtSolution from file.
+
+        Args:
+            directory: The directory from which to load the solution.
+            compute_matrices: Whether to compute the field-independent
+                matrices for the device if the mesh already exists.
+
+        Returns:
+            The loaded BrandtSolution instance
+        """
+        with open(os.path.join(directory, "metadata.json"), "r") as f:
+            info = json.load(f)
+
+        # Load device
+        device_path = os.path.join(directory, info.pop("device"))
+        device = Device.from_file(device_path, compute_matrices=compute_matrices)
+
+        # Load arrays
+        streams = {}
+        fields = {}
+        screening_fields = {}
+        array_paths = info.pop("arrays")
+        for path in array_paths:
+            layer = path.split("_")[0]
+            with np.load(os.path.join(directory, path)) as arrays:
+                streams[layer] = arrays["streams"]
+                fields[layer] = arrays["fields"]
+                screening_fields[layer] = arrays["screening_fields"]
+
+        # Load applied field function
+        with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
+            applied_field = dill.load(f)
+
+        return cls(
+            device=device,
+            streams=streams,
+            fields=fields,
+            screening_fields=screening_fields,
+            applied_field=applied_field,
+            **info,
+        )

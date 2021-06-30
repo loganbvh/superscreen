@@ -1,3 +1,4 @@
+dill
 jupyter
 matplotlib
 meshpy

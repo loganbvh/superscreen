@@ -23,6 +23,7 @@ LICENSE = "MIT"
 PYTHON_VERSION = ">=3.6"
 
 INSTALL_REQUIRES = [
+    "dill",
     "jupyter",
     "matplotlib",
     "meshpy",

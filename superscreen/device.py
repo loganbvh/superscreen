@@ -5,9 +5,13 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
+import os
+import json
+
 import logging
 from typing import Optional, Union, List, Tuple, Dict
 
+import dill
 import numpy as np
 from pint import UnitRegistry
 import matplotlib.pyplot as plt
@@ -289,10 +293,12 @@ class Device(object):
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
             sparse: Whether to use sparse matrices for weights and Laplacian.
-            weight_method: Meshing scheme: either "uniform", "half_cotangent", or "inv_euclidian".
-            min_triangles: Minimum number of triangles in the mesh. If None, then the
-                number of triangles will be determined by meshpy_kwargs.
-            optimesh_steps: Maximum number of optimesh steps. If None, then no optimization is done.
+            weight_method: Meshing scheme: either "uniform", "half_cotangent",
+                or "inv_euclidian".
+            min_triangles: Minimum number of triangles in the mesh. If None, then
+                the number of triangles will be determined by meshpy_kwargs.
+            optimesh_steps: Maximum number of optimesh steps. If None, then no
+                optimization is done.
             optimesh_method: Name of the optimization method to use.
             optimesh_tolerance: Optimesh quality tolerance.
             optimesh_verbose: Whether to use verbose mode in optimesh.
@@ -352,34 +358,53 @@ class Device(object):
         self.triangles = triangles
 
         if compute_matrices:
-            from .fem import calculate_weights, laplace_operator
-            from . import brandt
+            self.compute_matrices(sparse=sparse, weight_method=weight_method)
 
-            logger.info("Calculating weight matrix.")
-            self.weights = calculate_weights(
-                points, triangles, weight_method, sparse=sparse
+    def compute_matrices(
+        self, sparse: bool = True, weight_method: str = "half_cotangent"
+    ) -> None:
+        """Calculcates mesh weights, Laplace oeprator, and kernel functions.
+
+        Args:
+            sparse: Whether to use sparse matrices for weights and Laplacian.
+            weight_method: Meshing scheme: either "uniform", "half_cotangent",
+                or "inv_euclidian".
+        """
+        from .fem import calculate_weights, laplace_operator
+        from . import brandt
+
+        points = self.points
+        triangles = self.triangles
+
+        if points is None or triangles is None:
+            raise ValueError(
+                "Device mesh does not exist. Run Device.make_mesh() "
+                "to generate the mesh."
             )
-            logger.info("Calculating Laplace operator.")
-            self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
-            logger.info("Calculating kernel matrix.")
-            q = brandt.q_matrix(points)
-            # Each layer has its own edge vector C, so each layer's kernal matrix Q
-            # will have different diagonals.
-            C_vectors = {}
-            films = self.films
-            x, y = points.T
-            for layer_name in self.layers:
-                films = [film for film in self.films_list if film.layer == layer_name]
-                mask = np.logical_or.reduce(
-                    [film.contains_points(x, y) for film in films]
-                )
-                C_vectors[layer_name] = brandt.C_vector(points, mask=mask)
 
-            def Q_matrix(layer):
-                return brandt.Q_matrix(q, C_vectors[layer], self.weights)
+        logger.info("Calculating weight matrix.")
+        self.weights = calculate_weights(
+            points, triangles, weight_method, sparse=sparse
+        )
+        logger.info("Calculating Laplace operator.")
+        self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
+        logger.info("Calculating kernel matrix.")
+        q = brandt.q_matrix(points)
+        # Each layer has its own edge vector C, so each layer's kernal matrix Q
+        # will have different diagonals.
+        C_vectors = {}
+        films = self.films
+        x, y = points.T
+        for layer_name in self.layers:
+            films = [film for film in self.films_list if film.layer == layer_name]
+            mask = np.logical_or.reduce([film.contains_points(x, y) for film in films])
+            C_vectors[layer_name] = brandt.C_vector(points, mask=mask)
 
-            self.Q = Q_matrix
-            self.sparse = sparse
+        def Q_matrix(layer):
+            return brandt.Q_matrix(q, C_vectors[layer], self.weights)
+
+        self.Q = Q_matrix
+        self.sparse = sparse
 
     def plot_polygons(
         self,
@@ -462,6 +487,158 @@ class Device(object):
         ax.set_xlabel(f"$x$ $[{units:~L}]$")
         ax.set_ylabel(f"$y$ $[{units:~L}]$")
         return ax
+
+    def to_file(self, directory: str, save_mesh: bool = True) -> None:
+        """Serializes the Device to disk.
+
+        Args:
+            directory: The name of the directory in which to save the Device
+                (must either be empty or not yet exist).
+            save_mesh: Whether to save the full mesh to file.
+        """
+        from .io import NumpyJSONEncoder
+
+        if os.path.isdir(directory) and len(os.listdir(directory)):
+            raise IOError(f"Directory '{directory}' already exists and is not empty.")
+        else:
+            os.makedirs(directory)
+
+        # Serialize films, holes, and abstract_regions to JSON
+        polygons = {"device_name": self.name, "length_units": self.length_units}
+        for poly_type in ["films", "holes", "abstract_regions"]:
+            polygons[poly_type] = {}
+            for name, poly in getattr(self, poly_type).items():
+                polygons[poly_type][name] = {
+                    "layer": poly.layer,
+                    "points": poly.points,
+                }
+        with open(os.path.join(directory, "polygons.json"), "w") as f:
+            json.dump(polygons, f, indent=4, cls=NumpyJSONEncoder)
+
+        # Serialize layers to JSON.
+        # If Lambda or london_lambda is a Parameter, then we will
+        # pickle it using dill.
+        layers = {"device_name": self.name, "length_units": self.length_units}
+        for name, layer in self.layers.items():
+            layers[name] = {"z0": layer.z0, "thickness": layer.thickness}
+            if isinstance(layer._Lambda, (int, float)):
+                layers[name]["Lambda"] = layer._Lambda
+                layers[name]["london_lambda"] = None
+            elif isinstance(layer.london_lambda, (int, float)):
+                layers[name]["Lambda"] = None
+                layers[name]["london_lambda"] = layer.london_lambda
+            else:
+                if isinstance(layer._Lambda, Parameter):
+                    # Lambda is defined as a Parameter and london_lambda is None
+                    assert layer.london_lambda is None
+                    param = layer._Lambda
+                    key = "Lambda"
+                    null_key = "london_lambda"
+                else:
+                    # london_lambda is defined as a Parameter and _Lambda is None
+                    assert layer._Lambda is None
+                    param = layer.london_lambda
+                    key = "london_lambda"
+                    null_key = "Lambda"
+                dill_fname = f"{layer.name}_{param.func.__name__}.dill"
+                layers[name][null_key] = None
+                layers[name][key] = {
+                    "path": dill_fname,
+                    "kwargs": param.kwargs,
+                }
+                with open(os.path.join(directory, dill_fname), "wb") as f:
+                    dill.dump(param, f)
+
+        with open(os.path.join(directory, "layers.json"), "w") as f:
+            json.dump(layers, f, indent=4, cls=NumpyJSONEncoder)
+
+        if save_mesh:
+            # Serialize mesh, if it exists.
+            if self.points is not None:
+                np.savez(
+                    os.path.join(directory, "mesh.npz"),
+                    points=self.points,
+                    triangles=self.triangles,
+                )
+
+    @classmethod
+    def from_file(cls, directory: str, compute_matrices: bool = True) -> "Device":
+        """Creates a new Device from one serialized to disk.
+
+        Args:
+            directory: The directory from which to load the device.
+            compute_matrices: Whether to compute the field-independent
+                matrices for the device if the mesh already exists.
+
+        Returns:
+            The loaded Device instance
+        """
+        from .io import json_numpy_obj_hook
+
+        # Load all polygons (films, holes, abstract_regions)
+        with open(os.path.join(directory, "polygons.json"), "r") as f:
+            polygons_json = json.load(f, object_hook=json_numpy_obj_hook)
+
+        device_name = polygons_json.pop("device_name")
+        length_units = polygons_json.pop("length_units")
+        films = {
+            name: Polygon(name, **kwargs)
+            for name, kwargs in polygons_json["films"].items()
+        }
+        holes = {
+            name: Polygon(name, **kwargs)
+            for name, kwargs in polygons_json["holes"].items()
+        }
+        abstract_regions = {
+            name: Polygon(name, **kwargs)
+            for name, kwargs in polygons_json["abstract_regions"].items()
+        }
+
+        # Load all layers
+        with open(os.path.join(directory, "layers.json"), "r") as f:
+            layers_json = json.load(f, object_hook=json_numpy_obj_hook)
+
+        device_name = layers_json.pop("device_name")
+        length_units = layers_json.pop("length_units")
+        for name, layer_dict in layers_json.items():
+            # Check whether either Lambda or london_lambda is a Parameter
+            # that was pickled.
+            if isinstance(layer_dict["Lambda"], dict):
+                assert layer_dict["london_lambda"] is None
+                path = layer_dict["Lambda"]["path"]
+                with open(os.path.join(directory, path), "rb") as f:
+                    Lambda = dill.load(f)
+                layers_json[name]["Lambda"] = Lambda
+            elif isinstance(layer_dict["london_lambda"], dict):
+                assert layer_dict["Lambda"] is None
+                path = layer_dict["london_lambda"]["path"]
+                with open(os.path.join(directory, path), "rb") as f:
+                    london_lambda = dill.load(f)
+                layers_json[name]["london_lambda"] = london_lambda
+        layers = {}
+        for name, kwargs in layers_json.items():
+            layers[name] = Layer(name, **kwargs)
+
+        device = cls(
+            device_name,
+            layers=layers,
+            films=films,
+            holes=holes,
+            abstract_regions=abstract_regions,
+            length_units=length_units,
+        )
+
+        # Load the mesh if it exists
+        if "mesh.npz" in os.listdir(directory):
+            with np.load(os.path.join(directory, "mesh.npz")) as mesh:
+                points = mesh["points"]
+                triangles = mesh["triangles"]
+            device.points = points
+            device.triangles = triangles
+            if compute_matrices:
+                device.compute_matrices()
+
+        return device
 
     def __repr__(self) -> str:
         # Normal tab "\t" renders a bit too big in jupyter if you ask me.

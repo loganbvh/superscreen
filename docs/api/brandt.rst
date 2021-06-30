@@ -4,7 +4,7 @@
 
 
 ******
-Brandt
+Solver
 ******
 
 The ``superscreen.brandt`` module contains the actual implementation
@@ -22,6 +22,10 @@ Brandt Solution
 
 .. autoclass:: superscreen.solution.BrandtSolution
     :members:
+
+.. autofunction:: superscreen.io.save_solutions
+
+.. autofunction:: superscreen.io.load_solutions
 
 Supporting Functions
 --------------------

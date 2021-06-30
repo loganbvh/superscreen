@@ -72,8 +72,8 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
    :caption: API Reference
 
    api/device.rst
-   api/fem.rst
    api/brandt.rst
+   api/fem.rst
    api/visualization.rst
 
 .. toctree::

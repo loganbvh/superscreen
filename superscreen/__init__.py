@@ -6,9 +6,10 @@
 #     LICENSE file in the root directory of this source tree.
 
 from .brandt import convert_field, solve
-from .solution import BrandtSolution
 from .device import Layer, Polygon, Device
+from .io import save_solutions, load_solutions
 from .parameter import Parameter, Constant
+from .solution import BrandtSolution
 from .visualization import (
     auto_grid,
     grids_to_vecs,
