@@ -406,8 +406,10 @@ class Device(object):
         x, y = points.T
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
-            mask = np.logical_or.reduce([film.contains_points(x, y) for film in films])
-            C_vectors[layer_name] = brandt.C_vector(points, mask=mask)
+            C = np.zeros(points.shape[0], dtype=float)
+            for film in films:
+                C += brandt.C_vector(points, mask=film.contains_points(x, y))
+            C_vectors[layer_name] = C
 
         def Q_matrix(layer):
             return brandt.Q_matrix(q, C_vectors[layer], self.weights)
