@@ -21,6 +21,55 @@ from .brandt import convert_field
 from .solution import BrandtSolution
 
 
+def auto_range_iqr(
+    data_array: np.ndarray,
+    cutoff_percentile: Union[float, Tuple[float, float]] = 1,
+) -> Tuple[float, float]:
+    """Get the min and max range of the provided array that excludes outliers
+    following the IQR rule.
+
+    This function computes the inter-quartile-range (IQR), defined by Q3-Q1,
+    i.e. the percentiles for 75 and 25 percent of the distribution. The region
+    without outliers is defined by [Q1-1.5*IQR, Q3+1.5*IQR].
+    Taken from `qcodes <https://github.com/QCoDeS/Qcodes/blob/
+    6c8f7202f6b6fca4884bfc0f6e1e9a6564628d75/qcodes/utils/plotting.py#L28-L76>`_.
+
+    Args:
+        data_array: Array of arbitrary dimension containing the
+            statistical data.
+        cutoff_percentile: Percentile of data that may maximally be
+            clipped on both sides of the distribution. If given a
+            tuple (a, b) the percentile limits will be a and 100-b.
+
+    Returns:
+        vmin, vmax
+    """
+    if isinstance(cutoff_percentile, tuple):
+        bottom, top = cutoff_percentile
+    else:
+        bottom = cutoff_percentile
+        top = 100 - bottom
+    z = data_array.flatten()
+    zmax = np.nanmax(z)
+    zmin = np.nanmin(z)
+    zrange = zmax - zmin
+    pmin, q3, q1, pmax = np.nanpercentile(z, [bottom, 75, 25, top])
+    iqr = q3 - q1
+    # handle corner case of all data zero, such that IQR is zero
+    # to counter numerical artifacts do not test IQR == 0, but IQR on its
+    # natural scale (zrange) to be smaller than some very small number.
+    # also test for zrange to be 0.0 to avoid division by 0.
+    if zrange == 0.0 or iqr / zrange < 1e-8:
+        vmin = zmin
+        vmax = zmax
+    else:
+        vmin = max(q1 - 1.5 * iqr, zmin)
+        vmax = min(q3 + 1.5 * iqr, zmax)
+        vmin = min(vmin, pmin)
+        vmax = max(vmax, pmax)
+    return vmin, vmax
+
+
 def auto_grid(
     num_plots: int,
     max_cols: int = 3,
@@ -67,6 +116,7 @@ def setup_color_limits(
     vmax: Optional[float] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
+    auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
 ) -> Dict[str, Tuple[float, float]]:
     """Set up color limits (vmin, vmax) for a dictionary of numpy arrays.
 
@@ -80,6 +130,7 @@ def setup_color_limits(
             This option is ignored if vmin and vmax are provided.
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
             This option is ignored if vmin and vmax are provided.
+        auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
 
     Returns:
         A dict of ``{name: (vmin, vmax)}``
@@ -89,10 +140,16 @@ def setup_color_limits(
     if vmin is not None:
         return {name: (vmin, vmax) for name in dict_of_arrays}
 
-    clims = {
-        name: (np.nanmin(array), np.nanmax(array))
-        for name, array in dict_of_arrays.items()
-    }
+    if auto_range_cutoff is None:
+        clims = {
+            name: (np.nanmin(array), np.nanmax(array))
+            for name, array in dict_of_arrays.items()
+        }
+    else:
+        clims = {
+            name: auto_range_iqr(array, cutoff_percentile=auto_range_cutoff)
+            for name, array in dict_of_arrays.items()
+        }
 
     if share_color_scale:
         # All subplots share the same color scale
@@ -404,6 +461,7 @@ def plot_fields(
     max_cols: int = 3,
     cmap: str = "cividis",
     colorbar: bool = True,
+    auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
@@ -432,6 +490,7 @@ def plot_fields(
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
+        auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
         share_color_scale: Whether to force all layers to use the same color scale.
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
@@ -499,6 +558,7 @@ def plot_fields(
         vmax=vmax,
         share_color_scale=share_color_scale,
         symmetric_color_scale=symmetric_color_scale,
+        auto_range_cutoff=auto_range_cutoff,
     )
     # Keep track of which axes are actually used,
     # and delete unused axes later
@@ -562,6 +622,7 @@ def plot_currents(
     max_cols: int = 3,
     cmap: str = "inferno",
     colorbar: bool = True,
+    auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
@@ -589,6 +650,7 @@ def plot_currents(
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
+        auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
         share_color_scale: Whether to force all layers to use the same color scale.
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
@@ -637,6 +699,7 @@ def plot_currents(
         vmax=vmax,
         share_color_scale=share_color_scale,
         symmetric_color_scale=symmetric_color_scale,
+        auto_range_cutoff=auto_range_cutoff,
     )
     # Keep track of which axes are actually used,
     # and delete unused axes later
@@ -708,6 +771,7 @@ def plot_field_at_positions(
     grid_method: str = "cubic",
     cmap: str = "cividis",
     colorbar: bool = True,
+    auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
@@ -740,6 +804,7 @@ def plot_field_at_positions(
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
+        auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
         share_color_scale: Whether to force all layers to use the same color scale.
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
@@ -798,6 +863,7 @@ def plot_field_at_positions(
         vmax=vmax,
         share_color_scale=share_color_scale,
         symmetric_color_scale=symmetric_color_scale,
+        auto_range_cutoff=auto_range_cutoff,
     )
     for ax, label in zip(fig.axes, clabels):
         field = fields_dict[label]

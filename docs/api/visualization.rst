@@ -31,6 +31,8 @@ Stream Functions
 Supporting Functions
 --------------------
 
+.. autofunction:: superscreen.visualization.auto_range_iqr
+
 .. autofunction:: superscreen.visualization.auto_grid
 
 .. autofunction:: superscreen.visualization.grids_to_vecs
