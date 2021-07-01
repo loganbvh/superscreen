@@ -78,6 +78,15 @@ class Layer(object):
             return self._Lambda
         return self.london_lambda ** 2 / self.thickness
 
+    @Lambda.setter
+    def Lambda(self, value: Union[float, Parameter]) -> None:
+        """Effective penetration depth of the superconductor."""
+        if self._Lambda is None:
+            raise AttributeError(
+                "Can't set Lambda directly. Set london_lambda and/or thickness instead."
+            )
+        self._Lambda = value
+
     def __repr__(self) -> str:
         Lambda = self.Lambda
         if isinstance(Lambda, (int, float)):
