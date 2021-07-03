@@ -55,7 +55,7 @@ class BrandtSolution(object):
         self.applied_field = applied_field
         self.field_units = field_units
         self.current_units = current_units
-        self.circulating_currents = circulating_currents
+        self.circulating_currents = circulating_currents or {}
 
     def grid_data(
         self,
@@ -293,7 +293,7 @@ class BrandtSolution(object):
                 )
             zs = positions[:, 2]
             positions = positions[:, :2]
-        elif isinstance(zs, (int, float)):
+        elif isinstance(zs, (int, float, np.generic)):
             # constant zs
             zs = zs * np.ones(positions.shape[0], dtype=float)
         if not isinstance(zs, np.ndarray):
