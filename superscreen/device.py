@@ -279,7 +279,7 @@ class Device(object):
             + [region.points for region in self.abstract_regions_list]
         )
         # Remove duplicate points to avoid meshing issues.
-        # If you don't do this and there are dupliate points,
+        # If you don't do this and there are duplicate points,
         # meshpy.triangle will segfault.
         points = np.unique(points, axis=0)
         return points
@@ -626,9 +626,8 @@ class Device(object):
                 with open(os.path.join(directory, path), "rb") as f:
                     london_lambda = dill.load(f)
                 layers_json[name]["london_lambda"] = london_lambda
-        layers = {}
-        for name, kwargs in layers_json.items():
-            layers[name] = Layer(name, **kwargs)
+
+        layers = {name: Layer(name, **kwargs) for name, kwargs in layers_json.items()}
 
         device = cls(
             device_name,

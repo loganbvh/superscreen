@@ -244,7 +244,7 @@ def brandt_layer(
     circulating_currents = circulating_currents or {}
 
     if device.weights is None:
-        device.make_mesh(compute_arrays=True)
+        device.make_mesh(compute_matrices=True)
 
     weights = device.weights
     Del2 = device.Del2
