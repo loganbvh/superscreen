@@ -7,7 +7,8 @@
 
 import os
 import json
-from typing import Union, List
+import datetime
+from typing import Union, List, Dict
 
 import numpy as np
 
@@ -21,23 +22,34 @@ class NumpyJSONEncoder(json.JSONEncoder):
             return obj.tolist()
 
         # scalar complex values only
-        elif isinstance(obj, (complex, np.complex_, np.complex64, np.complex128)):
+        if isinstance(obj, (complex, np.complex_, np.complex64, np.complex128)):
             return {"real": obj.real, "imag": obj.imag}
 
-        elif isinstance(obj, (np.void,)):
+        if isinstance(obj, (np.void,)):
             return None
 
         # float, int, etc.
-        elif isinstance(obj, (np.generic,)):
+        if isinstance(obj, (np.generic,)):
             return obj.item()
+
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
 
         return super().default(self, obj)
 
 
-def json_numpy_obj_hook(item):
-    if isinstance(item, dict) and set(item.keys()) == {"real", "imag"}:
-        return complex(item["real"], item["imag"])
-    return item
+def json_numpy_obj_hook(d: Dict) -> Dict:
+    if set(d.keys()) == {"real", "imag"}:
+        return complex(d["real"], d["imag"])
+
+    for key, value in d.items():
+        if isinstance(value, str) and len(value) >= 26:
+            try:
+                # Requires Python >= 3.7
+                d[key] = datetime.datetime.fromisoformat(value)
+            except ValueError:
+                pass
+    return d
 
 
 def save_solutions(
@@ -57,8 +69,7 @@ def save_solutions(
     """
     if os.path.isdir(base_directory) and len(os.listdir(base_directory)):
         raise IOError(f"Directory '{base_directory}' already exists and is not empty.")
-    else:
-        os.makedirs(base_directory)
+    os.makedirs(base_directory, exist_ok=True)
 
     paths = []
     for i, solution in enumerate(solutions):

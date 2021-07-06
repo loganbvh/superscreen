@@ -6,4 +6,6 @@ numpy
 optimesh
 pandas
 pint
+pytest
+pytest-cov
 scipy
