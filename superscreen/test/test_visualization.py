@@ -90,37 +90,6 @@ def test_plot_fields(
     plt.close(fig)
 
 
-@pytest.mark.parametrize("layers", [None, "layer0"])
-@pytest.mark.parametrize("units", [None, "mT"])
-@pytest.mark.parametrize("dataset", ["fields", "screening_fields"])
-@pytest.mark.parametrize("normalize", [False, True])
-@pytest.mark.parametrize("cross_section_xs, cross_section_ys", [(None, 0), (0, None)])
-@pytest.mark.parametrize("auto_range_cutoff", [None, 1])
-def test_plot_fields(
-    solution,
-    dataset,
-    layers,
-    units,
-    normalize,
-    cross_section_xs,
-    cross_section_ys,
-    auto_range_cutoff,
-):
-    fig, ax = sc.plot_fields(
-        solution,
-        grid_shape=(50, 50),
-        dataset=dataset,
-        layers=layers,
-        units=units,
-        normalize=normalize,
-        cross_section_xs=cross_section_xs,
-        cross_section_ys=cross_section_ys,
-        cross_section_angle=45,
-        auto_range_cutoff=auto_range_cutoff,
-    )
-    plt.close(fig)
-
-
 @pytest.mark.parametrize(
     "positions, zs",
     [
