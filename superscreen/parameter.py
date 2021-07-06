@@ -182,6 +182,20 @@ class Parameter(object):
         """other ** self"""
         return CompositeParameter(other, self, operator.pow)
 
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+
+        if not isinstance(other, Parameter):
+            return False
+
+        # Check if function bytecode is the same
+        if self.__call__.__code__ != other.__call__.__code__:
+            return False
+
+        # Checks function name and kwargs
+        return repr(self) == repr(other)
+
 
 class CompositeParameter(Parameter):
 

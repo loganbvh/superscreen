@@ -7,6 +7,7 @@
 
 import os
 import json
+from datetime import datetime
 from typing import Optional, Union, Callable, Dict, Tuple, List
 
 import dill
@@ -53,9 +54,27 @@ class BrandtSolution(object):
         self.fields = fields
         self.screening_fields = screening_fields
         self.applied_field = applied_field
-        self.field_units = field_units
-        self.current_units = current_units
         self.circulating_currents = circulating_currents or {}
+        # Make field_units and current_units "read-only" attributes.
+        # The should never be changed after instantiation.
+        self._field_units = field_units
+        self._current_units = current_units
+        self._time_created = datetime.now()
+
+    @property
+    def field_units(self) -> str:
+        """The units in which magnetic fields are specified."""
+        return self._field_units
+
+    @property
+    def current_units(self) -> str:
+        """The units in whic currents are specified."""
+        return self._current_units
+
+    @property
+    def time_created(self) -> datetime:
+        """The time at which the solution was originally created."""
+        return self._time_created
 
     def grid_data(
         self,
@@ -378,8 +397,7 @@ class BrandtSolution(object):
         """
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
-        else:
-            os.makedirs(directory)
+        os.makedirs(directory, exist_ok=True)
 
         # Save device
         device_path = "device"
@@ -416,6 +434,7 @@ class BrandtSolution(object):
             "circulating_currents": circ_currents,
             "field_units": self.field_units,
             "current_units": self.current_units,
+            "time_created": self.time_created.isoformat(),
         }
 
         with open(os.path.join(directory, "metadata.json"), "w") as f:
@@ -458,7 +477,10 @@ class BrandtSolution(object):
         with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
             applied_field = dill.load(f)
 
-        return cls(
+        # Requires Python >= 3.7
+        time_created = datetime.fromisoformat(info.pop("time_created"))
+
+        solution = cls(
             device=device,
             streams=streams,
             fields=fields,
@@ -466,3 +488,39 @@ class BrandtSolution(object):
             applied_field=applied_field,
             **info,
         )
+        # Set "read-only" attribute
+        solution._time_created = time_created
+
+        return solution
+
+    def __eq__(self, other) -> bool:
+
+        if other is self:
+            return True
+
+        if not isinstance(other, BrandtSolution):
+            return False
+
+        # First check things that are "easy" to check
+        if not (
+            self.device == other.device
+            and self.time_created == other.time_created
+            and self.field_units == other.field_units
+            and self.current_units == other.current_units
+            and self.circulating_currents == other.circulating_currents
+            and self.applied_field == other.applied_field
+        ):
+            return False
+
+        # Then check the arrays, which may take longer
+        for name, array in self.streams.items():
+            if not np.allclose(array, other.streams[name]):
+                return False
+        for name, array in self.fields.items():
+            if not np.allclose(array, other.fields[name]):
+                return False
+        for name, array in self.screening_fields.items():
+            if not np.allclose(array, other.screening_fields[name]):
+                return False
+
+        return True

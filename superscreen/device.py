@@ -102,6 +102,21 @@ class Layer(object):
             f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
         )
 
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+
+        if not isinstance(other, Layer):
+            return False
+
+        return (
+            self.name == other.name
+            and self.thickness == other.thickness
+            and self.london_lambda == other.london_lambda
+            and self.Lambda == other.Lambda
+            and self.z0 == other.z0
+        )
+
 
 class Polygon(object):
     """A polygonal region located in a Layer.
@@ -154,6 +169,19 @@ class Polygon(object):
         return (
             f'Polygon("{self.name}", layer="{self.layer}", '
             f"points=ndarray[shape={self.points.shape}])"
+        )
+
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+
+        if not isinstance(other, Polygon):
+            return False
+
+        return (
+            self.name == other.name
+            and self.layer == other.layer
+            and np.allclose(self.points, other.points)
         )
 
 
@@ -511,8 +539,7 @@ class Device(object):
 
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
-        else:
-            os.makedirs(directory)
+        os.makedirs(directory, exist_ok=True)
 
         # Serialize films, holes, and abstract_regions to JSON
         polygons = {"device_name": self.name, "length_units": self.length_units}
@@ -687,3 +714,19 @@ class Device(object):
         ]
 
         return "Device(" + nt + (", " + nt).join(args) + ",\n)"
+
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+
+        if not isinstance(other, Device):
+            return False
+
+        return (
+            self.name == other.name
+            and self.layers_list == other.layers_list
+            and self.films_list == other.films_list
+            and self.holes_list == other.holes_list
+            and self.abstract_regions_list == other.abstract_regions_list
+            and self.length_units == other.length_units
+        )
