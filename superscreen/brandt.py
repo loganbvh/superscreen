@@ -5,6 +5,7 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
+import itertools
 import logging
 from typing import Union, Callable, Optional, Dict, Tuple, List
 
@@ -110,9 +111,6 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     Returns:
         Shape (n, n) array, Qij
     """
-    if not isinstance(weights, np.ndarray):
-        # Convert sparse matrix to array
-        weights = weights.toarray()
     # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
     # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
     q = q.copy()
@@ -272,8 +270,8 @@ def brandt_layer(
                 f"thickness of the film may not be valid. "
             )
 
-    film_names = [name for name, film in device.films.items() if film.layer == layer]
-    hole_names = [name for name, hole in device.holes.items() if hole.layer == layer]
+    films = {name: film for name, film in device.films.items() if film.layer == layer}
+    holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
     # Units for field are {current_units} / {device.length_units}
     Hz_applied = applied_field(points[:, 0], points[:, 1])
@@ -285,10 +283,9 @@ def brandt_layer(
 
     # Identify holes in the superconductor
     hole_indices = {}
-    in_hole = np.zeros(len(x), dtype=bool)
+    in_hole = np.zeros(x.shape[0], dtype=bool)
     holes = device.holes
-    for name in hole_names:
-        hole = holes[name]
+    for name, hole in holes.items():
         ix = hole.contains_points(x, y)
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
@@ -300,7 +297,7 @@ def brandt_layer(
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(x)
     Ha_eff = np.zeros_like(Hz_applied)
-    for name in hole_names:
+    for name in holes:
         current = circulating_currents.get(name, None)
         if current is None:
             continue
@@ -320,8 +317,7 @@ def brandt_layer(
         ).sum(axis=1)
 
     # Now solve for the stream function inside the superconducting films
-    for name in film_names:
-        film = device.films[name]
+    for name, film in films.items():
         # We want all points that are in a film and not in a hole.
         ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
@@ -332,11 +328,7 @@ def brandt_layer(
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        # lu_solve seems to be slightly faster than gf = la.inv(A) @ h,
-        # slightly faster than gf = la.solve(A, h),
-        # and much faster than gf = la.pinv(A) @ h.
-        lu, piv = la.lu_factor(A)
-        gf = la.lu_solve((lu, piv), h)
+        gf = la.solve(A, h)
         g[ix1d] = gf
         if check_inversion:
             # Validate solution
@@ -470,34 +462,34 @@ def solve(
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
-        # Cache the calculated kernel matrices.
+
+        layer_names = list(device.layers)
+        # Cache kernel matrices
         kernels = {}
         for i in range(iterations):
             # Calculate the screening fields at each layer from every other layer
-            other_screening_fields = {}
-            for name, layer in device.layers.items():
-                Hzr = np.zeros(points.shape[0], dtype=float)
-                for other_name, other_layer in device.layers.items():
-                    if name == other_name:
-                        continue
-                    logger.info(
-                        f"Calculating screening field at {name} "
-                        f"from {other_name} ({i+1}/{iterations})."
-                    )
-                    dz = other_layer.z0 - layer.z0
-                    # Average stream function over all vertices in each triangle to
-                    # estimate the stream function value at the centroid of the triangle.
-                    g = streams[other_name][triangles].mean(axis=1)
-                    # Calculate the dipole kernel and integrate
-                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    q = kernels.get((name, other_name), None)
-                    if q is None:
-                        q = (2 * dz ** 2 - rho2) / (
-                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
-                        )
-                        kernels[(name, other_name)] = q
-                    Hzr += np.sum(tri_areas * q * g, axis=1)
-                other_screening_fields[name] = Hzr
+            other_screening_fields = {
+                name: np.zeros(points.shape[0], dtype=float) for name in layer_names
+            }
+            for layer, other_layer in itertools.product(device.layers_list, repeat=2):
+                if layer.name == other_layer.name:
+                    continue
+                logger.info(
+                    f"Calculating screening field at {layer.name} "
+                    f"from {other_layer.name} ({i+1}/{iterations})."
+                )
+                # Average stream function over all vertices in each triangle to
+                # estimate the stream function value at the centroid of the triangle.
+                g = streams[other_layer.name][triangles].mean(axis=1)
+                dz = other_layer.z0 - layer.z0
+                key = frozenset([layer.name, other_layer.name])
+                q = kernels.get(key, None)
+                if q is None:
+                    q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                    kernels[key] = q
+                # Calculate the dipole kernel and integrate
+                # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                other_screening_fields[name] += np.sum(tri_areas * q * g, axis=1)
 
             # Solve again with the screening fields from all layers
             streams = {}
