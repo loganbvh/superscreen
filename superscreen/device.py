@@ -434,7 +434,6 @@ class Device(object):
         # Each layer has its own edge vector C, so each layer's kernal matrix Q
         # will have different diagonals.
         C_vectors = {}
-        films = self.films
         x, y = points.T
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]

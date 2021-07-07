@@ -328,7 +328,9 @@ def brandt_layer(
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        gf = la.solve(A, h)
+        # gf = la.solve(A, h)
+        lu, piv = la.lu_factor(A)
+        gf = la.lu_solve((lu, piv), h)
         g[ix1d] = gf
         if check_inversion:
             # Validate solution
