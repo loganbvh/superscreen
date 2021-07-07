@@ -394,6 +394,11 @@ class Device(object):
         self.points = points
         self.triangles = triangles
 
+        self.weights = None
+        self.Del2 = None
+        self.Q = None
+        self._Q_cache = {}
+        self.sparse = None
         if compute_matrices:
             self.compute_matrices(sparse=sparse, weight_method=weight_method)
 
@@ -420,9 +425,8 @@ class Device(object):
             )
 
         logger.info("Calculating weight matrix.")
-        self.weights = calculate_weights(
-            points, triangles, weight_method, sparse=sparse
-        )
+        weights = calculate_weights(points, triangles, weight_method, sparse=sparse)
+        self.weights = weights
         logger.info("Calculating Laplace operator.")
         self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
         logger.info("Calculating kernel matrix.")
@@ -434,13 +438,22 @@ class Device(object):
         x, y = points.T
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
-            C = np.zeros(points.shape[0], dtype=float)
-            for film in films:
-                C += brandt.C_vector(points, mask=film.contains_points(x, y))
-            C_vectors[layer_name] = C
+            C_vectors[layer_name] = sum(
+                brandt.C_vector(points, mask=film.contains_points(x, y))
+                for film in films
+            )
+
+        if sparse:
+            weights = weights.toarray()
+
+        self._Q_cache = {}
 
         def Q_matrix(layer):
-            return brandt.Q_matrix(q, C_vectors[layer], self.weights)
+            Q = self._Q_cache.get(layer, None)
+            if Q is None:
+                Q = brandt.Q_matrix(q, C_vectors[layer], weights)
+                self._Q_cache[layer] = Q
+            return Q
 
         self.Q = Q_matrix
         self.sparse = sparse
