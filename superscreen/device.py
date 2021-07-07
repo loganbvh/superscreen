@@ -425,7 +425,9 @@ class Device(object):
             )
 
         logger.info("Calculating weight matrix.")
-        self.weights = calculate_weights(points, triangles, weight_method, sparse=sparse)
+        self.weights = calculate_weights(
+            points, triangles, weight_method, sparse=sparse
+        )
         logger.info("Calculating Laplace operator.")
         self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
         logger.info("Calculating kernel matrix.")
