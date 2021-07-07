@@ -111,6 +111,8 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     Returns:
         Shape (n, n) array, Qij
     """
+    if sp.issparse(weights):
+        weights = weights.toarray()
     # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
     # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
     q = q.copy()
@@ -251,7 +253,7 @@ def brandt_layer(
         weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
-    Q = device.Q(layer)
+    Q = device.Q(layer, weights=weights)
     points = device.points
     x, y = points.T
     london_lambda = device.layers[layer].london_lambda
@@ -328,7 +330,6 @@ def brandt_layer(
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        # gf = la.solve(A, h)
         lu, piv = la.lu_factor(A)
         gf = la.lu_solve((lu, piv), h)
         g[ix1d] = gf
@@ -491,7 +492,7 @@ def solve(
                     kernels[key] = q
                 # Calculate the dipole kernel and integrate
                 # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                other_screening_fields[name] += np.sum(tri_areas * q * g, axis=1)
+                other_screening_fields[layer.name] += np.sum(tri_areas * q * g, axis=1)
 
             # Solve again with the screening fields from all layers
             streams = {}
