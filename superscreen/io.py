@@ -55,6 +55,7 @@ def json_numpy_obj_hook(d: Dict) -> Dict:
 def save_solutions(
     solutions: List[BrandtSolution],
     base_directory: str,
+    save_mesh: bool = True,
     return_paths: bool = False,
 ) -> Union[None, List[str]]:
     """Saves a list of BrandtSolutions to disk.
@@ -74,7 +75,7 @@ def save_solutions(
     paths = []
     for i, solution in enumerate(solutions):
         path = os.path.join(base_directory, str(i))
-        solution.to_file(path)
+        solution.to_file(path, save_mesh=save_mesh)
         paths.append(os.path.abspath(path))
 
     if return_paths:

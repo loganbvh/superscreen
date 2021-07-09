@@ -388,12 +388,13 @@ class BrandtSolution(object):
             fields["applied_field"] = H_applied
         return fields
 
-    def to_file(self, directory: str) -> None:
+    def to_file(self, directory: str, save_mesh: bool = True) -> None:
         """Saves a BrandtSolution to disk.
 
         Args:
             directory: The name of the directory in which to save the solution
                 (must either be empty or not yet exist).
+            save_mesh: Whether to save the device mesh.
         """
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
@@ -401,7 +402,7 @@ class BrandtSolution(object):
 
         # Save device
         device_path = "device"
-        self.device.to_file(os.path.join(directory, device_path))
+        self.device.to_file(os.path.join(directory, device_path), save_mesh=save_mesh)
 
         # Save arrays
         array_paths = []
