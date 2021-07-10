@@ -6,6 +6,7 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 import superscreen as sc
+from superscreen.visualization import non_gui_backend
 
 
 @pytest.fixture
@@ -54,24 +55,26 @@ def device_with_mesh():
 
 
 def test_plot_polygons(device, device_with_mesh):
-    ax = device.plot_polygons()
-    assert isinstance(ax, plt.Axes)
-    plt.close(ax.figure)
+    with non_gui_backend():
+        ax = device.plot_polygons()
+        assert isinstance(ax, plt.Axes)
+        plt.close(ax.figure)
 
-    ax = device_with_mesh.plot_polygons()
-    assert isinstance(ax, plt.Axes)
-    plt.close(ax.figure)
+        ax = device_with_mesh.plot_polygons()
+        assert isinstance(ax, plt.Axes)
+        plt.close(ax.figure)
 
 
 @pytest.mark.parametrize("edges", [False, True])
 @pytest.mark.parametrize("vertices", [False, True])
 def test_plot_mesh(device, device_with_mesh, edges, vertices):
-    with pytest.raises(RuntimeError):
-        ax = device.plot_mesh(edges=edges, vertices=vertices)
+    with non_gui_backend():
+        with pytest.raises(RuntimeError):
+            ax = device.plot_mesh(edges=edges, vertices=vertices)
 
-    ax = device_with_mesh.plot_mesh(edges=edges, vertices=vertices)
-    assert isinstance(ax, plt.Axes)
-    plt.close(ax.figure)
+        ax = device_with_mesh.plot_mesh(edges=edges, vertices=vertices)
+        assert isinstance(ax, plt.Axes)
+        plt.close(ax.figure)
 
 
 @pytest.mark.parametrize("min_triangles", [None, 2500])

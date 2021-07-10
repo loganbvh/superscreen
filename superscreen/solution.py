@@ -13,6 +13,7 @@ from typing import Optional, Union, Callable, Dict, Tuple, List
 import dill
 import pint
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
 
@@ -493,6 +494,98 @@ class BrandtSolution(object):
         solution._time_created = time_created
 
         return solution
+
+    def plot_streams(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        units: Optional[str] = None,
+        max_cols: int = 3,
+        cmap: str = "magma",
+        levels: int = 101,
+        colorbar: bool = True,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for superscreen.visualization.plot_streams."""
+        from .visualization import plot_streams
+
+        return plot_streams(self, **kwargs)
+
+    def plot_currents(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        max_cols: int = 3,
+        cmap: str = "inferno",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        streamplot: bool = True,
+        min_stream_amp: float = 0.025,
+        cross_section_xs: Optional[Union[float, List[float]]] = None,
+        cross_section_ys: Optional[Union[float, List[float]]] = None,
+        cross_section_angle: Optional[float] = None,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for superscreen.visualization.plot_currents."""
+        from .visualization import plot_currents
+
+        return plot_currents(self, **kwargs)
+
+    def plot_fields(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        dataset: str = "fields",
+        normalize: bool = False,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        max_cols: int = 3,
+        cmap: str = "cividis",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        cross_section_xs: Optional[Union[float, List[float]]] = None,
+        cross_section_ys: Optional[Union[float, List[float]]] = None,
+        cross_section_angle: Optional[float] = None,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for superscreen.visualization.plot_fields."""
+        from .visualization import plot_fields
+
+        return plot_fields(self, **kwargs)
+
+    def plot_field_at_positions(
+        self,
+        positions: np.ndarray,
+        zs: Optional[Union[float, np.ndarray]] = None,
+        vector: bool = False,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        cmap: str = "cividis",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        cross_section_xs: Optional[Union[float, List[float]]] = None,
+        cross_section_ys: Optional[Union[float, List[float]]] = None,
+        cross_section_angle: Optional[float] = None,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for superscreen.visualization.plot_field_at_positions."""
+        from .visualization import plot_field_at_positions
+
+        return plot_field_at_positions(self, **kwargs)
 
     def __eq__(self, other) -> bool:
 

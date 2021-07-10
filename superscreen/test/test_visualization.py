@@ -3,6 +3,7 @@ import pytest
 import matplotlib.pyplot as plt
 
 import superscreen as sc
+from superscreen.visualization import non_gui_backend
 
 
 @pytest.fixture(scope="module")
@@ -48,12 +49,13 @@ def solution(device):
 @pytest.mark.parametrize("layers", [None, "layer0"])
 @pytest.mark.parametrize("units", [None, "mA"])
 def test_plot_streams(solution, layers, units):
-    fig, ax = sc.plot_streams(
-        solution,
-        layers=layers,
-        units=units,
-    )
-    plt.close(fig)
+    with non_gui_backend():
+        fig, ax = sc.plot_streams(
+            solution,
+            layers=layers,
+            units=units,
+        )
+        plt.close(fig)
 
 
 @pytest.mark.parametrize("layers", [None, "layer0"])
@@ -74,20 +76,21 @@ def test_plot_fields(
     share_color_scale,
     symmetric_color_scale,
 ):
-    fig, ax = sc.plot_currents(
-        solution,
-        grid_shape=(50, 50),
-        layers=layers,
-        units=units,
-        cross_section_xs=cross_section_xs,
-        cross_section_ys=cross_section_ys,
-        cross_section_angle=45,
-        streamplot=streamplot,
-        auto_range_cutoff=auto_range_cutoff,
-        share_color_scale=share_color_scale,
-        symmetric_color_scale=symmetric_color_scale,
-    )
-    plt.close(fig)
+    with non_gui_backend():
+        fig, ax = sc.plot_currents(
+            solution,
+            grid_shape=(50, 50),
+            layers=layers,
+            units=units,
+            cross_section_xs=cross_section_xs,
+            cross_section_ys=cross_section_ys,
+            cross_section_angle=45,
+            streamplot=streamplot,
+            auto_range_cutoff=auto_range_cutoff,
+            share_color_scale=share_color_scale,
+            symmetric_color_scale=symmetric_color_scale,
+        )
+        plt.close(fig)
 
 
 @pytest.mark.parametrize(
@@ -110,15 +113,16 @@ def test_plot_field_at_positions(
     cross_section_ys,
     auto_range_cutoff,
 ):
-    fig, ax = sc.plot_field_at_positions(
-        solution,
-        positions,
-        zs=zs,
-        grid_shape=(50, 50),
-        units=units,
-        cross_section_xs=cross_section_xs,
-        cross_section_ys=cross_section_ys,
-        cross_section_angle=45,
-        auto_range_cutoff=auto_range_cutoff,
-    )
-    plt.close(fig)
+    with non_gui_backend():
+        fig, ax = sc.plot_field_at_positions(
+            solution,
+            positions,
+            zs=zs,
+            grid_shape=(50, 50),
+            units=units,
+            cross_section_xs=cross_section_xs,
+            cross_section_ys=cross_section_ys,
+            cross_section_angle=45,
+            auto_range_cutoff=auto_range_cutoff,
+        )
+        plt.close(fig)

@@ -5,20 +5,36 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
+import warnings
+from contextlib import contextmanager
 from typing import Optional, Union, Tuple, List, Dict
 
 import numpy as np
 import scipy.ndimage
 from scipy.interpolate import griddata
-import matplotlib.colors as cm
+import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.transforms as mtrans
 from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 
 from .brandt import convert_field
 from .solution import BrandtSolution
+
+
+@contextmanager
+def non_gui_backend():
+    """A contextmanager that temporarily uses a non-GUI backend for matplotlib."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", category=UserWarning, message="Matplotlib is currently using agg"
+        )
+        try:
+            old_backend = mpl.get_backend()
+            mpl.use("Agg")
+            yield
+        finally:
+            mpl.use(old_backend)
 
 
 def auto_range_iqr(
@@ -297,7 +313,7 @@ def image_cross_section(
         rotated_z = rotated_zgrids[names[0]]
         x0 = xvec.mean()
         y0 = yvec.mean()
-        tr = mtrans.Affine2D().rotate_deg_around(x0, y0, angle)
+        tr = mpl.transforms.Affine2D().rotate_deg_around(x0, y0, angle)
         try:
             plt.ioff()
             fig, ax = plt.subplots()
@@ -566,7 +582,7 @@ def plot_fields(
     for ax, layer in zip(fig.axes, layers):
         field = fields[layer]
         layer_vmin, layer_vmax = clim_dict[layer]
-        norm = cm.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+        norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
         im = ax.pcolormesh(xgrid, ygrid, field, shading="auto", cmap=cmap, norm=norm)
         ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
         ax.set_aspect("equal")
@@ -708,7 +724,7 @@ def plot_currents(
         Jx, Jy = jcs[layer]
         J = Js[layer]
         layer_vmin, layer_vmax = clim_dict[layer]
-        norm = cm.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+        norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
         im = ax.pcolormesh(xgrid, ygrid, J, shading="auto", cmap=cmap, norm=norm)
         ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
         ax.set_aspect("equal")
@@ -868,7 +884,7 @@ def plot_field_at_positions(
     for ax, label in zip(fig.axes, clabels):
         field = fields_dict[label]
         layer_vmin, layer_vmax = clim_dict[label]
-        norm = cm.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+        norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
         im = ax.pcolormesh(xgrid, ygrid, field, shading="auto", cmap=cmap, norm=norm)
         ax.set_title(f"{label.split('[')[0].strip()}")
         ax.set_aspect("equal")
@@ -907,3 +923,19 @@ def plot_field_at_positions(
             cax.set_ylabel(label)
     fig.tight_layout()
     return fig, axes
+
+
+def _patch_docstring(func):
+
+    other_func = getattr(BrandtSolution, func.__name__)
+    other_func.__doc__ = (
+        other_func.__doc__
+        + "\n\n"
+        + "\n".join(
+            [line for line in func.__doc__.splitlines() if "solution:" not in line]
+        )
+    )
+
+
+for func in [plot_streams, plot_currents, plot_fields, plot_field_at_positions]:
+    _patch_docstring(func)
