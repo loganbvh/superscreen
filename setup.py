@@ -44,6 +44,9 @@ EXTRAS_REQUIRE = {
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
     ],
+    "ray": [
+        "ray[default]",
+    ],
 }
 
 CLASSIFIERS = """\
