@@ -237,7 +237,7 @@ def init(shared_arrays):
 
 
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
-    """Solve a single setup assuming we're using multiprocessing."""
+    """Solve a single setup (multiprocessing)."""
     directory = kwargs.pop("directory", None)
     index = kwargs.pop("index")
     return_solutions = kwargs.pop("return_solutions")
@@ -361,7 +361,7 @@ def solve_many_mp(
 def solve_single_ray(
     *, directory, index, arrays, return_solutions, keep_only_final_solution, **kwargs
 ):
-    """Solve a single setup assuming we're using ray."""
+    """Solve a single setup (ray)."""
     device = kwargs["device"]
     device.set_arrays(arrays)
 
