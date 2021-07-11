@@ -926,7 +926,6 @@ def plot_field_at_positions(
 
 
 def _patch_docstring(func):
-
     other_func = getattr(BrandtSolution, func.__name__)
     other_func.__doc__ = (
         other_func.__doc__
