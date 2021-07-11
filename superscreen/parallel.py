@@ -207,7 +207,7 @@ def shared_array_to_numpy(
 
 
 def numpy_to_shared_array(array: np.ndarray) -> mp.RawArray:
-    """Convert a numpy array to a shared RayArray."""
+    """Convert a numpy array to a shared RawArray."""
     dtype = np.ctypeslib.as_ctypes_type(array.dtype)
     shared_array = mp.RawArray(dtype, array.size)
     sh_np = np.ctypeslib.as_array(shared_array).reshape(array.shape)
