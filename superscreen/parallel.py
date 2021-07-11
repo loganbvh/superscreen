@@ -192,17 +192,22 @@ def solve_many_serial(
 # Concurrency using multiprocessing
 #######################################################################################
 
+# See: http://thousandfold.net/cz/2014/05/01/sharing-numpy-arrays-between-processes-using-multiprocessing-and-ctypes/
+# See: https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
+
 
 def shared_array_to_numpy(
     shared_array: mp.RawArray, shape: Tuple[int, ...]
 ) -> np.ndarray:
+    """Convert a shared RawArray to a numpy array."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         array = np.ctypeslib.as_array(shared_array).reshape(shape)
     return array
 
 
-def numpy_to_shared_array(array: np.ndarray) -> mp.Array:
+def numpy_to_shared_array(array: np.ndarray) -> mp.RawArray:
+    """Convert a numpy array to a shared RayArray."""
     dtype = np.ctypeslib.as_ctypes_type(array.dtype)
     shared_array = mp.RawArray(dtype, array.size)
     sh_np = np.ctypeslib.as_array(shared_array).reshape(array.shape)
@@ -210,7 +215,8 @@ def numpy_to_shared_array(array: np.ndarray) -> mp.Array:
     return shared_array
 
 
-def share_arrays(device: Device) -> Dict[str, Tuple[mp.Array, Tuple[int, ...]]]:
+def share_arrays(device: Device) -> Dict[str, Tuple[mp.RawArray, Tuple[int, ...]]]:
+    """Convert all arrays in the device to shared RawArrays."""
     arrays = device.get_arrays(copy_arrays=False, dense=True)
     C_vectors = {
         name: (numpy_to_shared_array(array), array.shape)
@@ -231,6 +237,7 @@ def init(shared_arrays):
 
 
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
+    """Solve a single setup assuming we're using multiprocessing."""
     directory = kwargs.pop("directory", None)
     index = kwargs.pop("index")
     return_solutions = kwargs.pop("return_solutions")
@@ -300,6 +307,7 @@ def solve_many_mp(
         product=product,
     )
 
+    # Put the device's big arrays in shared memory
     shared_arrays = share_arrays(device)
 
     if directory is not None:
@@ -353,6 +361,7 @@ def solve_many_mp(
 def solve_single_ray(
     *, directory, index, arrays, return_solutions, keep_only_final_solution, **kwargs
 ):
+    """Solve a single setup assuming we're using ray."""
     device = kwargs["device"]
     device.set_arrays(arrays)
 
@@ -419,8 +428,8 @@ def solve_many_ray(
         ncpus = min(len(setups), ncpus)
         ray.init(num_cpus=ncpus)
 
+    # Put the device's big arrays in shared memory
     arrays = device.get_arrays(copy_arrays=False, dense=True)
-
     arrays_ref = ray.put(arrays)
 
     if directory is not None:
