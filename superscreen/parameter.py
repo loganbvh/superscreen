@@ -9,6 +9,7 @@ import inspect
 import operator
 from typing import Callable, Union, Optional
 
+import dill
 import numpy as np
 
 Numeric = Union[int, float, np.ndarray]
@@ -194,7 +195,15 @@ class Parameter(object):
             return False
 
         # Checks function name and kwargs
+        # This might be overkill
         return repr(self) == repr(other)
+
+    def __getstate__(self):
+        return dill.dumps(self.__dict__)
+
+    def __setstate__(self, state):
+        state = dill.loads(state)
+        self.__dict__.update(state)
 
 
 class CompositeParameter(Parameter):
@@ -292,6 +301,17 @@ class CompositeParameter(Parameter):
 
     def __repr__(self) -> str:
         return f"CompositeParameter<{self._bare_repr()}>"
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["left"] = dill.dumps(state["left"])
+        state["right"] = dill.dumps(state["right"])
+        return state
+
+    def __setstate__(self, state):
+        state["left"] = dill.loads(state["left"])
+        state["right"] = dill.loads(state["right"])
+        self.__dict__.update(state)
 
 
 class Constant(Parameter):
