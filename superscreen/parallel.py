@@ -365,11 +365,11 @@ def solve_single_ray(
     device = kwargs["device"]
     device.set_arrays(arrays)
 
-    solutions = brandt.solve(**kwargs)
-
     log_level = kwargs.pop("log_level", None)
     if log_level is not None:
         logging.basicConfig(level=log_level)
+
+    solutions = brandt.solve(**kwargs)
 
     if directory is None:
         path = None
