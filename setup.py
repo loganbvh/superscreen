@@ -33,6 +33,7 @@ INSTALL_REQUIRES = [
     "pint",
     "pytest",
     "pytest-cov",
+    "ray[default]"
     "scipy",
 ]
 
@@ -43,9 +44,6 @@ EXTRAS_REQUIRE = {
         "sphinx-autodoc-typehints",
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
-    ],
-    "ray": [
-        "ray[default]",
     ],
 }
 
