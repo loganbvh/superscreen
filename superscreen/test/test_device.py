@@ -1,3 +1,4 @@
+import pickle
 import tempfile
 
 import pytest
@@ -116,3 +117,14 @@ def test_device_to_file(device, device_with_mesh, save_mesh):
         device_with_mesh.to_file(directory, save_mesh=save_mesh)
         loaded_device = sc.Device.from_file(directory)
     assert device_with_mesh == loaded_device
+
+
+def test_pickle_device(device, device_with_mesh):
+
+    loaded_device = pickle.loads(pickle.dumps(device))
+    loaded_device_with_mesh = pickle.loads(pickle.dumps(device_with_mesh))
+
+    assert loaded_device == device
+    assert loaded_device_with_mesh == device_with_mesh
+
+    assert loaded_device.ureg("1 m") == loaded_device.ureg("1000 mm")

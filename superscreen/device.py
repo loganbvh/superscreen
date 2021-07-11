@@ -5,20 +5,24 @@
 #     This source code is licensed under the MIT license found in the
 #     LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
 import os
 import json
-
 import logging
+from copy import deepcopy
 from typing import Optional, Union, List, Tuple, Dict
 
 import dill
 import numpy as np
 from pint import UnitRegistry
 import matplotlib.pyplot as plt
+import scipy.sparse as sp
 from scipy.spatial import ConvexHull
 from meshpy import triangle
 import optimesh
 
+from . import brandt
+from . import fem
 from .parameter import Parameter
 
 
@@ -117,6 +121,9 @@ class Layer(object):
             and self.z0 == other.z0
         )
 
+    def copy(self):
+        return deepcopy(self)
+
 
 class Polygon(object):
     """A polygonal region located in a Layer.
@@ -157,10 +164,8 @@ class Polygon(object):
             of the same shape as xq and yq indicating whether each point
             lies within the polygon.
         """
-        from .fem import in_polygon
-
         x, y = self.points.T
-        bool_array = in_polygon(xq, yq, x, y)
+        bool_array = fem.in_polygon(xq, yq, x, y)
         if index:
             return np.where(bool_array)[0]
         return bool_array
@@ -184,6 +189,9 @@ class Polygon(object):
             and np.allclose(self.points, other.points)
         )
 
+    def copy(self):
+        return deepcopy(self)
+
 
 class Device(object):
     """An object representing a device composed of multiple layers of
@@ -198,6 +206,15 @@ class Device(object):
             Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
     """
+
+    ARRAY_NAMES = (
+        "points",
+        "triangles",
+        "weights",
+        "Del2",
+        "q",
+        "C_vectors",
+    )
 
     def __init__(
         self,
@@ -233,15 +250,16 @@ class Device(object):
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
-        self.sparse = None
         self.ureg = ureg
 
         self.points = None
         self.triangles = None
 
         self.weights = None
-        self.Q = None
         self.Del2 = None
+        self.q = None
+        self.C_vectors = None
+        self._Q_cache = {}
 
     @property
     def length_units(self):
@@ -311,6 +329,111 @@ class Device(object):
         # meshpy.triangle will segfault.
         points = np.unique(points, axis=0)
         return points
+
+    def get_arrays(
+        self,
+        copy_arrays: bool = False,
+        dense: bool = True,
+    ) -> Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]:
+        """Returns a dict of the large arrays that belong to the device.
+
+        Args:
+            copy_arrays: Whether to copy all of the arrays or just return references
+                to the existing arrays.
+            dense: Whether to convert any sparse matrices to dense numpy arrays.
+
+        Returns:
+            A dict of arrays, with keys specified by ``Device.ARRAY_NAMES``
+        """
+        arrays = {name: getattr(self, name) for name in self.ARRAY_NAMES}
+        for name, array in arrays.items():
+            if copy_arrays and (name == "C_vectors"):
+                for name, array in arrays["C_vectors"].items():
+                    arrays["C_vectors"][name] = array.copy()
+            if dense and sp.issparse(array):
+                arrays[name] = array.toarray()
+            elif copy_arrays and array is not None:
+                arrays[name] = array.copy()
+        return arrays
+
+    def set_arrays(
+        self,
+        arrays: Dict[
+            str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]
+        ],
+    ) -> None:
+        """Sets the Device's large arrays from a dict like that returned
+        by Device.get_arrays().
+
+        Args:
+            arrays: The dict containing the arrays to use.
+        """
+        # Ensure that all names and types are valid before setting any attributes.
+        valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
+        for name in ("weights", "Del2"):
+            valid_types[name] = (valid_types[name], sp.csr_matrix)
+        _ = valid_types.pop("C_vectors")
+        C_vectors = arrays["C_vectors"]
+        layer_names = set(self.layers)
+        for name, array in C_vectors.items():
+            if name not in layer_names:
+                raise ValueError(f"Unexpected C_vector name: {name}.")
+            if not isinstance(array, np.ndarray):
+                raise TypeError(
+                    f"Expected type {np.ndarray} for C vector '{name}', "
+                    f"but got {type(array)}."
+                )
+        for name, array in arrays.items():
+            if name == "C_vectors":
+                continue
+            if name not in self.ARRAY_NAMES:
+                raise ValueError(f"Unexpected array name: {name}.")
+            if not isinstance(array, valid_types[name]):
+                raise TypeError(
+                    f"Expected type in {valid_types[name]} for array '{name}', "
+                    f"but got {type(array)}."
+                )
+        # Finally actually set the attributes
+        for name, array in arrays.items():
+            setattr(self, name, array)
+        self.C_vectors = C_vectors
+
+    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> Device:
+        """Copy this Device to create a new one.
+
+        Args:
+            with_arrays: Whether to set the large arrays on the new Device.
+            copy_arrays: Whether to create copies of the large arrays, or just
+                return references to the existing arrays.
+
+        Returns:
+            A new Device instance, copied from self
+        """
+        layers = [layer.copy() for layer in self.layers_list]
+        films = [film.copy() for film in self.films_list]
+        holes = [hole.copy() for hole in self.holes_list]
+        abstract_regions = [region.copy() for region in self.abstract_regions_list]
+
+        device = Device(
+            self.name,
+            layers=layers,
+            films=films,
+            holes=holes,
+            abstract_regions=abstract_regions,
+            length_units=self.length_units,
+        )
+        if with_arrays:
+            device.set_arrays(self.get_arrays(copy_arrays=copy_arrays))
+
+        return device
+
+    def __copy__(self) -> Device:
+        # Shallow copy (create new references to existing arrays).
+        return self.copy(with_arrays=True, copy_arrays=False)
+
+    def __deepcopy__(self) -> Device:
+        # Deep copy (copy all arrays and return references to copies)
+        return self.copy(with_arrays=True, copy_arrays=True)
 
     def make_mesh(
         self,
@@ -396,11 +519,21 @@ class Device(object):
 
         self.weights = None
         self.Del2 = None
-        self.Q = None
         self._Q_cache = {}
-        self.sparse = None
         if compute_matrices:
             self.compute_matrices(sparse=sparse, weight_method=weight_method)
+
+    def Q(
+        self, layer: str, weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None
+    ) -> np.ndarray:
+        """Computes the kernel matrix Q for a given layer of the device."""
+        Q = self._Q_cache.get(layer, None)
+        if weights is None:
+            weights = self.weights
+        if Q is None:
+            Q = brandt.Q_matrix(self.q, self.C_vectors[layer], weights)
+            self._Q_cache[layer] = Q
+        return Q
 
     def compute_matrices(
         self, sparse: bool = True, weight_method: str = "half_cotangent"
@@ -412,8 +545,6 @@ class Device(object):
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
         """
-        from .fem import calculate_weights, laplace_operator
-        from . import brandt
 
         points = self.points
         triangles = self.triangles
@@ -425,37 +556,24 @@ class Device(object):
             )
 
         logger.info("Calculating weight matrix.")
-        self.weights = calculate_weights(
+        self.weights = fem.calculate_weights(
             points, triangles, weight_method, sparse=sparse
         )
         logger.info("Calculating Laplace operator.")
-        self.Del2 = laplace_operator(points, triangles, self.weights, sparse=sparse)
+        self.Del2 = fem.laplace_operator(points, triangles, self.weights, sparse=sparse)
         logger.info("Calculating kernel matrix.")
-        q = brandt.q_matrix(points)
+        self.q = brandt.q_matrix(points)
         # Each layer has its own edge vector C, so each layer's kernal matrix Q
         # will have different diagonals.
-        C_vectors = {}
+        self.C_vectors = {}
         x, y = points.T
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
-            C_vectors[layer_name] = sum(
+            self.C_vectors[layer_name] = sum(
                 brandt.C_vector(points, mask=film.contains_points(x, y))
                 for film in films
             )
-
         self._Q_cache = {}
-
-        def Q_matrix(layer, weights=None):
-            Q = self._Q_cache.get(layer, None)
-            if weights is None:
-                weights = self.weights
-            if Q is None:
-                Q = brandt.Q_matrix(q, C_vectors[layer], weights)
-                self._Q_cache[layer] = Q
-            return Q
-
-        self.Q = Q_matrix
-        self.sparse = sparse
 
     def plot_polygons(
         self,
@@ -742,3 +860,14 @@ class Device(object):
             and self.abstract_regions_list == other.abstract_regions_list
             and self.length_units == other.length_units
         )
+
+    def __getstate__(self):
+        # Pickle can't handle a pint.UnitRegistry.
+        state = self.__dict__.copy()
+        del state["ureg"]
+        return state
+
+    def __setstate__(self, state):
+        # Pickle can't handle a pint.UnitRegistry.
+        state["ureg"] = ureg
+        self.__dict__.update(state)
