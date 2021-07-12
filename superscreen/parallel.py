@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 import itertools
 import warnings
@@ -22,7 +23,7 @@ from .parameter import Parameter
 logger = logging.getLogger(__name__)
 
 
-def create_setups(
+def create_models(
     device: Device,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
@@ -53,7 +54,7 @@ def create_setups(
             similar to zip().
 
     Returns:
-        A list of "setups", (device, applied_field, circulating_currents).
+        A list of "models", (device, applied_field, circulating_currents).
     """
 
     if not isinstance(applied_fields, (list, tuple)):
@@ -81,7 +82,7 @@ def create_setups(
         devices = [device.copy(with_arrays=False)]
 
     if product:
-        setups = list(itertools.product(devices, applied_fields, circulating_currents))
+        models = list(itertools.product(devices, applied_fields, circulating_currents))
     else:
         max_len = max(len(devices), len(applied_fields), len(circulating_currents))
         for lst in [devices, applied_fields, circulating_currents]:
@@ -93,9 +94,9 @@ def create_setups(
                 "Devices, applied_fields, and circulating_current must be lists "
                 "of the same length."
             )
-        setups = list(zip(devices, applied_fields, circulating_currents))
+        models = list(zip(devices, applied_fields, circulating_currents))
 
-    return setups
+    return models
 
 
 #######################################################################################
@@ -124,7 +125,7 @@ def solve_many_serial(
     log_level: Optional[int] = None,
 ):
     """Solve many models in a single process."""
-    setups = create_setups(
+    models = create_models(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
@@ -143,9 +144,11 @@ def solve_many_serial(
     if directory is not None:
         paths = []
 
-    logger.info(f"Solving {len(setups)} models serially with 1 process.")
+    t0 = time.time()
 
-    for i, (device, applied_field, circulating_currents) in enumerate(setups):
+    logger.info(f"Solving {len(models)} models serially with 1 process.")
+
+    for i, (device, applied_field, circulating_currents) in enumerate(models):
 
         device.set_arrays(arrays)
 
@@ -172,6 +175,14 @@ def solve_many_serial(
                 all_solutions.append(solutions[-1])
             else:
                 all_solutions.append(solutions)
+
+    t1 = time.time()
+    elapsed_seconds = t1 - t0
+    seconds_per_model = elapsed_seconds / len(models)
+    logger.info(
+        f"Solved {len(models)} models serially with 1 process in "
+        f"{elapsed_seconds:.3f} seconds ({seconds_per_model:.3f} seconds per model)."
+    )
 
     if directory is None:
         paths = None
@@ -291,7 +302,7 @@ def solve_many_mp(
     log_level: Optional[int] = None,
 ) -> List[str]:
     """Solve many models in parallel using multiprocessing."""
-    setups = create_setups(
+    models = create_models(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
@@ -300,14 +311,16 @@ def solve_many_mp(
         product=product,
     )
 
-    # Put the device's big arrays in shared memory
-    shared_arrays = share_arrays(device)
-
     if directory is not None:
         device.to_file(os.path.join(directory, device.name), save_mesh=True)
 
+    t0 = time.time()
+
+    # Put the device's big arrays in shared memory
+    shared_arrays = share_arrays(device)
+
     kwargs = []
-    for i, (device, applied_field, circulating_currents) in enumerate(setups):
+    for i, (device, applied_field, circulating_currents) in enumerate(models):
         kwargs.append(
             dict(
                 directory=directory,
@@ -326,17 +339,28 @@ def solve_many_mp(
             )
         )
 
-    nproc = min(len(setups), mp.cpu_count())
+    nproc = min(len(models), mp.cpu_count())
     logger.info(
-        f"Solving {len(setups)} models in parallel with {nproc} process(es) "
-        f"using multiprocessing."
+        f"Solving {len(models)} models in parallel using multiprocessing with "
+        f"{nproc} process(es)."
     )
     with mp.Pool(processes=nproc, initializer=init, initargs=(shared_arrays,)) as pool:
         results = pool.map(solve_single_mp, kwargs)
         pool.close()
         pool.join()
 
+    t1 = time.time()
+    elapsed_seconds = t1 - t0
+    seconds_per_model = elapsed_seconds / len(models)
+    logger.info(
+        f"Solved {len(models)} models in parallel using multiprocessing with {nproc} "
+        f"process(es) in {elapsed_seconds:.3f} seconds "
+        f"({seconds_per_model:.3f} seconds per model)."
+    )
+
     all_solutions, paths = zip(*results)
+    all_solutions = list(all_solutions)
+    paths = list(paths)
     if all(s is None for s in all_solutions):
         all_solutions = None
     if all(p is None for p in paths):
@@ -407,7 +431,7 @@ def solve_many_ray(
             "ray is not installed. Please run 'pip install ray[default]' to install it."
         )
 
-    setups = create_setups(
+    models = create_models(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
@@ -416,24 +440,27 @@ def solve_many_ray(
         product=product,
     )
 
-    ncpus = mp.cpu_count()
+    nproc = mp.cpu_count()
     if not ray.is_initialized():
-        ncpus = min(len(setups), ncpus)
-        ray.init(num_cpus=ncpus)
+        nproc = min(len(models), nproc)
+        logger.info("Initializing ray with {nproc} process(es).")
+        ray.init(num_cpus=nproc)
+
+    if directory is not None:
+        device.to_file(os.path.join(directory, device.name), save_mesh=True)
+
+    t0 = time.time()
 
     # Put the device's big arrays in shared memory
     arrays = device.get_arrays(copy_arrays=False, dense=True)
     arrays_ref = ray.put(arrays)
 
-    if directory is not None:
-        device.to_file(os.path.join(directory, device.name), save_mesh=True)
-
     logger.info(
-        f"Solving {len(setups)} models in parallel with {ncpus} process(es) using ray."
+        f"Solving {len(models)} models in parallel using ray with {nproc} process(es)."
     )
 
     result_ids = []
-    for i, (device, applied_field, circulating_currents) in enumerate(setups):
+    for i, (device, applied_field, circulating_currents) in enumerate(models):
         result_ids.append(
             solve_single_ray.remote(
                 directory=directory,
@@ -455,7 +482,18 @@ def solve_many_ray(
 
     results = ray.get(result_ids)
 
+    t1 = time.time()
+    elapsed_seconds = t1 - t0
+    seconds_per_model = elapsed_seconds / len(models)
+    logger.info(
+        f"Solved {len(models)} models in parallel using ray with {nproc} "
+        f"process(es) in {elapsed_seconds:.3f} seconds "
+        f"({seconds_per_model:.3f} seconds per model)."
+    )
+
     all_solutions, paths = zip(*results)
+    all_solutions = list(all_solutions)
+    paths = list(paths)
     if all(s is None for s in all_solutions):
         all_solutions = None
     if all(p is None for p in paths):
