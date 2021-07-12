@@ -1,10 +1,3 @@
-# This file is part of superscreen.
-#
-#     Copyright (c) 2021 Logan Bishop-Van Horn
-#
-#     This source code is licensed under the MIT license found in the
-#     LICENSE file in the root directory of this source tree.
-
 import warnings
 from contextlib import contextmanager
 from typing import Optional, Union, Tuple, List, Dict
@@ -926,7 +919,6 @@ def plot_field_at_positions(
 
 
 def _patch_docstring(func):
-
     other_func = getattr(BrandtSolution, func.__name__)
     other_func.__doc__ = (
         other_func.__doc__

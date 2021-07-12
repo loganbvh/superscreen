@@ -8,4 +8,5 @@ pandas
 pint
 pytest
 pytest-cov
+ray[default]
 scipy

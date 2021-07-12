@@ -1,13 +1,7 @@
-# This file is part of superscreen.
-#
-#     Copyright (c) 2021 Logan Bishop-Van Horn
-#
-#     This source code is licensed under the MIT license found in the
-#     LICENSE file in the root directory of this source tree.
-
+from __future__ import annotations
 import itertools
 import logging
-from typing import Union, Callable, Optional, Dict, Tuple, List
+from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
 
 import pint
 import numpy as np
@@ -15,12 +9,13 @@ import scipy.linalg as la
 import scipy.sparse as sp
 from scipy.spatial.distance import cdist
 
-from .device import Device
 from .fem import areas, centroids
-from .parameter import Constant
+from .parameter import Constant, Parameter
 from .solution import BrandtSolution
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from .device import Device
+
 
 lambda_str = "\u03bb"
 Lambda_str = "\u039b"
@@ -241,6 +236,8 @@ def brandt_layer(
     Returns:
         stream function, total field, film screening field
     """
+    logger = logging.getLogger(__name__)
+
     circulating_currents = circulating_currents or {}
 
     if device.weights is None:
@@ -358,6 +355,7 @@ def solve(
     check_inversion: Optional[bool] = True,
     coupled: Optional[bool] = True,
     iterations: Optional[int] = 1,
+    log_level: Optional[int] = logging.INFO,
 ) -> List[BrandtSolution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
@@ -382,20 +380,27 @@ def solve(
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
-        check_inversion: Whether to verify the accuracy of the matrix inversion.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
+        check_inversion: Whether to verify the accuracy of the matrix inversion.
         coupled: Whether to account for the interactions between different layers
             (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
             (iterations is ignored if coupled is False).
+        log_level: Logging level to use, if any.
 
     Returns:
         A list of BrandtSolutions of length 1 if coupled is False,
         or length (iterations + 1) if coupled is True.
     """
+
+    if log_level is not None:
+        logging.basicConfig(level=log_level)
+
+    logger = logging.getLogger(__name__)
+
     points = device.points
     triangles = device.triangles
 
@@ -543,3 +548,136 @@ def solve(
             solutions.append(solution)
 
     return solutions
+
+
+def solve_many(
+    *,
+    device: Device,
+    parallel_method: Optional[str] = None,
+    applied_fields: Union[Parameter, List[Parameter]],
+    circulating_currents: Optional[
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
+    ] = None,
+    layer_updater: Optional[Callable] = None,
+    layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
+    field_units: str = "mT",
+    current_units: str = "uA",
+    check_inversion: Optional[bool] = True,
+    coupled: Optional[bool] = True,
+    iterations: Optional[int] = 1,
+    product: bool = False,
+    directory: Optional[str] = None,
+    return_solutions: bool = False,
+    keep_only_final_solution: bool = False,
+    log_level: Optional[int] = logging.INFO,
+) -> Tuple[
+    Optional[Union[List[BrandtSolution], List[List[BrandtSolution]]]],
+    Optional[List[str]],
+]:
+    """Solves many models involving the same device, optionally in parallel using
+    multiple processes.
+
+    Args:
+        device: The Device to simulate.
+        parallel_method: The method to use for multiprocessing (None, "mp", or "ray").
+        applied_fields: A callable or list of callables that compute(s) the applied
+            magnetic field as a function of x, y, z coordinates.
+        circulating_currents: A dict of ``{hole_name: circulating_current}`` or list
+            of such dicts. If circulating_current is a float, then it is assumed to
+            be in units of current_units. If circulating_current is a string, then
+            it is converted to a pint.Quantity.
+        layer_updater: A callable with signature
+            ``layer_updater(layer: Layer, **kwargs) -> Layer`` that updates
+            parameter(s) of each layer in a device.
+        layer_update_kwargs: A list of dicts of keyword arguments passed to
+            ``layer_updater``.
+        field_units: Units of the applied field. Can either be magnetic field H
+            or magnetic flux density B = mu0 * H.
+        current_units: Units to use for current quantities. The applied field will be
+            converted to units of [current_units / device.length_units].
+        check_inversion: Whether to verify the accuracy of the matrix inversion.
+        coupled: Whether to account for the interactions between different layers
+            (e.g. shielding).
+        iterations: Number of times to compute the interactions between layers
+            (iterations is ignored if coupled is False).
+        product: If True, then all combinations of applied_fields,
+            circulating_currrents, and layer_update_kwargs are simulated (the
+            behavior is given by itertools.product(), i.e. a nested for loop).
+            Otherwise, the behavior is similar to zip().
+            See superscreen.parallel.create_models for more details.
+        directory: The directory in which to save the results. If None is given, then
+            the results are not automatically saved to disk.
+        return_solutions: Whether to return the BrandtSolution objects.
+        keep_only_final_solution: Whether to keep/save only the BrandtSolution from
+            the final iteration of superscreen.brandt.solve for each setup.
+        log_level: Logging level to use, if any.
+
+    Returns:
+        solutions, paths. If return_solutions is True, solutions is either a list of
+        lists of BrandtSolutions (if keep_only_final_solution is False), or a list
+        of BrandtSolutions (the final iteration for each setup). If directory is True,
+        paths is a list of paths to the saved solutions, otherwise paths is None.
+    """
+    from . import parallel
+
+    parallel_methods = {
+        None: parallel.solve_many_serial,
+        False: parallel.solve_many_serial,
+        "multiprocessing": parallel.solve_many_mp,
+        "mp": parallel.solve_many_mp,
+        "ray": parallel.solve_many_ray,
+    }
+
+    if parallel_method not in parallel_methods:
+        raise ValueError(
+            f"Unknown parallel method, {parallel_method}. "
+            f"Valid methods are {list(parallel_methods)}."
+        )
+
+    kwargs = dict(
+        device=device,
+        applied_fields=applied_fields,
+        circulating_currents=circulating_currents,
+        layer_updater=layer_updater,
+        layer_update_kwargs=layer_update_kwargs,
+        field_units=field_units,
+        current_units=current_units,
+        check_inversion=check_inversion,
+        coupled=coupled,
+        iterations=iterations,
+        product=product,
+        directory=directory,
+        return_solutions=return_solutions,
+        keep_only_final_solution=keep_only_final_solution,
+        log_level=log_level,
+    )
+
+    solutions, paths = parallel_methods[parallel_method](**kwargs)
+
+    return solutions, paths
+
+
+def _patch_docstring(func):
+    func.__doc__ = (
+        func.__doc__
+        + "\n"
+        + "\n".join(
+            [
+                line
+                for line in solve_many.__doc__.splitlines()
+                if "parallel_method:" not in line
+            ][2:]
+        )
+    )
+
+
+# Set docstrings for functions in parallel.py based on solve_many.
+# Hide import after definition of solve_many to avoid circular import.
+from .parallel import solve_many_serial, solve_many_mp, solve_many_ray  # noqa: E402
+
+
+for func in [solve_many_serial, solve_many_mp, solve_many_ray]:
+    _patch_docstring(func)

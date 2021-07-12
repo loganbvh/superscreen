@@ -1,14 +1,7 @@
-# This file is part of superscreen.
-#
-#     Copyright (c) 2021 Logan Bishop-Van Horn
-#
-#     This source code is licensed under the MIT license found in the
-#     LICENSE file in the root directory of this source tree.
-
 import os
 import json
 from datetime import datetime
-from typing import Optional, Union, Callable, Dict, Tuple, List
+from typing import Optional, Union, Callable, Dict, Tuple, List, Any
 
 import dill
 import pint
@@ -495,6 +488,53 @@ class BrandtSolution(object):
 
         return solution
 
+    def equals(self, other: Any, require_same_timestamp: bool = False) -> bool:
+        """Check whether two solutions are equal.
+
+        Args:
+            other: The BrandtSolution to compare for equality.
+            require_same_timestamp: If True, two solutions are only considered
+                equal if they have the exact same time_created.
+
+        Returns:
+            bool indicating whether the two solutions are equal
+        """
+
+        if other is self:
+            return True
+
+        if not isinstance(other, BrandtSolution):
+            return False
+
+        # First check things that are "easy" to check
+        if not (
+            self.device == other.device
+            and self.field_units == other.field_units
+            and self.current_units == other.current_units
+            and self.circulating_currents == other.circulating_currents
+            and self.applied_field == other.applied_field
+        ):
+            return False
+
+        if require_same_timestamp and (self.time_created != other.time_created):
+            return False
+
+        # Then check the arrays, which may take longer
+        for name, array in self.streams.items():
+            if not np.allclose(array, other.streams[name]):
+                return False
+        for name, array in self.fields.items():
+            if not np.allclose(array, other.fields[name]):
+                return False
+        for name, array in self.screening_fields.items():
+            if not np.allclose(array, other.screening_fields[name]):
+                return False
+
+        return True
+
+    def __eq__(self, other) -> bool:
+        return self.equals(other, require_same_timestamp=True)
+
     def plot_streams(
         self,
         layers: Optional[Union[List[str], str]] = None,
@@ -586,35 +626,3 @@ class BrandtSolution(object):
         from .visualization import plot_field_at_positions
 
         return plot_field_at_positions(self, **kwargs)
-
-    def __eq__(self, other) -> bool:
-
-        if other is self:
-            return True
-
-        if not isinstance(other, BrandtSolution):
-            return False
-
-        # First check things that are "easy" to check
-        if not (
-            self.device == other.device
-            and self.time_created == other.time_created
-            and self.field_units == other.field_units
-            and self.current_units == other.current_units
-            and self.circulating_currents == other.circulating_currents
-            and self.applied_field == other.applied_field
-        ):
-            return False
-
-        # Then check the arrays, which may take longer
-        for name, array in self.streams.items():
-            if not np.allclose(array, other.streams[name]):
-                return False
-        for name, array in self.fields.items():
-            if not np.allclose(array, other.fields[name]):
-                return False
-        for name, array in self.screening_fields.items():
-            if not np.allclose(array, other.screening_fields[name]):
-                return False
-
-        return True

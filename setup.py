@@ -33,6 +33,7 @@ INSTALL_REQUIRES = [
     "pint",
     "pytest",
     "pytest-cov",
+    "ray[default]",
     "scipy",
 ]
 

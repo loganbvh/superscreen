@@ -61,20 +61,20 @@ def test_plot_streams(solution, layers, units):
 @pytest.mark.parametrize("layers", [None, "layer0"])
 @pytest.mark.parametrize("units", [None, "mA/um"])
 @pytest.mark.parametrize("streamplot", [False, True])
-@pytest.mark.parametrize("cross_section_xs, cross_section_ys", [(None, 0), (0, None)])
-@pytest.mark.parametrize("auto_range_cutoff", [None, 1])
-@pytest.mark.parametrize("share_color_scale", [False, True])
-@pytest.mark.parametrize("symmetric_color_scale", [False, True])
-def test_plot_fields(
+# @pytest.mark.parametrize("cross_section_xs, cross_section_ys", [(None, 0), (0, None)])
+# @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
+# @pytest.mark.parametrize("share_color_scale", [False, True])
+# @pytest.mark.parametrize("symmetric_color_scale", [False, True])
+def test_plot_currents_and_fields(
     solution,
     layers,
     units,
-    cross_section_xs,
-    cross_section_ys,
     streamplot,
-    auto_range_cutoff,
-    share_color_scale,
-    symmetric_color_scale,
+    share_color_scale=True,
+    symmetric_color_scale=True,
+    cross_section_xs=None,
+    cross_section_ys=None,
+    auto_range_cutoff=1,
 ):
     with non_gui_backend():
         fig, ax = sc.plot_currents(
@@ -86,6 +86,20 @@ def test_plot_fields(
             cross_section_ys=cross_section_ys,
             cross_section_angle=45,
             streamplot=streamplot,
+            auto_range_cutoff=auto_range_cutoff,
+            share_color_scale=share_color_scale,
+            symmetric_color_scale=symmetric_color_scale,
+        )
+        plt.close(fig)
+
+        fig, ax = sc.plot_fields(
+            solution,
+            grid_shape=(50, 50),
+            layers=layers,
+            units=units,
+            cross_section_xs=cross_section_xs,
+            cross_section_ys=cross_section_ys,
+            cross_section_angle=45,
             auto_range_cutoff=auto_range_cutoff,
             share_color_scale=share_color_scale,
             symmetric_color_scale=symmetric_color_scale,
