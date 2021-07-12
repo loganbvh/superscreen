@@ -79,7 +79,7 @@ def test_plot_mesh(device, device_with_mesh, edges, vertices):
 
 
 @pytest.mark.parametrize("min_triangles", [None, 2500])
-@pytest.mark.parametrize("optimesh_steps", [None, 100])
+@pytest.mark.parametrize("optimesh_steps", [None, 20])
 @pytest.mark.parametrize("sparse", [False, True])
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean"]

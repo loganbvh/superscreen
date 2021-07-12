@@ -41,7 +41,7 @@ def solution1(device):
         circulating_currents=None,
         field_units="mT",
         coupled=True,
-        iterations=5,
+        iterations=1,
     )
 
     return solutions[-1]
@@ -62,7 +62,7 @@ def solution2(device):
         circulating_currents=circulating_currents,
         field_units="mT",
         coupled=True,
-        iterations=5,
+        iterations=1,
     )
 
     return solutions[-1]

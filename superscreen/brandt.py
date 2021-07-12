@@ -603,11 +603,12 @@ def solve_many(
             (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
             (iterations is ignored if coupled is False).
-            See superscreen.parallel.create_setups for more details.
+            See superscreen.parallel.create_models for more details.
         product: If True, then all combinations of applied_fields,
             circulating_currrents, and layer_update_kwargs are simulated (the
-            behavior is given by itertools.product()). Otherwise, the behavior is
-            similar to zip(). See superscreen.parallel.create_setups for more details.
+            behavior is given by itertools.product(), i.e. a nested for loop).
+            Otherwise, the behavior is similar to zip().
+            See superscreen.parallel.create_models for more details.
         directory: The directory in which to save the results. If None is given, then
             the results are not automatically saved to disk.
         return_solutions: Whether to return the BrandtSolution objects.
