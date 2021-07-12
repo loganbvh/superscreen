@@ -6,6 +6,7 @@ import warnings
 import multiprocessing as mp
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
+import pint
 import numpy as np
 
 try:
@@ -14,7 +15,6 @@ except ImportError:
     ray = None
 
 from . import brandt
-from .brandt import CirculatingCurrentsType
 from .io import save_solutions
 from .device import Device
 from .parameter import Parameter
@@ -27,12 +27,15 @@ def create_models(
     device: Device,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
-        Union[CirculatingCurrentsType, List[CirculatingCurrentsType]]
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
     ] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     product: bool = False,
-) -> List[Tuple[Device, Parameter, CirculatingCurrentsType]]:
+) -> List[Tuple[Device, Parameter, Dict[str, Union[float, str, pint.Quantity]]]]:
     """Generate a list of (device, applied_field, circulating_currents).
 
     Args:
@@ -109,7 +112,10 @@ def solve_many_serial(
     device: Device,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
-        Union[CirculatingCurrentsType, List[CirculatingCurrentsType]]
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
     ] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
@@ -286,7 +292,10 @@ def solve_many_mp(
     device: Device,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
-        Union[CirculatingCurrentsType, List[CirculatingCurrentsType]]
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
     ] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
@@ -410,7 +419,10 @@ def solve_many_ray(
     device: Device,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
-        Union[CirculatingCurrentsType, List[CirculatingCurrentsType]]
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
     ] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,

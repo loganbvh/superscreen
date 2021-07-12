@@ -4,10 +4,10 @@ import tempfile
 
 os.environ["RAY_START_REDIS_WAIT_RETRIES"] = "48"
 
-import pytest
-import ray
+import pytest  # noqa: E402
+import ray  # noqa: E402
 
-import superscreen as sc
+import superscreen as sc  # noqa: E402
 
 
 @pytest.fixture(scope="module")

@@ -21,9 +21,6 @@ lambda_str = "\u03bb"
 Lambda_str = "\u039b"
 
 
-CirculatingCurrentsType = Dict[str, Union[float, str, pint.Quantity]]
-
-
 def q_matrix(points: np.ndarray) -> np.ndarray:
     """Computes the denominator matrix, q:
 
@@ -215,7 +212,7 @@ def brandt_layer(
     device: Device,
     layer: str,
     applied_field: Callable,
-    circulating_currents: Optional[CirculatingCurrentsType] = None,
+    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
     check_lambda: bool = True,
@@ -352,7 +349,7 @@ def solve(
     *,
     device: Device,
     applied_field: Callable,
-    circulating_currents: Optional[CirculatingCurrentsType] = None,
+    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
     check_inversion: Optional[bool] = True,
@@ -559,7 +556,10 @@ def solve_many(
     parallel_method: Optional[str] = None,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
-        Union[CirculatingCurrentsType, List[CirculatingCurrentsType]]
+        Union[
+            Dict[str, Union[float, str, pint.Quantity]],
+            List[Dict[str, Union[float, str, pint.Quantity]]],
+        ]
     ] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
@@ -603,7 +603,6 @@ def solve_many(
             (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
             (iterations is ignored if coupled is False).
-            See superscreen.parallel.create_models for more details.
         product: If True, then all combinations of applied_fields,
             circulating_currrents, and layer_update_kwargs are simulated (the
             behavior is given by itertools.product(), i.e. a nested for loop).
@@ -620,7 +619,7 @@ def solve_many(
         solutions, paths. If return_solutions is True, solutions is either a list of
         lists of BrandtSolutions (if keep_only_final_solution is False), or a list
         of BrandtSolutions (the final iteration for each setup). If directory is True,
-        paths is a list of paths to the saved solutions.
+        paths is a list of paths to the saved solutions, otherwise paths is None.
     """
     from . import parallel
 

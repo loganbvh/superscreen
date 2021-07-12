@@ -15,7 +15,8 @@ Brandt Solver
 
 .. autofunction:: superscreen.brandt.solve
 
-.. autofunction:: superscreen.brandt.brandt_layer
+.. autofunction:: superscreen.brandt.solve_many
+
 
 Brandt Solution
 ---------------
@@ -29,6 +30,8 @@ Brandt Solution
 
 Supporting Functions
 --------------------
+
+.. autofunction:: superscreen.brandt.brandt_layer
 
 .. autofunction:: superscreen.brandt.convert_field
 
