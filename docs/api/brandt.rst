@@ -10,18 +10,21 @@ Solver
 The ``superscreen.brandt`` module contains the actual implementation
 of Brandt's method, as described :ref:`here <background>`.
 
-Brandt Solver
--------------
+Solve
+-----
 
 .. autofunction:: superscreen.brandt.solve
+
+Solve Many
+----------
 
 .. autofunction:: superscreen.brandt.solve_many
 
 
-Brandt Solution
----------------
+Solution
+--------
 
-.. autoclass:: superscreen.solution.BrandtSolution
+.. autoclass:: superscreen.solution.Solution
     :members:
 
 .. autofunction:: superscreen.io.save_solutions
@@ -31,14 +34,29 @@ Brandt Solution
 Supporting Functions
 --------------------
 
+Brandt Core
+===========
+
 .. autofunction:: superscreen.brandt.brandt_layer
-
-.. autofunction:: superscreen.brandt.convert_field
-
-.. autofunction:: superscreen.brandt.field_conversion_factor
 
 .. autofunction:: superscreen.brandt.q_matrix
 
 .. autofunction:: superscreen.brandt.C_vector
 
 .. autofunction:: superscreen.brandt.Q_matrix
+
+.. autofunction:: superscreen.brandt.convert_field
+
+.. autofunction:: superscreen.brandt.field_conversion_factor
+
+
+Parallel Processing
+===================
+
+.. autofunction:: superscreen.parallel.create_models
+
+.. autofunction:: superscreen.parallel.solve_many_serial
+
+.. autofunction:: superscreen.parallel.solve_many_mp
+
+.. autofunction:: superscreen.parallel.solve_many_ray

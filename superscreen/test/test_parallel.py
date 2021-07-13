@@ -83,10 +83,10 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions)
+                assert all(isinstance(s, sc.Solution) for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions[0])
+                assert all(isinstance(s, sc.Solution) for s in solutions[0])
         else:
             assert solutions is None
 
@@ -116,10 +116,10 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions)
+                assert all(isinstance(s, sc.Solution) for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions[0])
+                assert all(isinstance(s, sc.Solution) for s in solutions[0])
         else:
             assert solutions is None
 
@@ -149,10 +149,10 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions)
+                assert all(isinstance(s, sc.Solution) for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.BrandtSolution) for s in solutions[0])
+                assert all(isinstance(s, sc.Solution) for s in solutions[0])
         else:
             assert solutions is None
 

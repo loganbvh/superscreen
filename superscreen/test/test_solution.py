@@ -226,10 +226,10 @@ def test_save_solution(solution1, solution2, save_mesh):
 
     with tempfile.TemporaryDirectory() as directory:
         solution1.to_file(directory, save_mesh=save_mesh)
-        loaded_solution1 = sc.BrandtSolution.from_file(directory)
+        loaded_solution1 = sc.Solution.from_file(directory)
     assert solution1 == loaded_solution1
 
     with tempfile.TemporaryDirectory() as other_directory:
         solution2.to_file(other_directory, save_mesh=save_mesh)
-        loaded_solution2 = sc.BrandtSolution.from_file(other_directory)
+        loaded_solution2 = sc.Solution.from_file(other_directory)
     assert solution2 == loaded_solution2

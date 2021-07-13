@@ -8,7 +8,7 @@ Visualization
 *************
 
 The ``superscreen.visualization`` module contains functions used to visualize
-the results contained in a :class:`superscreen.brandt.BrandtSolution`.
+the results contained in a :class:`superscreen.brandt.Solution`.
 
 Fields
 ------

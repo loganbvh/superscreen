@@ -35,20 +35,6 @@ Polygon
 .. autoclass:: superscreen.device.Polygon
     :members:
 
-
-Geometry
---------
-
-.. autofunction:: superscreen.geometry.rotate
-
-.. autofunction:: superscreen.geometry.ellipse
-
-.. autofunction:: superscreen.geometry.circle
-
-.. autofunction:: superscreen.geometry.rectangle
-
-.. autofunction:: superscreen.geometry.square
-
 Parameters
 ----------
 
@@ -73,3 +59,16 @@ Constant
     :members:
     :show-inheritance:
     :inherited-members:
+
+Geometry
+--------
+
+.. autofunction:: superscreen.geometry.rotate
+
+.. autofunction:: superscreen.geometry.ellipse
+
+.. autofunction:: superscreen.geometry.circle
+
+.. autofunction:: superscreen.geometry.rectangle
+
+.. autofunction:: superscreen.geometry.square

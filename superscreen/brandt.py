@@ -11,7 +11,7 @@ from scipy.spatial.distance import cdist
 
 from .fem import areas, centroids
 from .parameter import Constant, Parameter
-from .solution import BrandtSolution
+from .solution import Solution
 
 if TYPE_CHECKING:
     from .device import Device
@@ -356,7 +356,7 @@ def solve(
     coupled: Optional[bool] = True,
     iterations: Optional[int] = 1,
     log_level: Optional[int] = logging.INFO,
-) -> List[BrandtSolution]:
+) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
     The simulation strategy is:
@@ -392,7 +392,7 @@ def solve(
         log_level: Logging level to use, if any.
 
     Returns:
-        A list of BrandtSolutions of length 1 if coupled is False,
+        A list of Solutions of length 1 if coupled is False,
         or length (iterations + 1) if coupled is True.
     """
 
@@ -445,7 +445,7 @@ def solve(
         fields[name] = total_field
         screening_fields[name] = screening_field
 
-    solution = BrandtSolution(
+    solution = Solution(
         device=device,
         streams=streams,
         fields={
@@ -529,7 +529,7 @@ def solve(
                 fields[name] = total_field
                 screening_fields[name] = screening_field
 
-            solution = BrandtSolution(
+            solution = Solution(
                 device=device,
                 streams=streams,
                 fields={
@@ -573,10 +573,7 @@ def solve_many(
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
     log_level: Optional[int] = logging.INFO,
-) -> Tuple[
-    Optional[Union[List[BrandtSolution], List[List[BrandtSolution]]]],
-    Optional[List[str]],
-]:
+) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
 
@@ -610,15 +607,15 @@ def solve_many(
             See superscreen.parallel.create_models for more details.
         directory: The directory in which to save the results. If None is given, then
             the results are not automatically saved to disk.
-        return_solutions: Whether to return the BrandtSolution objects.
-        keep_only_final_solution: Whether to keep/save only the BrandtSolution from
+        return_solutions: Whether to return the Solution objects.
+        keep_only_final_solution: Whether to keep/save only the Solution from
             the final iteration of superscreen.brandt.solve for each setup.
         log_level: Logging level to use, if any.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of
-        lists of BrandtSolutions (if keep_only_final_solution is False), or a list
-        of BrandtSolutions (the final iteration for each setup). If directory is True,
+        lists of Solutions (if keep_only_final_solution is False), or a list
+        of Solutions (the final iteration for each setup). If directory is True,
         paths is a list of paths to the saved solutions, otherwise paths is None.
     """
     from . import parallel
