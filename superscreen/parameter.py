@@ -191,16 +191,8 @@ class Parameter(object):
         # This might be overkill
         return repr(self) == repr(other)
 
-    def __getstate__(self):
-        return dill.dumps(self.__dict__)
-
-    def __setstate__(self, state):
-        state = dill.loads(state)
-        self.__dict__.update(state)
-
 
 class CompositeParameter(Parameter):
-
     """A callable object that behaves like a Parameter
     (i.e. it computes a scalar value as a function of
     position coordinates x, y, z). A CompositeParameter object is created as
