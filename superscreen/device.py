@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from copy import deepcopy
-from typing import Optional, Union, List, Tuple, Dict, TYPE_CHECKING
+from typing import Optional, Union, List, Tuple, Dict
 
 import dill
 import numpy as np
@@ -16,9 +16,6 @@ import optimesh
 from . import brandt
 from . import fem
 from .parameter import Parameter
-
-if TYPE_CHECKING:
-    from .device import Device
 
 
 logger = logging.getLogger(__name__)
@@ -422,11 +419,11 @@ class Device(object):
 
         return device
 
-    def __copy__(self) -> Device:
+    def __copy__(self) -> "Device":
         # Shallow copy (create new references to existing arrays).
         return self.copy(with_arrays=True, copy_arrays=False)
 
-    def __deepcopy__(self) -> Device:
+    def __deepcopy__(self) -> "Device":
         # Deep copy (copy all arrays and return references to copies)
         return self.copy(with_arrays=True, copy_arrays=True)
 
