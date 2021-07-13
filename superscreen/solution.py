@@ -558,4 +558,3 @@ class Solution(object):
         from .visualization import plot_field_at_positions
 
         return plot_field_at_positions(self, positions, **kwargs)
-
