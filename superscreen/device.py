@@ -1,4 +1,3 @@
-from __future__ import annotations
 import os
 import json
 import logging
@@ -255,7 +254,7 @@ class Device(object):
         self._Q_cache = {}
 
     @property
-    def length_units(self) -> str:
+    def length_units(self):
         """Length units used for the device geometry."""
         return self._length_units
 
@@ -391,7 +390,7 @@ class Device(object):
             setattr(self, name, array)
         self.C_vectors = C_vectors
 
-    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> Device:
+    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> "Device":
         """Copy this Device to create a new one.
 
         Args:
@@ -420,11 +419,11 @@ class Device(object):
 
         return device
 
-    def __copy__(self) -> Device:
+    def __copy__(self) -> "Device":
         # Shallow copy (create new references to existing arrays).
         return self.copy(with_arrays=True, copy_arrays=False)
 
-    def __deepcopy__(self) -> Device:
+    def __deepcopy__(self) -> "Device":
         # Deep copy (copy all arrays and return references to copies)
         return self.copy(with_arrays=True, copy_arrays=True)
 
@@ -855,12 +854,16 @@ class Device(object):
         )
 
     def __getstate__(self):
-        # Pickle can't handle a pint.UnitRegistry.
         state = self.__dict__.copy()
+        # Pickle can't handle a pint.UnitRegistry.
         del state["ureg"]
+        # Use dill for Layer objects because Layer.Lambda could be a Parameter
+        state["layers_list"] = dill.dumps(self.layers_list)
         return state
 
     def __setstate__(self, state):
         # Pickle can't handle a pint.UnitRegistry.
         state["ureg"] = ureg
+        # Use dill for Layer objects because Layer.Lambda could be a Parameter
+        state["layers_list"] = dill.loads(state["layers_list"])
         self.__dict__.update(state)

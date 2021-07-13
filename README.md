@@ -28,7 +28,7 @@ Click the badge below to try `SuperScreen` interactively online via [Binder](htt
 
 ## Install `SuperScreen`
 
-`SuperScreen` requires `python >= 3.7`. For more details, see the
+`SuperScreen` requires `python >= 3.6`. For more details, see the
 [documentation](https://superscreen.readthedocs.io/en/latest/).
 
 ### Installing from source

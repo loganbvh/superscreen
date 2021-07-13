@@ -7,6 +7,10 @@ import numpy as np
 
 from .solution import Solution
 
+from backports.datetime_fromisoformat import MonkeyPatch
+
+MonkeyPatch.patch_fromisoformat()
+
 
 class NumpyJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -38,7 +42,6 @@ def json_numpy_obj_hook(d: Dict) -> Dict:
     for key, value in d.items():
         if isinstance(value, str) and len(value) >= 26:
             try:
-                # Requires Python >= 3.7
                 d[key] = datetime.datetime.fromisoformat(value)
             except ValueError:
                 pass

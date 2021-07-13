@@ -20,9 +20,10 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com, lbvh@stanford.edu"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.7"
+PYTHON_VERSION = ">=3.6"
 
 INSTALL_REQUIRES = [
+    "backports-datetime-fromisoformat",
     "dill",
     "jupyter",
     "matplotlib",
@@ -56,6 +57,7 @@ Operating System :: POSIX
 Operating System :: Unix
 Operating System :: Microsoft :: Windows
 Programming Language :: Python
+Programming Language :: Python :: 3.6
 Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9

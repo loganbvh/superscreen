@@ -14,6 +14,11 @@ from .device import Device
 from .fem import areas, centroids
 
 
+from backports.datetime_fromisoformat import MonkeyPatch
+
+MonkeyPatch.patch_fromisoformat()
+
+
 class Solution(object):
     """A container for the calculated stream functions and fields,
     with some convenient data processing methods.
@@ -470,7 +475,6 @@ class Solution(object):
         with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
             applied_field = dill.load(f)
 
-        # Requires Python >= 3.7
         time_created = datetime.fromisoformat(info.pop("time_created"))
 
         solution = cls(

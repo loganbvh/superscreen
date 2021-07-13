@@ -1,4 +1,3 @@
-from __future__ import annotations
 import itertools
 import logging
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
@@ -209,7 +208,7 @@ def field_conversion_factor(
 
 def brandt_layer(
     *,
-    device: Device,
+    device: "Device",
     layer: str,
     applied_field: Callable,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
@@ -347,7 +346,7 @@ def brandt_layer(
 
 def solve(
     *,
-    device: Device,
+    device: "Device",
     applied_field: Callable,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
@@ -552,7 +551,7 @@ def solve(
 
 def solve_many(
     *,
-    device: Device,
+    device: "Device",
     parallel_method: Optional[str] = None,
     applied_fields: Union[Parameter, List[Parameter]],
     circulating_currents: Optional[
