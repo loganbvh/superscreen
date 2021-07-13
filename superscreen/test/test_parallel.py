@@ -1,5 +1,4 @@
 import os
-import contextlib
 import tempfile
 
 os.environ["RAY_START_REDIS_WAIT_RETRIES"] = "48"
@@ -8,6 +7,19 @@ import pytest  # noqa: E402
 import ray  # noqa: E402
 
 import superscreen as sc  # noqa: E402
+
+
+class NullContextManager(object):
+    """Does nothing."""
+
+    def __init__(self, resource=None):
+        self.resource = resource
+
+    def __enter__(self):
+        return self.resource
+
+    def __exit__(self, *args):
+        pass
 
 
 @pytest.fixture(scope="module")
@@ -57,7 +69,7 @@ def test_solve_many(
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]
 
-    context = tempfile.TemporaryDirectory() if save else contextlib.nullcontext(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
     with context as directory:
         solutions_serial, paths_serial = sc.solve_many(
             device=device,
@@ -90,7 +102,7 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else contextlib.nullcontext(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
     with context as directory:
         solutions_mp, paths_mp = sc.solve_many(
             device=device,
@@ -123,7 +135,7 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else contextlib.nullcontext(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
     with context as directory:
         solutions_ray, paths_ray = sc.solve_many(
             device=device,
