@@ -14,7 +14,7 @@ from .device import Device
 from .fem import areas, centroids
 
 
-class BrandtSolution(object):
+class Solution(object):
     """A container for the calculated stream functions and fields,
     with some convenient data processing methods.
 
@@ -383,7 +383,7 @@ class BrandtSolution(object):
         return fields
 
     def to_file(self, directory: str, save_mesh: bool = True) -> None:
-        """Saves a BrandtSolution to disk.
+        """Saves a Solution to disk.
 
         Args:
             directory: The name of the directory in which to save the solution
@@ -436,10 +436,8 @@ class BrandtSolution(object):
             json.dump(metadata, f, indent=4)
 
     @classmethod
-    def from_file(
-        cls, directory: str, compute_matrices: bool = False
-    ) -> "BrandtSolution":
-        """Loads a BrandtSolution from file.
+    def from_file(cls, directory: str, compute_matrices: bool = False) -> "Solution":
+        """Loads a Solution from file.
 
         Args:
             directory: The directory from which to load the solution.
@@ -447,7 +445,7 @@ class BrandtSolution(object):
                 matrices for the device if the mesh already exists.
 
         Returns:
-            The loaded BrandtSolution instance
+            The loaded Solution instance
         """
         with open(os.path.join(directory, "metadata.json"), "r") as f:
             info = json.load(f)
@@ -492,7 +490,7 @@ class BrandtSolution(object):
         """Check whether two solutions are equal.
 
         Args:
-            other: The BrandtSolution to compare for equality.
+            other: The Solution to compare for equality.
             require_same_timestamp: If True, two solutions are only considered
                 equal if they have the exact same time_created.
 
@@ -503,7 +501,7 @@ class BrandtSolution(object):
         if other is self:
             return True
 
-        if not isinstance(other, BrandtSolution):
+        if not isinstance(other, Solution):
             return False
 
         # First check things that are "easy" to check
@@ -535,94 +533,28 @@ class BrandtSolution(object):
     def __eq__(self, other) -> bool:
         return self.equals(other, require_same_timestamp=True)
 
-    def plot_streams(
-        self,
-        layers: Optional[Union[List[str], str]] = None,
-        units: Optional[str] = None,
-        max_cols: int = 3,
-        cmap: str = "magma",
-        levels: int = 101,
-        colorbar: bool = True,
-        **kwargs,
-    ) -> Tuple[plt.Figure, np.ndarray]:
-        """Alias for superscreen.visualization.plot_streams."""
+    def plot_streams(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for :func:`superscreen.visualization.plot_streams`."""
         from .visualization import plot_streams
 
         return plot_streams(self, **kwargs)
 
-    def plot_currents(
-        self,
-        layers: Optional[Union[List[str], str]] = None,
-        units: Optional[str] = None,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        grid_method: str = "cubic",
-        max_cols: int = 3,
-        cmap: str = "inferno",
-        colorbar: bool = True,
-        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
-        share_color_scale: bool = False,
-        symmetric_color_scale: bool = False,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        streamplot: bool = True,
-        min_stream_amp: float = 0.025,
-        cross_section_xs: Optional[Union[float, List[float]]] = None,
-        cross_section_ys: Optional[Union[float, List[float]]] = None,
-        cross_section_angle: Optional[float] = None,
-        **kwargs,
-    ) -> Tuple[plt.Figure, np.ndarray]:
-        """Alias for superscreen.visualization.plot_currents."""
+    def plot_currents(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for :func:`superscreen.visualization.plot_currents`."""
         from .visualization import plot_currents
 
         return plot_currents(self, **kwargs)
 
-    def plot_fields(
-        self,
-        layers: Optional[Union[List[str], str]] = None,
-        dataset: str = "fields",
-        normalize: bool = False,
-        units: Optional[str] = None,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        grid_method: str = "cubic",
-        max_cols: int = 3,
-        cmap: str = "cividis",
-        colorbar: bool = True,
-        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
-        share_color_scale: bool = False,
-        symmetric_color_scale: bool = False,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        cross_section_xs: Optional[Union[float, List[float]]] = None,
-        cross_section_ys: Optional[Union[float, List[float]]] = None,
-        cross_section_angle: Optional[float] = None,
-        **kwargs,
-    ) -> Tuple[plt.Figure, np.ndarray]:
-        """Alias for superscreen.visualization.plot_fields."""
+    def plot_fields(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+        """Alias for :func:`superscreen.visualization.plot_fields`."""
         from .visualization import plot_fields
 
         return plot_fields(self, **kwargs)
 
     def plot_field_at_positions(
-        self,
-        positions: np.ndarray,
-        zs: Optional[Union[float, np.ndarray]] = None,
-        vector: bool = False,
-        units: Optional[str] = None,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        grid_method: str = "cubic",
-        cmap: str = "cividis",
-        colorbar: bool = True,
-        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
-        share_color_scale: bool = False,
-        symmetric_color_scale: bool = False,
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        cross_section_xs: Optional[Union[float, List[float]]] = None,
-        cross_section_ys: Optional[Union[float, List[float]]] = None,
-        cross_section_angle: Optional[float] = None,
-        **kwargs,
+        self, positions: np.ndarray, **kwargs
     ) -> Tuple[plt.Figure, np.ndarray]:
-        """Alias for superscreen.visualization.plot_field_at_positions."""
+        """Alias for :func:`superscreen.visualization.plot_field_at_positions`."""
         from .visualization import plot_field_at_positions
 
-        return plot_field_at_positions(self, **kwargs)
+        return plot_field_at_positions(self, positions, **kwargs)

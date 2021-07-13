@@ -5,7 +5,7 @@ from typing import Union, List, Dict
 
 import numpy as np
 
-from .solution import BrandtSolution
+from .solution import Solution
 
 
 class NumpyJSONEncoder(json.JSONEncoder):
@@ -46,12 +46,12 @@ def json_numpy_obj_hook(d: Dict) -> Dict:
 
 
 def save_solutions(
-    solutions: List[BrandtSolution],
+    solutions: List[Solution],
     base_directory: str,
     save_mesh: bool = True,
     return_paths: bool = False,
 ) -> Union[None, List[str]]:
-    """Saves a list of BrandtSolutions to disk.
+    """Saves a list of Solutions to disk.
 
     Args:
         base_directory: The name of the directory in which to save the solutions
@@ -75,17 +75,17 @@ def save_solutions(
         return paths
 
 
-def load_solutions(base_directory: str) -> List[BrandtSolution]:
-    """Loads a sequence of BrandtSolutions from disk.
+def load_solutions(base_directory: str) -> List[Solution]:
+    """Loads a sequence of Solutions from disk.
 
     Args:
         base_directory: The name of the directory from which to load the solutions.
 
     Returns:
-        A list of BrandtSolutions
+        A list of Solutions
     """
     solutions = []
     for subdir in sorted(os.listdir(base_directory), key=int):
         path = os.path.join(base_directory, subdir)
-        solutions.append(BrandtSolution.from_file(path))
+        solutions.append(Solution.from_file(path))
     return solutions

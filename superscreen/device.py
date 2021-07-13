@@ -255,7 +255,7 @@ class Device(object):
         self._Q_cache = {}
 
     @property
-    def length_units(self):
+    def length_units(self) -> str:
         """Length units used for the device geometry."""
         return self._length_units
 

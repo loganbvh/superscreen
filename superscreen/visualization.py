@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 
 from .brandt import convert_field
-from .solution import BrandtSolution
+from .solution import Solution
 
 
 @contextmanager
@@ -181,7 +181,7 @@ def setup_color_limits(
 
 
 def cross_section(
-    solution: BrandtSolution,
+    solution: Solution,
     dataset: Optional[str] = None,
     layers: Optional[Union[List[str], str]] = None,
     xs: Optional[Union[float, List[float]]] = None,
@@ -198,7 +198,7 @@ def cross_section(
     the grid by ``angle``.
 
     Args:
-        solution: The BrandtSolution from which to extract the data
+        solution: The Solution from which to extract the data
         dataset: The dataset of which to take a cross-section. Required if
             existing grids are not provided, in which case dataset must
             be "streams", "fields", or "screening_fields".
@@ -349,7 +349,7 @@ def image_cross_section(
 
 
 def plot_streams_layer(
-    solution: BrandtSolution,
+    solution: Solution,
     layer: str,
     units: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
@@ -363,7 +363,7 @@ def plot_streams_layer(
     Additional keyword arguments are passed to plt.subplots() if ax is None.
 
     Args:
-        solution: The BrandtSolution from which to extract the stream function.
+        solution: The Solution from which to extract the stream function.
         layer: Name of the layer in solution.device.layers for which to plot
             the stream function.
         units: Units in which to plot the stream function. Defaults to
@@ -405,7 +405,7 @@ def plot_streams_layer(
 
 
 def plot_streams(
-    solution: BrandtSolution,
+    solution: Solution,
     layers: Optional[Union[List[str], str]] = None,
     units: Optional[str] = None,
     max_cols: int = 3,
@@ -419,7 +419,7 @@ def plot_streams(
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
-        solution: The BrandtSolution from which to extract stream functions.
+        solution: The Solution from which to extract stream functions.
         layers: Name(s) of layer(s) for which to plot the stream function.
             By default, the stream function is plotted for all layers in the Device.
         units: Units in which to plot the stream function. Defaults to
@@ -460,7 +460,7 @@ def plot_streams(
 
 
 def plot_fields(
-    solution: BrandtSolution,
+    solution: Solution,
     layers: Optional[Union[List[str], str]] = None,
     dataset: str = "fields",
     normalize: bool = False,
@@ -486,7 +486,7 @@ def plot_fields(
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
-        solution: The BrandtSolution from which to extract fields.
+        solution: The Solution from which to extract fields.
         layers: Name(s) of layer(s) for which to plot the fields.
             By default, the stream function is plotted for all layers in the Device.
         dataset: Which set of fields to plot, either "fields" or "screening_fields".
@@ -623,7 +623,7 @@ def plot_fields(
 
 
 def plot_currents(
-    solution: BrandtSolution,
+    solution: Solution,
     layers: Optional[Union[List[str], str]] = None,
     units: Optional[str] = None,
     grid_shape: Union[int, Tuple[int, int]] = (200, 200),
@@ -648,7 +648,7 @@ def plot_currents(
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
-        solution: The BrandtSolution from which to extract sheet current.
+        solution: The Solution from which to extract sheet current.
         layers: Name(s) of layer(s) for which to plot the sheet current.
             By default, the stream function is plotted for all layers in the Device.
         units: Units in which to plot the current density. Defaults to
@@ -771,7 +771,7 @@ def plot_currents(
 
 
 def plot_field_at_positions(
-    solution: BrandtSolution,
+    solution: Solution,
     positions: np.ndarray,
     zs: Optional[Union[float, np.ndarray]] = None,
     vector: bool = False,
@@ -796,7 +796,7 @@ def plot_field_at_positions(
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
-        solution: The BrandtSolution from which to extract fields.
+        solution: The Solution from which to extract fields.
         positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
             coordinates at which to calculate the magnetic field. A single list like [x, y]
             or [x, y, z] is also allowed.
@@ -919,12 +919,12 @@ def plot_field_at_positions(
 
 
 def _patch_docstring(func):
-    other_func = getattr(BrandtSolution, func.__name__)
+    other_func = getattr(Solution, func.__name__)
     other_func.__doc__ = (
         other_func.__doc__
         + "\n\n"
         + "\n".join(
-            [line for line in func.__doc__.splitlines() if "solution:" not in line]
+            [line for line in func.__doc__.split("\n    ") if "solution:" not in line]
         )
     )
 
