@@ -14,6 +14,11 @@ from .device import Device
 from .fem import areas, centroids
 
 
+from backports.datetime_fromisoformat import MonkeyPatch
+
+MonkeyPatch.patch_fromisoformat()
+
+
 class Solution(object):
     """A container for the calculated stream functions and fields,
     with some convenient data processing methods.

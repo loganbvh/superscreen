@@ -7,6 +7,10 @@ import numpy as np
 
 from .solution import Solution
 
+from backports.datetime_fromisoformat import MonkeyPatch
+
+MonkeyPatch.patch_fromisoformat()
+
 
 class NumpyJSONEncoder(json.JSONEncoder):
     def default(self, obj):
