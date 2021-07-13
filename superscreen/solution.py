@@ -475,7 +475,6 @@ class Solution(object):
         with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
             applied_field = dill.load(f)
 
-        # Requires Python >= 3.7
         time_created = datetime.fromisoformat(info.pop("time_created"))
 
         solution = cls(
