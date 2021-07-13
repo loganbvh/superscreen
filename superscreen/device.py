@@ -1,9 +1,8 @@
-from __future__ import annotations
 import os
 import json
 import logging
 from copy import deepcopy
-from typing import Optional, Union, List, Tuple, Dict
+from typing import Optional, Union, List, Tuple, Dict, TYPE_CHECKING
 
 import dill
 import numpy as np
@@ -17,6 +16,9 @@ import optimesh
 from . import brandt
 from . import fem
 from .parameter import Parameter
+
+if TYPE_CHECKING:
+    from .device import Device
 
 
 logger = logging.getLogger(__name__)
@@ -391,7 +393,7 @@ class Device(object):
             setattr(self, name, array)
         self.C_vectors = C_vectors
 
-    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> Device:
+    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> "Device":
         """Copy this Device to create a new one.
 
         Args:
