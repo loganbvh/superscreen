@@ -668,6 +668,9 @@ def _patch_docstring(func):
             ][2:]
         )
     )
+    annotations = solve_many.__annotations__.copy()
+    _ = annotations.pop("parallel_method", None)
+    func.__annotations__.update(annotations)
 
 
 # Set docstrings for functions in parallel.py based on solve_many.

@@ -927,6 +927,9 @@ def _patch_docstring(func):
             [line for line in func.__doc__.split("\n    ") if "solution:" not in line]
         )
     )
+    annotations = func.__annotations__.copy()
+    _ = annotations.pop("solution", None)
+    other_func.__annotations__.update(annotations)
 
 
 for func in [plot_streams, plot_currents, plot_fields, plot_field_at_positions]:
