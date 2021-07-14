@@ -69,7 +69,7 @@ def test_solve_many(
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager()
     with context as directory:
         solutions_serial, paths_serial = sc.solve_many(
             device=device,
@@ -102,7 +102,7 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager()
     with context as directory:
         solutions_mp, paths_mp = sc.solve_many(
             device=device,
@@ -135,7 +135,7 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager(None)
+    context = tempfile.TemporaryDirectory() if save else NullContextManager()
     with context as directory:
         solutions_ray, paths_ray = sc.solve_many(
             device=device,
