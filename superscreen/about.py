@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import inspect
-from typing import Union, Dict
+from typing import Optional, Union, Dict
 
 import numpy
 import scipy
@@ -44,7 +44,7 @@ def _blas_info() -> str:
     return blas
 
 
-def version_dict() -> Dict[str, Union[str, int]]:
+def version_dict() -> Dict[str, Union[str, str]]:
     """Returns a dictionary containing the versions of important dependencies."""
     return {
         "SuperScreen": superscreen.__version__,
@@ -55,12 +55,14 @@ def version_dict() -> Dict[str, Union[str, int]]:
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",
-        "Number of CPUs": os.cpu_count(),
+        "Number of CPUs": str(os.cpu_count()),
         "BLAS Info": _blas_info(),
     }
 
 
-def version_table(verbose: bool = False) -> HTML:
+def version_table(
+    version_info: Optional[Dict[str, str]] = None, verbose: bool = False
+) -> HTML:
     """Returns an HTML table with the versions of important depedencies."""
 
     # Adapted from: https://github.com/qutip/qutip/blob/
@@ -70,10 +72,10 @@ def version_table(verbose: bool = False) -> HTML:
         "<table>",
         "<tr><th>Software</th><th>Version</th></tr>",
     ]
+    if version_info is None:
+        version_info = version_dict()
 
-    packages = version_dict()
-
-    for name, version in packages.items():
+    for name, version in version_info.items():
         html.append(f"<tr><td>{name}</td><td>{version}</td></tr>")
 
     if verbose:

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
 
+from .about import version_dict
 from .device import Device
 from .fem import areas, centroids
 
@@ -59,6 +60,7 @@ class Solution(object):
         self._field_units = field_units
         self._current_units = current_units
         self._time_created = datetime.now()
+        self._version_info = version_dict()
 
     @property
     def field_units(self) -> str:
@@ -67,13 +69,18 @@ class Solution(object):
 
     @property
     def current_units(self) -> str:
-        """The units in whic currents are specified."""
+        """The units in which currents are specified."""
         return self._current_units
 
     @property
     def time_created(self) -> datetime:
         """The time at which the solution was originally created."""
         return self._time_created
+
+    @property
+    def version_info(self) -> Dict[str, str]:
+        """A dictionary of dependency versions."""
+        return self._version_info
 
     def grid_data(
         self,
@@ -435,6 +442,7 @@ class Solution(object):
             "field_units": self.field_units,
             "current_units": self.current_units,
             "time_created": self.time_created.isoformat(),
+            "version_info": self.version_info,
         }
 
         with open(os.path.join(directory, "metadata.json"), "w") as f:
@@ -476,6 +484,7 @@ class Solution(object):
             applied_field = dill.load(f)
 
         time_created = datetime.fromisoformat(info.pop("time_created"))
+        version_info = info.pop("version_info", None)
 
         solution = cls(
             device=device,
@@ -485,8 +494,9 @@ class Solution(object):
             applied_field=applied_field,
             **info,
         )
-        # Set "read-only" attribute
+        # Set "read-only" attributes
         solution._time_created = time_created
+        solution._version_info = version_info
 
         return solution
 

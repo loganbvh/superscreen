@@ -269,7 +269,7 @@ is:
     :label: eq13
 
     -(\mathbf{Q}\cdot\mathbf{w}-\mathbf{\Lambda}\cdot\mathbf{\nabla}^2)\mathbf{g}
-    = \mathbf{h}_{z,\,\mathrm{applied}} - \sum_{k\neq\ell}\mathbf{h}_{z,\,\mathrm{eff},\,k}
+    = \mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}
 
 (where we exclude points in the mesh lying outside of the superconducting film, but keep points
 inside holes in the film). :math:`\mathbf{\Lambda}` is either a scalar or a vector defining the
@@ -289,7 +289,7 @@ gives us the stream function for the full mesh:
 
     \mathbf{g} = \begin{cases}
         \left(-[\mathbf{Q}\cdot\mathbf{w}-\mathbf{\Lambda}\cdot\mathbf{\nabla}^2]\right)^{-1}
-        \left(\mathbf{h}_{z,\,\mathrm{applied}} - \sum_{k\neq\ell}\mathbf{h}_{z,\,\mathrm{eff},\,k}\right)
+        \left(\mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}\right)
             & \text{inside the film}\\
         I_{\mathrm{circ},\,k}
             & \text{inside hole }k\\
