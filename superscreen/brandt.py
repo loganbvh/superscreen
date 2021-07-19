@@ -282,7 +282,6 @@ def brandt_layer(
     # Identify holes in the superconductor
     hole_indices = {}
     in_hole = np.zeros(x.shape[0], dtype=bool)
-    holes = device.holes
     for name, hole in holes.items():
         ix = hole.contains_points(x, y)
         hole_indices[name] = np.where(ix)[0]
