@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def create_models(
     device: Device,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],
@@ -63,7 +63,7 @@ def create_models(
     if not isinstance(applied_fields, (list, tuple)):
         applied_fields = [applied_fields]
     for param in applied_fields:
-        if not isinstance(param, Parameter):
+        if param is not None and (not isinstance(param, Parameter)):
             raise TypeError(
                 f"All applied fields must be Parameters (got {type(param)})."
             )
@@ -110,7 +110,7 @@ def create_models(
 def solve_many_serial(
     *,
     device: Device,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],
@@ -290,7 +290,7 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
 def solve_many_mp(
     *,
     device: Device,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],
@@ -417,7 +417,7 @@ def solve_single_ray(
 def solve_many_ray(
     *,
     device: Device,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],
