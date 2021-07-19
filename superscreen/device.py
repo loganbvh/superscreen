@@ -549,10 +549,12 @@ class Device(object):
 
         logger.info("Calculating weight matrix.")
         self.weights = fem.calculate_weights(
-            points, triangles, weight_method, sparse=sparse
+            points, triangles, weight_method, normalize=True, sparse=sparse
         )
         logger.info("Calculating Laplace operator.")
-        self.Del2 = fem.laplace_operator(points, triangles, self.weights, sparse=sparse)
+        self.Del2 = fem.laplace_operator(
+            points, triangles, weight_method, sparse=sparse
+        )
         logger.info("Calculating kernel matrix.")
         self.q = brandt.q_matrix(points)
         # Each layer has its own edge vector C, so each layer's kernal matrix Q
