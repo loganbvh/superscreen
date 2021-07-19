@@ -110,6 +110,7 @@ def calculate_weights(
     points: np.ndarray,
     triangles: np.ndarray,
     method: str,
+    normalize: bool = True,
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:
     """Returns the weight matrix, calculated using the specified method.
@@ -117,7 +118,9 @@ def calculate_weights(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangle indices.
-        method: "uniform", "inv_euclidean", or "half_cotangent".
+        method: Method for calculating the weights. One of: "uniform",
+            "inv_euclidean", or "half_cotangent".
+        normalize: Whether to normalize each row/column in the weight matrix.
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -138,15 +141,17 @@ def calculate_weights(
         )
     # normalize row-by-row
     if sp.issparse(weights):
-        # weights / weights.sum(axis=1) returns np.matrix,
-        # so convert back to lil.
-        weights = sp.lil_matrix(weights / weights.sum(axis=1))
-        weights.setdiag(1.0)
+        if normalize:
+            # weights / weights.sum(axis=1) returns np.matrix,
+            # so convert back to lil.
+            weights = sp.lil_matrix(weights / weights.sum(axis=1))
+            weights.setdiag(1.0)
         weights = weights.tocsr()
     else:
         weights = np.asarray(weights)
-        weights = weights / weights.sum(axis=1)[:, np.newaxis]
-        np.fill_diagonal(weights, 1.0)
+        if normalize:
+            weights = weights / weights.sum(axis=1)[:, np.newaxis]
+            np.fill_diagonal(weights, 1.0)
     return weights
 
 
@@ -256,7 +261,6 @@ def weights_half_cotangent(
 def mass_matrix(
     points: np.ndarray,
     triangles: np.ndarray,
-    lumped: bool = True,
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csc_matrix]:
     """The mass matrix defines an effective area for each vertex.
@@ -264,7 +268,6 @@ def mass_matrix(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangle indices.
-        lumped: Whether to compute the lumped mass matrix (which is diagonal).
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -281,29 +284,10 @@ def mass_matrix(
 
     tri_areas = areas(points, triangles)
 
-    if lumped:
-        for a, t in zip(tri_areas / 3, triangles):
-            mass[t[0], t[0]] += a
-            mass[t[1], t[1]] += a
-            mass[t[2], t[2]] += a
-    else:
-        raise NotImplementedError("Non-lumped mass matrix is not implemented.")
-        # I can't find a good reference for this, so we'll just use
-        # the lumped mass matrix.
-        # for a, t in zip(tri_areas / 6, triangles):
-        #     # Add A / 6 to every vertex in t
-        #     mass[t[0], t[0]] += a
-        #     mass[t[1], t[1]] += a
-        #     mass[t[2], t[2]] += a
-
-        #     # Add A / 12 to every edge in t
-        #     a2 = a / 2
-        #     mass[t[0], t[1]] += a2
-        #     mass[t[1], t[0]] = mass[t[0], t[1]]
-        #     mass[t[0], t[2]] += a2
-        #     mass[t[2], t[0]] = mass[t[0], t[2]]
-        #     mass[t[1], t[2]] += a2
-        #     mass[t[2], t[1]] = mass[t[1], t[2]]
+    for a, t in zip(tri_areas / 3, triangles):
+        mass[t[0], t[0]] += a
+        mass[t[1], t[1]] += a
+        mass[t[2], t[2]] += a
 
     if sparse:
         # Use csc_matrix because we will eventually invert the mass matrix,
@@ -316,7 +300,7 @@ def mass_matrix(
 def laplace_operator(
     points: Union[np.ndarray, sp.csr_matrix],
     triangles: Union[np.ndarray, sp.csr_matrix],
-    weights: Union[np.ndarray, sp.csr_matrix],
+    weight_method: str = "half_cotangent",
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:
     """Laplacian operator for the mesh (sometimes called
@@ -328,7 +312,8 @@ def laplace_operator(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangle indices.
-        weights: Shape (n, n) array of vertex weights.
+        weight_method: Method for calculating the weights. One of: "uniform",
+            "inv_euclidean", or "half_cotangent".
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
@@ -336,6 +321,9 @@ def laplace_operator(
     """
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
+    weights = calculate_weights(
+        points, triangles, weight_method, normalize=False, sparse=sparse
+    )
     M = mass_matrix(points, triangles, sparse=sparse)
     if sparse:
         if not sp.isspmatrix_csc(M):
