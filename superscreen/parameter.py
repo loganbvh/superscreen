@@ -187,9 +187,10 @@ class Parameter(object):
         if self.__call__.__code__ != other.__call__.__code__:
             return False
 
-        # Checks function name and kwargs
-        # This might be overkill
-        return repr(self) == repr(other)
+        if self.func.__name__ != other.func.__name__:
+            return False
+
+        return self.kwargs == other.kwargs
 
 
 class CompositeParameter(Parameter):
@@ -283,6 +284,19 @@ class CompositeParameter(Parameter):
             right_repr = str(self.right)
 
         return f"({left_repr} {op_str} {right_repr})"
+
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+
+        if not isinstance(other, type(self)):
+            return False
+
+        return (
+            self.left == other.left
+            and self.right == other.right
+            and self.operator is other.operator
+        )
 
     def __repr__(self) -> str:
         return f"CompositeParameter<{self._bare_repr()}>"

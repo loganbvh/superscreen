@@ -11,7 +11,19 @@ making it ``pip``-installable.
 We recommend creating a new
 `conda environment <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_
 for ``SuperScreen`` to avoid dependency conflicts with other packages. To create a new conda environment called
-``superscreen``, run ``conda create --name superscreen python=<3.6, 3.7, 3.8, or 3.9>``.
+``superscreen``, run ``conda create --name superscreen python=3.x``, where ``x`` is one of ``{6, 7, 8, 9}``.
+After the environment has been created, run ``conda activate superscreen`` to activate it.
+
+
+.. important::
+
+  - On **Windows**, ensure that the latest
+    `Microsoft Visual C++ runtime
+    <https://support.microsoft.com/en-us/topic/the-latest-supported-visual-c-downloads-2647da03-1eea-4433-9aff-95f26a218cc0>`_
+    is installed before installing ``superscreen``.
+  - On **MacOS**, ensure that `Xcode command line tools <https://mac.install.guide/commandlinetools/>`_
+    are installed before installing ``superscreen``.
+
 
 Install from source
 -------------------
@@ -28,3 +40,21 @@ Install with pip
 ----------------
 
 - Coming soon...
+
+
+Verify the installation
+-----------------------
+
+To verify your installation by running the ``superscreen`` test suite,
+execute the following commands in a Python session:
+
+.. code-block:: python
+
+    >>> import superscreen.testing as st
+    >>> st.run()
+
+If you prefer, you can also run the ``superscreen`` tests in a single line:
+
+.. code-block:: bash
+
+    python -m superscreen.testing

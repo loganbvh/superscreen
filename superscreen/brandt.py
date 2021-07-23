@@ -259,7 +259,7 @@ def brandt_layer(
     if check_lambda:
         if isinstance(london_lambda, (int, float)) and london_lambda <= d:
             length_units = device.ureg(device.length_units).units
-            logger.warn(
+            logger.warning(
                 f"Layer '{layer}': The film thickness, d = {d:.4f} {length_units:~P}"
                 f", is greater than or equal to the London penetration depth, resulting "
                 f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
@@ -332,7 +332,7 @@ def brandt_layer(
             # Validate solution
             errors = (A @ gf) - h
             if not np.allclose(errors, 0):
-                logger.warn(
+                logger.warning(
                     f"Unable to solve for stream function in {layer} ({name}), "
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
