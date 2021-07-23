@@ -131,6 +131,9 @@ def solve_many_serial(
     log_level: Optional[int] = None,
 ):
     """Solve many models in a single process."""
+
+    solver = "superscreen.solve_many:serial:1"
+
     models = create_models(
         device,
         applied_fields,
@@ -169,6 +172,8 @@ def solve_many_serial(
             check_inversion=check_inversion,
             log_level=log_level,
         )
+        for solution in solutions:
+            solution._solver = solver
         if directory is not None:
             path = os.path.abspath(os.path.join(directory, str(i)))
             if keep_only_final_solution:
@@ -252,6 +257,7 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     index = kwargs.pop("index")
     return_solutions = kwargs.pop("return_solutions")
     keep_only_final_solution = kwargs.pop("keep_only_final_solution")
+    solver = kwargs.pop("solver")
 
     device = kwargs["device"]
     numpy_arrays = {}
@@ -269,6 +275,9 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     kwargs["device"] = device
 
     solutions = brandt.solve(**kwargs)
+
+    for solution in solutions:
+        solution._solver = solver
 
     if directory is None:
         path = None
@@ -328,6 +337,9 @@ def solve_many_mp(
     # Put the device's big arrays in shared memory
     shared_arrays = share_arrays(device)
 
+    nproc = min(len(models), mp.cpu_count())
+    solver = f"superscreen.solve_many:multiprocessing:{nproc}"
+
     kwargs = []
     for i, (device, applied_field, circulating_currents) in enumerate(models):
         kwargs.append(
@@ -345,10 +357,10 @@ def solve_many_mp(
                 iterations=iterations,
                 check_inversion=check_inversion,
                 log_level=log_level,
+                solver=solver,
             )
         )
 
-    nproc = min(len(models), mp.cpu_count())
     logger.info(
         f"Solving {len(models)} models in parallel using multiprocessing with "
         f"{nproc} process(es)."
@@ -385,7 +397,14 @@ def solve_many_mp(
 
 @ray.remote
 def solve_single_ray(
-    *, directory, index, arrays, return_solutions, keep_only_final_solution, **kwargs
+    *,
+    directory,
+    index,
+    arrays,
+    return_solutions,
+    keep_only_final_solution,
+    solver,
+    **kwargs,
 ):
     """Solve a single setup (ray)."""
     device = kwargs["device"]
@@ -396,6 +415,9 @@ def solve_single_ray(
         logging.basicConfig(level=log_level)
 
     solutions = brandt.solve(**kwargs)
+
+    for solution in solutions:
+        solution._solver = solver
 
     if directory is None:
         path = None
@@ -458,6 +480,10 @@ def solve_many_ray(
         logger.info("Initializing ray with {nproc} process(es).")
         ray.init(num_cpus=nproc)
 
+    nproc = int(ray.available_resources()["CPU"])
+
+    solver = f"superscreen.solve_many:ray:{nproc}"
+
     if directory is not None:
         device.to_file(os.path.join(directory, device.name), save_mesh=True)
 
@@ -480,6 +506,7 @@ def solve_many_ray(
                 arrays=arrays_ref,
                 return_solutions=return_solutions,
                 keep_only_final_solution=keep_only_final_solution,
+                solver=solver,
                 device=device,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,

@@ -81,7 +81,7 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
         )
-
+        solver = "superscreen.solve_many:serial:1"
         solutions, paths = solutions_serial, paths_serial
         if save:
             assert paths is not None
@@ -95,9 +95,11 @@ def test_solve_many(
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
                 assert all(isinstance(s, sc.Solution) for s in solutions)
+                assert all(s.solver == solver for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
                 assert all(isinstance(s, sc.Solution) for s in solutions[0])
+                assert all(s.solver == solver for s in solutions[0])
         else:
             assert solutions is None
 
@@ -114,7 +116,8 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
         )
-
+        ncpu = min(len(circulating_currents), os.cpu_count())
+        solver = f"superscreen.solve_many:multiprocessing:{ncpu}"
         solutions, paths = solutions_mp, paths_mp
         if save:
             assert paths is not None
@@ -128,9 +131,11 @@ def test_solve_many(
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
                 assert all(isinstance(s, sc.Solution) for s in solutions)
+                assert all(s.solver == solver for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
                 assert all(isinstance(s, sc.Solution) for s in solutions[0])
+                assert all(s.solver == solver for s in solutions[0])
         else:
             assert solutions is None
 
@@ -147,7 +152,7 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
         )
-
+        solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray
         if save:
             assert paths is not None
@@ -161,9 +166,11 @@ def test_solve_many(
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
                 assert all(isinstance(s, sc.Solution) for s in solutions)
+                assert all(s.solver == solver for s in solutions)
             else:
                 assert all(isinstance(lst, list) for lst in solutions)
                 assert all(isinstance(s, sc.Solution) for s in solutions[0])
+                assert all(s.solver == solver for s in solutions[0])
         else:
             assert solutions is None
 
@@ -172,12 +179,12 @@ def test_solve_many(
                 for sol_serial, sol_mp, sol_ray in zip(
                     solutions_serial, solutions_mp, solutions_ray
                 ):
-                    assert sol_serial.equals(sol_mp, require_same_timestamp=False)
-                    assert sol_serial.equals(sol_ray, require_same_timestamp=False)
-                    assert sol_ray.equals(sol_mp, require_same_timestamp=False)
+                    assert sol_serial.equals(sol_mp)
+                    assert sol_serial.equals(sol_ray)
+                    assert sol_ray.equals(sol_mp)
             else:
                 for solutions in zip(solutions_serial, solutions_mp, solutions_ray):
                     for sol_serial, sol_mp, sol_ray in zip(*solutions):
-                        assert sol_serial.equals(sol_mp, require_same_timestamp=False)
-                        assert sol_serial.equals(sol_ray, require_same_timestamp=False)
-                        assert sol_ray.equals(sol_mp, require_same_timestamp=False)
+                        assert sol_serial.equals(sol_mp)
+                        assert sol_serial.equals(sol_ray)
+                        assert sol_ray.equals(sol_mp)
