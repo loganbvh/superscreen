@@ -289,6 +289,9 @@ class CompositeParameter(Parameter):
         if other is self:
             return True
 
+        if not isinstance(other, type(self)):
+            return False
+
         return (
             self.left == other.left
             and self.right == other.right

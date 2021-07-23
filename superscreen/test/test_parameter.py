@@ -70,15 +70,13 @@ def test_parameter_math(func, args):
     assert param2 == param2
     assert param1 != param2
 
+    assert (param1 * param2) == (param1 * param2)
+    assert (param1 ** 2) != param1
+    assert (param1 ** 2) != param1 * param2
 
-@pytest.mark.parametrize(
-    "func, args",
-    [
-        (func_2d, (np.random.rand(100), np.random.rand(100))),
-        (func_3d, (np.random.rand(100), np.random.rand(100), np.random.rand(100))),
-    ],
-)
-def test_pickle_parameter(func, args):
+
+@pytest.mark.parametrize("func", [func_2d, func_3d])
+def test_pickle_parameter(func):
 
     param1 = sc.Parameter(func, sigma=10)
     param2 = sc.Parameter(func, sigma=0.1)
@@ -88,3 +86,4 @@ def test_pickle_parameter(func, args):
 
     assert pickle.loads(pickle.dumps(param1 * param2)) == (param1 * param2)
     assert pickle.loads(pickle.dumps(param1 - param2)) == (param1 - param2)
+    assert pickle.loads(pickle.dumps(param1 * param2)) != (param1 / param2)
