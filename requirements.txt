@@ -1,5 +1,6 @@
 backports-datetime-fromisoformat
 dill
+ipython<=7.15
 jupyter
 matplotlib
 meshpy

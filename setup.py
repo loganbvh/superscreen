@@ -25,6 +25,7 @@ PYTHON_VERSION = ">=3.6"
 INSTALL_REQUIRES = [
     "backports-datetime-fromisoformat",
     "dill",
+    "ipython<=7.15",
     "jupyter",
     "matplotlib",
     "meshpy",
