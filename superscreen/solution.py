@@ -33,6 +33,7 @@ class Solution(object):
         field_units: Units of the applied field
         current_units: Units used for current quantities.
         circulating_currents: A dict of ``{hole_name: circulating_current}``
+        solver: The solver method that generated the solution.
     """
 
     def __init__(
@@ -48,6 +49,7 @@ class Solution(object):
         circulating_currents: Optional[
             Dict[str, Union[float, str, pint.Quantity]]
         ] = None,
+        solver: str = "superscreen.solve",
     ):
         self.device = device
         self.streams = streams
@@ -59,6 +61,7 @@ class Solution(object):
         # The should never be changed after instantiation.
         self._field_units = field_units
         self._current_units = current_units
+        self._solver = solver
         self._time_created = datetime.now()
         self._version_info = version_dict()
 
@@ -71,6 +74,11 @@ class Solution(object):
     def current_units(self) -> str:
         """The units in which currents are specified."""
         return self._current_units
+
+    @property
+    def solver(self) -> str:
+        """The solver method that generated the solution."""
+        return self._solver
 
     @property
     def time_created(self) -> datetime:
@@ -441,6 +449,7 @@ class Solution(object):
             "circulating_currents": circ_currents,
             "field_units": self.field_units,
             "current_units": self.current_units,
+            "solver": self.solver,
             "time_created": self.time_created.isoformat(),
             "version_info": self.version_info,
         }
@@ -500,7 +509,11 @@ class Solution(object):
 
         return solution
 
-    def equals(self, other: Any, require_same_timestamp: bool = False) -> bool:
+    def equals(
+        self,
+        other: Any,
+        require_same_timestamp: bool = False,
+    ) -> bool:
         """Check whether two solutions are equal.
 
         Args:
