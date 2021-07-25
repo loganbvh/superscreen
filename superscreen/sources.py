@@ -9,7 +9,7 @@ def constant(
     x: Union[int, float, np.ndarray],
     y: Union[int, float, np.ndarray],
     z: Union[int, float, np.ndarray],
-    value: Optional[Union[int, float]] = 0,
+    value: Union[int, float] = 0,
 ) -> Union[int, float, np.ndarray]:
     """Constant field.
 

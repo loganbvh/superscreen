@@ -40,7 +40,6 @@ def solution1(device):
         applied_field=applied_field,
         circulating_currents=None,
         field_units="mT",
-        coupled=True,
         iterations=1,
     )
 
@@ -61,7 +60,6 @@ def solution2(device):
         applied_field=applied_field,
         circulating_currents=circulating_currents,
         field_units="mT",
-        coupled=True,
         iterations=1,
     )
 

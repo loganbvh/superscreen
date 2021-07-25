@@ -350,10 +350,9 @@ def solve(
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: Optional[bool] = True,
-    coupled: Optional[bool] = True,
-    iterations: Optional[int] = 1,
-    log_level: Optional[int] = logging.INFO,
+    check_inversion: bool = True,
+    iterations: int = 0,
+    log_level: int = logging.INFO,
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
@@ -362,12 +361,12 @@ def solve(
     1. Compute the stream functions and fields for each layer given
     only the applied field.
 
-    2. If coupled is True and there are multiple layers, then for each layer,
+    2. If iterations > 1 and there are multiple layers, then for each layer,
     calculate the screening field from all other layers and recompute the
     stream function and fields based on the sum of the applied field
     and the screening fields from all other layers.
 
-    3. If iterations > 1, then repeat step 2 (iterations - 1) times.
+    3. Repeat step 2 (iterations - 1) times.
 
 
     Args:
@@ -383,15 +382,11 @@ def solve(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-        coupled: Whether to account for the interactions between different layers
-            (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
-            (iterations is ignored if coupled is False).
         log_level: Logging level to use, if any.
 
     Returns:
-        A list of Solutions of length 1 if coupled is False,
-        or length (iterations + 1) if coupled is True.
+        A list of Solutions ``iterations + 1``.
     """
 
     if log_level is not None:
@@ -460,9 +455,7 @@ def solve(
     )
     solutions.append(solution)
 
-    if coupled and len(device.layers) > 1:
-        if iterations < 1:
-            raise ValueError(f"Iterations ({iterations}) cannot be less than 1.")
+    if iterations and len(device.layers) > 1:
 
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
@@ -563,14 +556,13 @@ def solve_many(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: Optional[bool] = True,
-    coupled: Optional[bool] = True,
-    iterations: Optional[int] = 1,
+    check_inversion: bool = True,
+    iterations: int = 0,
     product: bool = False,
     directory: Optional[str] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
-    log_level: Optional[int] = logging.INFO,
+    log_level: int = logging.INFO,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -594,10 +586,7 @@ def solve_many(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-        coupled: Whether to account for the interactions between different layers
-            (e.g. shielding).
         iterations: Number of times to compute the interactions between layers
-            (iterations is ignored if coupled is False).
         product: If True, then all combinations of applied_fields,
             circulating_currrents, and layer_update_kwargs are simulated (the
             behavior is given by itertools.product(), i.e. a nested for loop).
@@ -621,6 +610,7 @@ def solve_many(
     parallel_methods = {
         None: parallel.solve_many_serial,
         False: parallel.solve_many_serial,
+        "serial": parallel.solve_many_serial,
         "multiprocessing": parallel.solve_many_mp,
         "mp": parallel.solve_many_mp,
         "ray": parallel.solve_many_ray,
@@ -641,7 +631,6 @@ def solve_many(
         field_units=field_units,
         current_units=current_units,
         check_inversion=check_inversion,
-        coupled=coupled,
         iterations=iterations,
         product=product,
         directory=directory,

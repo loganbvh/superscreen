@@ -95,7 +95,7 @@ class Solution(object):
         dataset: str,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
-        method: Optional[str] = "cubic",
+        method: str = "cubic",
         with_units: bool = False,
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
@@ -163,7 +163,7 @@ class Solution(object):
         self,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
-        method: Optional[str] = "cubic",
+        method: str = "cubic",
         units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
@@ -280,7 +280,7 @@ class Solution(object):
         zs: Optional[Union[float, np.ndarray]] = None,
         vector: bool = False,
         units: Optional[str] = None,
-        with_units: Optional[bool] = True,
+        with_units: bool = True,
         return_sum: bool = True,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Calculate the field due to currents in the device at any point(s) in space.

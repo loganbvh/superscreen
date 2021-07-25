@@ -48,7 +48,6 @@ def test_current_value(device):
         applied_field=applied_field,
         circulating_currents=circulating_currents,
         field_units="mT",
-        coupled=True,
         iterations=1,
     )[-1]
 
