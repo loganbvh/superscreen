@@ -39,7 +39,6 @@ def solution(device):
         applied_field=applied_field,
         circulating_currents=None,
         field_units="mT",
-        coupled=True,
         iterations=5,
     )
 
