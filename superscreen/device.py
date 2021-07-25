@@ -572,8 +572,8 @@ class Device(object):
     def plot_polygons(
         self,
         ax: Optional[plt.Axes] = None,
-        grid: Optional[bool] = False,
-        legend: Optional[bool] = True,
+        grid: bool = False,
+        legend: bool = True,
         figsize: Optional[Tuple[float, float]] = None,
         **kwargs,
     ) -> plt.Axes:
@@ -613,9 +613,9 @@ class Device(object):
     def plot_mesh(
         self,
         ax: Optional[plt.Axes] = None,
-        edges: Optional[bool] = True,
-        vertices: Optional[bool] = False,
-        grid: Optional[bool] = True,
+        edges: bool = True,
+        vertices: bool = False,
+        grid: bool = True,
         figsize: Optional[Tuple[float, float]] = None,
         **kwargs,
     ) -> plt.Axes:

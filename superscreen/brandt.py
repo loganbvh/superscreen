@@ -610,6 +610,7 @@ def solve_many(
     parallel_methods = {
         None: parallel.solve_many_serial,
         False: parallel.solve_many_serial,
+        "serial": parallel.solve_many_serial,
         "multiprocessing": parallel.solve_many_mp,
         "mp": parallel.solve_many_mp,
         "ray": parallel.solve_many_ray,
