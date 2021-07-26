@@ -298,8 +298,8 @@ def mass_matrix(
 
 
 def laplace_operator(
-    points: Union[np.ndarray, sp.csr_matrix],
-    triangles: Union[np.ndarray, sp.csr_matrix],
+    points: np.ndarray,
+    triangles: np.ndarray,
     weight_method: str = "half_cotangent",
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:

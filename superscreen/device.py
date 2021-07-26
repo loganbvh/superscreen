@@ -557,7 +557,7 @@ class Device(object):
         )
         logger.info("Calculating kernel matrix.")
         self.q = brandt.q_matrix(points)
-        # Each layer has its own edge vector C, so each layer's kernal matrix Q
+        # Each layer has its own edge vector C, so each layer's kernel matrix Q
         # will have different diagonals.
         self.C_vectors = {}
         x, y = points.T
