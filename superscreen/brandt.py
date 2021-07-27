@@ -387,7 +387,7 @@ def solve(
         log_level: Logging level to use, if any.
 
     Returns:
-        A list of Solutions ``iterations + 1``.
+        A list of Solutions of length ``iterations + 1``.
     """
 
     if log_level is not None:
