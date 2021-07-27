@@ -447,10 +447,6 @@ def solve(
         fields={
             layer: field / field_conversion_magnitude for layer, field in fields.items()
         },
-        screening_fields={
-            layer: screening_field / field_conversion_magnitude
-            for layer, screening_field in screening_fields.items()
-        },
         applied_field=applied_field,
         field_units=field_units,
         current_units=current_units,
@@ -529,10 +525,6 @@ def solve(
                 fields={
                     layer: field / field_conversion_magnitude
                     for layer, field in fields.items()
-                },
-                screening_fields={
-                    layer: screening_field / field_conversion_magnitude
-                    for layer, screening_field in screening_fields.items()
                 },
                 applied_field=applied_field,
                 field_units=field_units,

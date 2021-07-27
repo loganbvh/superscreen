@@ -28,7 +28,6 @@ class Solution(object):
         device: The ``Device`` that was solved
         streams: A dict of ``{layer_name: stream_function}``
         fields: A dict of ``{layer_name: total_field}``
-        screening_fields: A dict of ``{layer_name: screening_field}``
         applied_field: The function defining the applied field
         field_units: Units of the applied field
         current_units: Units used for current quantities.
@@ -42,7 +41,6 @@ class Solution(object):
         device: Device,
         streams: Dict[str, np.ndarray],
         fields: Dict[str, np.ndarray],
-        screening_fields: Dict[str, np.ndarray],
         applied_field: Callable,
         field_units: str,
         current_units: str,
@@ -54,8 +52,8 @@ class Solution(object):
         self.device = device
         self.streams = streams
         self.fields = fields
-        self.screening_fields = screening_fields
         self.applied_field = applied_field
+        self._screening_fields = None
         self.circulating_currents = circulating_currents or {}
         # Make field_units and current_units "read-only" attributes.
         # The should never be changed after instantiation.
@@ -89,6 +87,20 @@ class Solution(object):
     def version_info(self) -> Dict[str, str]:
         """A dictionary of dependency versions."""
         return self._version_info
+
+    @property
+    def screening_fields(self) -> Dict[str, np.ndarray]:
+        """A dict of ``{layer_name: screening_field}``."""
+        points = self.device.points
+        layers = self.device.layers
+        if self._screening_fields is None:
+            self._screening_fields = {}
+            for layer, total_field in self.fields.items():
+                Hz_applied = self.applied_field(
+                    points[:, 0], points[:, 1], layers[layer].z0
+                )
+                self._screening_fields[layer] = total_field - Hz_applied
+        return self._screening_fields
 
     def grid_data(
         self,
@@ -402,13 +414,19 @@ class Solution(object):
             fields["applied_field"] = H_applied
         return fields
 
-    def to_file(self, directory: str, save_mesh: bool = True) -> None:
+    def to_file(
+        self,
+        directory: str,
+        save_mesh: bool = True,
+        compressed: bool = True,
+    ) -> None:
         """Saves a Solution to disk.
 
         Args:
             directory: The name of the directory in which to save the solution
                 (must either be empty or not yet exist).
             save_mesh: Whether to save the device mesh.
+            compressed: Whether to use numpy.savez_compressed rather than numpy.savez.
         """
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
@@ -420,13 +438,13 @@ class Solution(object):
 
         # Save arrays
         array_paths = []
+        save_npz = np.savez_compressed if compressed else np.savez
         for layer in self.device.layers:
             path = f"{layer}_arrays.npz"
-            np.savez(
+            save_npz(
                 os.path.join(directory, path),
                 streams=self.streams[layer],
                 fields=self.fields[layer],
-                screening_fields=self.screening_fields[layer],
             )
             array_paths.append(path)
 
@@ -479,14 +497,12 @@ class Solution(object):
         # Load arrays
         streams = {}
         fields = {}
-        screening_fields = {}
         array_paths = info.pop("arrays")
         for path in array_paths:
             layer = path.split("_")[0]
             with np.load(os.path.join(directory, path)) as arrays:
                 streams[layer] = arrays["streams"]
                 fields[layer] = arrays["fields"]
-                screening_fields[layer] = arrays["screening_fields"]
 
         # Load applied field function
         with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
@@ -499,7 +515,6 @@ class Solution(object):
             device=device,
             streams=streams,
             fields=fields,
-            screening_fields=screening_fields,
             applied_field=applied_field,
             **info,
         )
@@ -550,9 +565,6 @@ class Solution(object):
                 return False
         for name, array in self.fields.items():
             if not np.allclose(array, other.fields[name]):
-                return False
-        for name, array in self.screening_fields.items():
-            if not np.allclose(array, other.screening_fields[name]):
                 return False
 
         return True
