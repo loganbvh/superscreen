@@ -494,14 +494,21 @@ class Device(object):
                 i += 1
         if optimesh_steps:
             logger.info(f"Optimizing mesh with {triangles.shape[0]} triangles.")
-            points, triangles = optimesh.optimize_points_cells(
-                points,
-                triangles,
-                optimesh_method,
-                optimesh_tolerance,
-                optimesh_steps,
-                verbose=optimesh_verbose,
-            )
+            try:
+                points, triangles = optimesh.optimize_points_cells(
+                    points,
+                    triangles,
+                    optimesh_method,
+                    optimesh_tolerance,
+                    optimesh_steps,
+                    verbose=optimesh_verbose,
+                )
+            except np.linalg.LinAlgError as e:
+                err = (
+                    "LinAlgError encountered in optimesh. Try reducing min_triangles "
+                    "or increasing the number of points in the device's important polygons."
+                )
+                raise RuntimeError(err) from e
         logger.info(
             f"Finished generating mesh with {points.shape[0]} points and "
             f"{triangles.shape[0]} triangles."
