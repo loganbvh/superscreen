@@ -6,13 +6,9 @@ import warnings
 import multiprocessing as mp
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
+import ray
 import pint
 import numpy as np
-
-try:
-    import ray
-except ImportError:
-    ray = None
 
 from . import brandt
 from .io import save_solutions
@@ -455,10 +451,6 @@ def solve_many_ray(
     log_level: Optional[int] = None,
 ):
     """Solve many models in parallel using ray."""
-    if ray is None:
-        raise EnvironmentError(
-            "ray is not installed. Please run 'pip install ray[default]' to install it."
-        )
 
     models = create_models(
         device,
