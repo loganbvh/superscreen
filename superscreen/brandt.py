@@ -11,6 +11,7 @@ from scipy.spatial.distance import cdist
 from .fem import areas, centroids
 from .parameter import Constant, Parameter
 from .solution import Solution
+from .sources import ConstantField
 
 if TYPE_CHECKING:
     from .device import Device
@@ -346,7 +347,7 @@ def brandt_layer(
 def solve(
     *,
     device: "Device",
-    applied_field: Callable,
+    applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
@@ -386,7 +387,7 @@ def solve(
         log_level: Logging level to use, if any.
 
     Returns:
-        A list of Solutions ``iterations + 1``.
+        A list of Solutions of length ``iterations + 1``.
     """
 
     if log_level is not None:
@@ -402,6 +403,8 @@ def solve(
     streams = {}
     fields = {}
     screening_fields = {}
+
+    applied_field = applied_field or ConstantField(0)
 
     field_conversion = field_conversion_factor(
         field_units,
@@ -443,10 +446,6 @@ def solve(
         streams=streams,
         fields={
             layer: field / field_conversion_magnitude for layer, field in fields.items()
-        },
-        screening_fields={
-            layer: screening_field / field_conversion_magnitude
-            for layer, screening_field in screening_fields.items()
         },
         applied_field=applied_field,
         field_units=field_units,
@@ -527,10 +526,6 @@ def solve(
                     layer: field / field_conversion_magnitude
                     for layer, field in fields.items()
                 },
-                screening_fields={
-                    layer: screening_field / field_conversion_magnitude
-                    for layer, screening_field in screening_fields.items()
-                },
                 applied_field=applied_field,
                 field_units=field_units,
                 current_units=current_units,
@@ -545,7 +540,7 @@ def solve_many(
     *,
     device: "Device",
     parallel_method: Optional[str] = None,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],

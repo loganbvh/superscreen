@@ -494,14 +494,21 @@ class Device(object):
                 i += 1
         if optimesh_steps:
             logger.info(f"Optimizing mesh with {triangles.shape[0]} triangles.")
-            points, triangles = optimesh.optimize_points_cells(
-                points,
-                triangles,
-                optimesh_method,
-                optimesh_tolerance,
-                optimesh_steps,
-                verbose=optimesh_verbose,
-            )
+            try:
+                points, triangles = optimesh.optimize_points_cells(
+                    points,
+                    triangles,
+                    optimesh_method,
+                    optimesh_tolerance,
+                    optimesh_steps,
+                    verbose=optimesh_verbose,
+                )
+            except np.linalg.LinAlgError as e:
+                err = (
+                    "LinAlgError encountered in optimesh. Try reducing min_triangles "
+                    "or increasing the number of points in the device's important polygons."
+                )
+                raise RuntimeError(err) from e
         logger.info(
             f"Finished generating mesh with {points.shape[0]} points and "
             f"{triangles.shape[0]} triangles."
@@ -651,13 +658,17 @@ class Device(object):
         ax.set_ylabel(f"$y$ $[{units:~L}]$")
         return ax
 
-    def to_file(self, directory: str, save_mesh: bool = True) -> None:
+    def to_file(
+        self, directory: str, save_mesh: bool = True, compressed: bool = True
+    ) -> None:
         """Serializes the Device to disk.
 
         Args:
             directory: The name of the directory in which to save the Device
                 (must either be empty or not yet exist).
             save_mesh: Whether to save the full mesh to file.
+            compressed: Whether to use numpy.savez_compressed rather than numpy.savez
+                when saving the mesh.
         """
         from .io import NumpyJSONEncoder
 
@@ -716,8 +727,9 @@ class Device(object):
 
         if save_mesh:
             # Serialize mesh, if it exists.
+            save_npz = np.savez_compressed if compressed else np.savez
             if self.points is not None:
-                np.savez(
+                save_npz(
                     os.path.join(directory, "mesh.npz"),
                     points=self.points,
                     triangles=self.triangles,

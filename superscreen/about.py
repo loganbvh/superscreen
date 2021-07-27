@@ -4,18 +4,12 @@ import time
 import inspect
 from typing import Optional, Union, Dict
 
+import ray
 import numpy
 import scipy
 import IPython
 from IPython.display import HTML
 import matplotlib
-
-try:
-    import ray
-
-    ray_version = ray.__version__
-except ImportError:
-    ray_version = None
 
 import superscreen
 
@@ -51,7 +45,7 @@ def version_dict() -> Dict[str, Union[str, str]]:
         "Numpy": numpy.__version__,
         "SciPy": scipy.__version__,
         "matplotlib": matplotlib.__version__,
-        "ray": ray_version,
+        "ray": ray.__version__,
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",

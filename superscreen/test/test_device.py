@@ -106,15 +106,16 @@ def test_make_mesh(device, min_triangles, optimesh_steps, sparse, weight_method)
 
 
 @pytest.mark.parametrize("save_mesh", [False, True])
-def test_device_to_file(device, device_with_mesh, save_mesh):
+@pytest.mark.parametrize("compressed", [False, True])
+def test_device_to_file(device, device_with_mesh, save_mesh, compressed):
 
     with tempfile.TemporaryDirectory() as directory:
-        device.to_file(directory, save_mesh=save_mesh)
+        device.to_file(directory, save_mesh=save_mesh, compressed=compressed)
         loaded_device = sc.Device.from_file(directory)
     assert device == loaded_device
 
     with tempfile.TemporaryDirectory() as directory:
-        device_with_mesh.to_file(directory, save_mesh=save_mesh)
+        device_with_mesh.to_file(directory, save_mesh=save_mesh, compressed=compressed)
         loaded_device = sc.Device.from_file(directory)
     assert device_with_mesh == loaded_device
 
