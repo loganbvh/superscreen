@@ -11,6 +11,7 @@ from scipy.spatial.distance import cdist
 from .fem import areas, centroids
 from .parameter import Constant, Parameter
 from .solution import Solution
+from .sources import ConstantField
 
 if TYPE_CHECKING:
     from .device import Device
@@ -346,7 +347,7 @@ def brandt_layer(
 def solve(
     *,
     device: "Device",
-    applied_field: Callable,
+    applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
@@ -402,6 +403,8 @@ def solve(
     streams = {}
     fields = {}
     screening_fields = {}
+
+    applied_field = applied_field or ConstantField(0)
 
     field_conversion = field_conversion_factor(
         field_units,
@@ -545,7 +548,7 @@ def solve_many(
     *,
     device: "Device",
     parallel_method: Optional[str] = None,
-    applied_fields: Union[Parameter, List[Parameter]],
+    applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
             Dict[str, Union[float, str, pint.Quantity]],
