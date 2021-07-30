@@ -452,7 +452,8 @@ def solve(
         streams=streams,
         fields={
             # Units: field_units
-            layer: field / field_conversion_magnitude for layer, field in fields.items()
+            layer: field / field_conversion_magnitude
+            for layer, field in fields.items()
         },
         applied_field=applied_field,
         field_units=field_units,
