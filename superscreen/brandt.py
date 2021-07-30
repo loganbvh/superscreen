@@ -212,6 +212,7 @@ def brandt_layer(
     device: "Device",
     layer: str,
     applied_field: Callable,
+    field_conversion_magnitude: float,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
@@ -223,13 +224,16 @@ def brandt_layer(
         device: The Device to simulate.
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
-            as a function of x, y coordinates.
+            as a function of x, y coordinates in units of
+            ``field_units`` as specified in ``solve``.
+        field_conversion_magnitude: A conversion factor from ``field_units`` to
+            ``{current_units} / {device.length_units}``.
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
         current_units: Units to use for current quantities. The applied field will be
-            converted to units of [current_units / device.length_units].
+            converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
         check_lambda: Whether to generate a warning if Lambda <= london_lambda.
 
@@ -272,8 +276,9 @@ def brandt_layer(
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
-    # Units for field are {current_units} / {device.length_units}
-    Hz_applied = applied_field(points[:, 0], points[:, 1])
+    # Units for Hz_applied are {current_units} / {device.length_units}.
+    # Use field_conversion_magnitude to get to these units.
+    Hz_applied = applied_field(points[:, 0], points[:, 1]) * field_conversion_magnitude
 
     if isinstance(Lambda, (int, float)):
         # Make Lambda a callable
@@ -424,13 +429,14 @@ def solve(
         logger.info(f"Calculating {name} response to applied field.")
 
         def layer_field(x, y):
-            # Units: current_units / device.length_units
-            return applied_field(x, y, layer.z0) * field_conversion_magnitude
+            # Units: field_units
+            return applied_field(x, y, layer.z0)
 
         g, total_field, screening_field = brandt_layer(
             device=device,
             layer=name,
             applied_field=layer_field,
+            field_conversion_magnitude=field_conversion_magnitude,
             circulating_currents=circulating_currents,
             current_units=current_units,
             check_inversion=check_inversion,
@@ -445,6 +451,7 @@ def solve(
         device=device,
         streams=streams,
         fields={
+            # Units: field_units
             layer: field / field_conversion_magnitude for layer, field in fields.items()
         },
         applied_field=applied_field,
@@ -500,22 +507,25 @@ def solve(
                 )
 
                 def layer_field(x, y):
-                    # Units: current_units / device.length_units
+                    # Units: field_units
                     return (
-                        applied_field(x, y, layer.z0) * field_conversion_magnitude
-                        + other_screening_fields[name]
+                        applied_field(x, y, layer.z0)
+                        + other_screening_fields[name] / field_conversion_magnitude
                     )
 
                 g, total_field, screening_field = brandt_layer(
                     device=device,
                     layer=name,
                     applied_field=layer_field,
+                    field_conversion_magnitude=field_conversion_magnitude,
                     circulating_currents=circulating_currents,
                     current_units=current_units,
                     check_inversion=check_inversion,
                     check_lambda=False,
                 )
+                # Units: current_units
                 streams[name] = g
+                # Units: current_units / device.length_units
                 fields[name] = total_field
                 screening_fields[name] = screening_field
 
@@ -523,6 +533,7 @@ def solve(
                 device=device,
                 streams=streams,
                 fields={
+                    # Units: field_units
                     layer: field / field_conversion_magnitude
                     for layer, field in fields.items()
                 },

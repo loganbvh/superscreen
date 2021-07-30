@@ -326,7 +326,6 @@ class Solution(object):
         triangles = device.triangles
 
         units = units or self.field_units
-        old_units = f"{self.current_units} / {device.length_units}"
 
         # In case something like a list [x, y] or [x, y, z] is given
         positions = np.atleast_2d(positions)
@@ -363,7 +362,7 @@ class Solution(object):
         H_applied = convert_field(
             H_applied,
             units,
-            old_units=old_units,
+            old_units=self.field_units,
             ureg=ureg,
             magnitude=(not with_units),
         )
@@ -404,7 +403,7 @@ class Solution(object):
             fields[name] = convert_field(
                 H,
                 units,
-                old_units=old_units,
+                old_units=f"{self.current_units} / {device.length_units}",
                 ureg=ureg,
                 magnitude=(not with_units),
             )
