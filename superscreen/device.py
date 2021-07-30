@@ -340,9 +340,9 @@ class Device(object):
         arrays = {name: getattr(self, name) for name in self.ARRAY_NAMES}
         for name, array in arrays.items():
             if copy_arrays and (name == "C_vectors"):
-                for name, array in arrays["C_vectors"].items():
-                    arrays["C_vectors"][name] = array.copy()
-            if dense and sp.issparse(array):
+                for name, arr in arrays["C_vectors"].items():
+                    arrays["C_vectors"][name] = arr.copy()
+            elif dense and sp.issparse(array):
                 arrays[name] = array.toarray()
             elif copy_arrays and array is not None:
                 arrays[name] = array.copy()

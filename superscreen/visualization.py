@@ -759,7 +759,7 @@ def plot_currents(
             used_axes.append(cax)
         if streamplot:
             if min_stream_amp is not None:
-                cutoff = J.max() * min_stream_amp
+                cutoff = np.nanmax(J) * min_stream_amp
                 Jx[J < cutoff] = np.nan
                 Jy[J < cutoff] = np.nan
             ax.streamplot(xgrid, ygrid, Jx, Jy, color="w", density=1, linewidth=0.75)
