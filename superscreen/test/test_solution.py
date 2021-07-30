@@ -3,7 +3,6 @@ import tempfile
 import numpy as np
 import pint
 import pytest
-from scipy.sparse import compressed
 
 import superscreen as sc
 

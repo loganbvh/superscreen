@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import itertools
+import tempfile
 import warnings
 import multiprocessing as mp
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
@@ -11,12 +12,26 @@ import pint
 import numpy as np
 
 from . import brandt
-from .io import save_solutions
+from .io import load_solutions, save_solutions
 from .device import Device
 from .parameter import Parameter
+from .solution import Solution
 
 
 logger = logging.getLogger(__name__)
+
+
+class NullContextManager(object):
+    """Does nothing."""
+
+    def __init__(self, resource=None):
+        self.resource = resource
+
+    def __enter__(self):
+        return self.resource
+
+    def __exit__(self, *args):
+        pass
 
 
 def create_models(
@@ -419,13 +434,7 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-    s = None
-    if return_solutions:
-        if keep_only_final_solution:
-            s = solutions[-1]
-        else:
-            s = solutions
-    return s, path
+    return path
 
 
 def solve_many_ray(
@@ -464,10 +473,12 @@ def solve_many_ray(
     nproc = mp.cpu_count()
     if not ray.is_initialized():
         nproc = min(len(models), nproc)
-        logger.info("Initializing ray with {nproc} process(es).")
+        logger.info(f"Initializing ray with {nproc} process(es).")
         ray.init(num_cpus=nproc)
 
-    nproc = int(ray.available_resources()["CPU"])
+    ray_resources = ray.available_resources()
+    nproc = int(ray_resources["CPU"])
+    logger.info(f"ray resources: {ray_resources}")
 
     solver = f"superscreen.solve_many:ray:{nproc}"
 
@@ -484,28 +495,50 @@ def solve_many_ray(
         f"Solving {len(models)} models in parallel using ray with {nproc} process(es)."
     )
 
-    result_ids = []
-    for i, (device, applied_field, circulating_currents) in enumerate(models):
-        result_ids.append(
-            solve_single_ray.remote(
-                directory=directory,
-                index=i,
-                arrays=arrays_ref,
-                return_solutions=return_solutions,
-                keep_only_final_solution=keep_only_final_solution,
-                solver=solver,
-                device=device,
-                applied_field=applied_field,
-                circulating_currents=circulating_currents,
-                field_units=field_units,
-                current_units=current_units,
-                iterations=iterations,
-                check_inversion=check_inversion,
-                log_level=log_level,
-            )
-        )
+    # To prevent filling up the ray object store, we save solutions to disk
+    # even if return_solutions is True.
+    if directory is None:
+        save_context = tempfile.TemporaryDirectory()
+    else:
+        save_context = NullContextManager(directory)
 
-    results = ray.get(result_ids)
+    with save_context as save_directory:
+        result_ids = []
+        for i, (device, applied_field, circulating_currents) in enumerate(models):
+            result_ids.append(
+                solve_single_ray.remote(
+                    directory=save_directory,
+                    index=i,
+                    arrays=arrays_ref,
+                    return_solutions=return_solutions,
+                    keep_only_final_solution=keep_only_final_solution,
+                    solver=solver,
+                    device=device,
+                    applied_field=applied_field,
+                    circulating_currents=circulating_currents,
+                    field_units=field_units,
+                    current_units=current_units,
+                    iterations=iterations,
+                    check_inversion=check_inversion,
+                    log_level=log_level,
+                )
+            )
+
+        paths = ray.get(result_ids)
+
+        solutions = None
+        if return_solutions:
+            # Load solutions from disk.
+            solutions = []
+            for path in paths:
+                if keep_only_final_solution:
+                    solution = Solution.from_file(path)
+                    solution.device.set_arrays(arrays)
+                    solutions.append(solution)
+                else:
+                    solutions.append(load_solutions(path))
+                    for solution in solutions[-1]:
+                        solution.device.set_arrays(arrays)
 
     t1 = time.time()
     elapsed_seconds = t1 - t0
@@ -516,12 +549,13 @@ def solve_many_ray(
         f"({seconds_per_model:.3f} seconds per model)."
     )
 
-    all_solutions, paths = zip(*results)
-    all_solutions = list(all_solutions)
-    paths = list(paths)
-    if all(s is None for s in all_solutions):
-        all_solutions = None
-    if all(p is None for p in paths):
+    if directory is None:
         paths = None
 
-    return all_solutions, paths
+    # Delete references to objects in shared memory.
+    # I don't know if this is strictly necessary as they will
+    # soon fall out of scope, but it can't hurt.
+    del arrays_ref
+    del result_ids
+
+    return solutions, paths
