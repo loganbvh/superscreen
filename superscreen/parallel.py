@@ -433,7 +433,8 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-
+    del device
+    del kwargs["device"]
     return path
 
 
