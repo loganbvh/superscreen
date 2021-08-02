@@ -433,6 +433,10 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
+    # Delete references to objects in shared memory.
+    # I don't know if this is strictly necessary as they will
+    # soon fall out of scope, but it can't hurt.
+    del solutions
     del device
     del kwargs["device"]
     return path
