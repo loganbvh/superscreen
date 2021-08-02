@@ -559,6 +559,7 @@ def solve_many_ray(
     # Delete references to objects in shared memory.
     # I don't know if this is strictly necessary as they will
     # soon fall out of scope, but it can't hurt.
+    del arrays
     del arrays_ref
     del result_ids
     del models
