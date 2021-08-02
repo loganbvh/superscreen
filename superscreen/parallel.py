@@ -408,7 +408,6 @@ def solve_single_ray(
     directory,
     index,
     arrays,
-    return_solutions,
     keep_only_final_solution,
     solver,
     **kwargs,
@@ -434,6 +433,7 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
+
     return path
 
 
@@ -510,7 +510,6 @@ def solve_many_ray(
                     directory=save_directory,
                     index=i,
                     arrays=arrays_ref,
-                    return_solutions=return_solutions,
                     keep_only_final_solution=keep_only_final_solution,
                     solver=solver,
                     device=device,
@@ -557,5 +556,6 @@ def solve_many_ray(
     # soon fall out of scope, but it can't hurt.
     del arrays_ref
     del result_ids
+    del models
 
     return solutions, paths
