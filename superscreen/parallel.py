@@ -433,12 +433,6 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-    # Delete references to objects in shared memory.
-    # I don't know if this is strictly necessary as they will
-    # soon fall out of scope, but it can't hurt.
-    del solutions
-    del device
-    del kwargs["device"]
     return path
 
 
@@ -492,8 +486,9 @@ def solve_many_ray(
 
     t0 = time.time()
 
-    # Put the device's big arrays in shared memory
-    arrays = device.get_arrays(copy_arrays=False, dense=True)
+    # Put the device's big arrays in shared memory.
+    # The copy is necessary here so that the arrays do not get pinned in shared memory.
+    arrays = device.get_arrays(copy_arrays=True, dense=True)
     arrays_ref = ray.put(arrays)
 
     logger.info(
@@ -509,7 +504,7 @@ def solve_many_ray(
 
     with save_context as save_directory:
         result_ids = []
-        for i, (device, applied_field, circulating_currents) in enumerate(models):
+        for i, (device_copy, applied_field, circulating_currents) in enumerate(models):
             result_ids.append(
                 solve_single_ray.remote(
                     directory=save_directory,
@@ -517,7 +512,7 @@ def solve_many_ray(
                     arrays=arrays_ref,
                     keep_only_final_solution=keep_only_final_solution,
                     solver=solver,
-                    device=device,
+                    device=device_copy,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
                     field_units=field_units,
@@ -533,6 +528,10 @@ def solve_many_ray(
         solutions = None
         if return_solutions:
             # Load solutions from disk.
+            # Set arrays with the original device arrays,
+            # not the ones in shared memory.
+            del arrays
+            arrays = device.get_arrays(copy_arrays=False, dense=False)
             solutions = []
             for path in paths:
                 if keep_only_final_solution:
@@ -555,13 +554,5 @@ def solve_many_ray(
 
     if directory is None:
         paths = None
-
-    # Delete references to objects in shared memory.
-    # I don't know if this is strictly necessary as they will
-    # soon fall out of scope, but it can't hurt.
-    del arrays
-    del arrays_ref
-    del result_ids
-    del models
 
     return solutions, paths
