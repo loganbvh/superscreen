@@ -498,7 +498,7 @@ class Solution(object):
         fields = {}
         array_paths = info.pop("arrays")
         for path in array_paths:
-            layer = path.split("_")[0]
+            layer = path.replace("_arrays.npz", "")
             with np.load(os.path.join(directory, path)) as arrays:
                 streams[layer] = arrays["streams"]
                 fields[layer] = arrays["fields"]
