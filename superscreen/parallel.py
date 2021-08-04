@@ -447,6 +447,11 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
+
+    del device
+    del kwargs["device"]
+    del solutions
+    
     return path
 
 
@@ -572,5 +577,10 @@ def solve_many_ray(
 
     if directory is None:
         paths = None
+
+    del models
+    del arrays
+    del arrays_ref
+    del result_ids
 
     return solutions, paths
