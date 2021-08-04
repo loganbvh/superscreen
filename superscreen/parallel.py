@@ -139,6 +139,7 @@ def solve_many_serial(
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
     log_level: Optional[int] = None,
+    use_shared_memory: bool = True,
 ):
     """Solve many models in a single process."""
 
@@ -239,9 +240,10 @@ def numpy_to_shared_array(array: np.ndarray) -> mp.RawArray:
     return shared_array
 
 
-def share_arrays(device: Device) -> Dict[str, Tuple[mp.RawArray, Tuple[int, ...]]]:
+def share_arrays(
+    arrays: Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]
+) -> Dict[str, Tuple[mp.RawArray, Tuple[int, ...]]]:
     """Convert all arrays in the device to shared RawArrays."""
-    arrays = device.get_arrays(copy_arrays=False, dense=True)
     C_vectors = {
         name: (numpy_to_shared_array(array), array.shape)
         for name, array in arrays["C_vectors"].items()
@@ -267,18 +269,23 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     return_solutions = kwargs.pop("return_solutions")
     keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     solver = kwargs.pop("solver")
+    use_shared_memory = kwargs.pop("use_shared_memory")
 
     device = kwargs["device"]
-    numpy_arrays = {}
-    numpy_arrays["C_vectors"] = {}
-    # init_arrays is the dict of arrays stored in shared memory
-    for name, data in init_arrays.items():
-        if name == "C_vectors":
-            for layer, (vec, shape) in data.items():
-                numpy_arrays["C_vectors"][layer] = shared_array_to_numpy(vec, shape)
-        else:
-            shared_array, shape = data
-            numpy_arrays[name] = shared_array_to_numpy(shared_array, shape)
+
+    if use_shared_memory:
+        # init_arrays is the dict of arrays stored in shared memory
+        numpy_arrays = {}
+        numpy_arrays["C_vectors"] = {}
+        for name, data in init_arrays.items():
+            if name == "C_vectors":
+                for layer, (vec, shape) in data.items():
+                    numpy_arrays["C_vectors"][layer] = shared_array_to_numpy(vec, shape)
+            else:
+                shared_array, shape = data
+                numpy_arrays[name] = shared_array_to_numpy(shared_array, shape)
+    else:
+        numpy_arrays = init_arrays
 
     device.set_arrays(numpy_arrays)
     kwargs["device"] = device
@@ -326,6 +333,7 @@ def solve_many_mp(
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
     log_level: Optional[int] = None,
+    use_shared_memory: bool = True,
 ) -> List[str]:
     """Solve many models in parallel using multiprocessing."""
     models = create_models(
@@ -342,8 +350,13 @@ def solve_many_mp(
 
     t0 = time.time()
 
-    # Put the device's big arrays in shared memory
-    shared_arrays = share_arrays(device)
+    arrays = device.get_arrays(copy_arrays=False, dense=True)
+
+    if use_shared_memory:
+        # Put the device's big arrays in shared memory
+        shared_arrays = share_arrays(arrays)
+    else:
+        shared_arrays = arrays
 
     nproc = min(len(models), mp.cpu_count())
     solver = f"superscreen.solve_many:multiprocessing:{nproc}"
@@ -365,6 +378,7 @@ def solve_many_mp(
                 check_inversion=check_inversion,
                 log_level=log_level,
                 solver=solver,
+                use_shared_memory=use_shared_memory,
             )
         )
 
@@ -457,6 +471,7 @@ def solve_many_ray(
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
     log_level: Optional[int] = None,
+    use_shared_memory: bool = True,
 ):
     """Solve many models in parallel using ray."""
 
@@ -489,7 +504,10 @@ def solve_many_ray(
     # Put the device's big arrays in shared memory.
     # The copy is necessary here so that the arrays do not get pinned in shared memory.
     arrays = device.get_arrays(copy_arrays=True, dense=True)
-    arrays_ref = ray.put(arrays)
+    if use_shared_memory:
+        arrays_ref = ray.put(arrays)
+    else:
+        arrays_ref = arrays
 
     logger.info(
         f"Solving {len(models)} models in parallel using ray with {nproc} process(es)."
