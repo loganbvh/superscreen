@@ -451,7 +451,7 @@ def solve_single_ray(
     del device
     del kwargs["device"]
     del solutions
-    
+
     return path
 
 
