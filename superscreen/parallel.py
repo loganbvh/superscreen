@@ -448,6 +448,7 @@ def solve_single_ray(
         else:
             save_solutions(solutions, path, save_mesh=False)
 
+    del arrays
     del device
     del kwargs["device"]
     del solutions
