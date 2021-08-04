@@ -223,8 +223,7 @@ def brandt_layer(
         device: The Device to simulate.
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
-            as a function of x, y coordinates in units of
-            ``field_units`` as specified in ``solve``.
+            as a function of x, y coordinates.
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
@@ -564,6 +563,7 @@ def solve_many(
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
     log_level: int = logging.INFO,
+    use_shared_memory: bool = True,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -599,6 +599,7 @@ def solve_many(
         keep_only_final_solution: Whether to keep/save only the Solution from
             the final iteration of superscreen.brandt.solve for each setup.
         log_level: Logging level to use, if any.
+        use_shared_memory: Whether to use shared memory if parallel_method is not None.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of
@@ -638,6 +639,7 @@ def solve_many(
         return_solutions=return_solutions,
         keep_only_final_solution=keep_only_final_solution,
         log_level=log_level,
+        use_shared_memory=use_shared_memory,
     )
 
     solutions, paths = parallel_methods[parallel_method](**kwargs)

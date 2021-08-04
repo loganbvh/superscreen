@@ -60,8 +60,14 @@ def test_ray_initialized(ray_initialized):
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("keep_only_final_solution", [False, True])
 @pytest.mark.parametrize("save", [False, True])
+@pytest.mark.parametrize("use_shared_memory", [False, True])
 def test_solve_many(
-    device, return_solutions, keep_only_final_solution, save, ray_initialized
+    device,
+    return_solutions,
+    keep_only_final_solution,
+    save,
+    use_shared_memory,
+    ray_initialized,
 ):
 
     applied_field = sc.sources.ConstantField(0)
@@ -79,6 +85,7 @@ def test_solve_many(
             return_solutions=return_solutions,
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
+            use_shared_memory=use_shared_memory,
         )
         solver = "superscreen.solve_many:serial:1"
         solutions, paths = solutions_serial, paths_serial
@@ -113,6 +120,7 @@ def test_solve_many(
             return_solutions=return_solutions,
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
+            use_shared_memory=use_shared_memory,
         )
         ncpu = min(len(circulating_currents), os.cpu_count())
         solver = f"superscreen.solve_many:multiprocessing:{ncpu}"
@@ -148,6 +156,7 @@ def test_solve_many(
             return_solutions=return_solutions,
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
+            use_shared_memory=use_shared_memory,
         )
         solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray
