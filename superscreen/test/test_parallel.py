@@ -7,21 +7,9 @@ import ray
 import superscreen as sc
 
 
-class NullContextManager(object):
-    """Does nothing."""
-
-    def __init__(self, resource=None):
-        self.resource = resource
-
-    def __enter__(self):
-        return self.resource
-
-    def __exit__(self, *args):
-        pass
-
-
 @pytest.fixture(scope="module")
 def ray_initialized():
+    # Seems to help on Windows :/
     assert os.environ["RAY_START_REDIS_WAIT_RETRIES"] == "48"
     ray.init(num_cpus=2, log_to_driver=False)
     try:
@@ -74,8 +62,11 @@ def test_solve_many(
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager()
-    with context as directory:
+    if save:
+        save_context = tempfile.TemporaryDirectory()
+    else:
+        save_context = sc.parallel.NullContextManager()
+    with save_context as directory:
         solutions_serial, paths_serial = sc.solve_many(
             device=device,
             parallel_method=None,
@@ -109,8 +100,11 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager()
-    with context as directory:
+    if save:
+        save_context = tempfile.TemporaryDirectory()
+    else:
+        save_context = sc.parallel.NullContextManager()
+    with save_context as directory:
         solutions_mp, paths_mp = sc.solve_many(
             device=device,
             parallel_method="mp",
@@ -145,8 +139,11 @@ def test_solve_many(
         else:
             assert solutions is None
 
-    context = tempfile.TemporaryDirectory() if save else NullContextManager()
-    with context as directory:
+    if save:
+        save_context = tempfile.TemporaryDirectory()
+    else:
+        save_context = sc.parallel.NullContextManager()
+    with save_context as directory:
         solutions_ray, paths_ray = sc.solve_many(
             device=device,
             parallel_method="ray",

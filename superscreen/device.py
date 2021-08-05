@@ -338,14 +338,11 @@ class Device(object):
             A dict of arrays, with keys specified by ``Device.ARRAY_NAMES``
         """
         arrays = {name: getattr(self, name) for name in self.ARRAY_NAMES}
+        if copy_arrays:
+            arrays = deepcopy(arrays)
         for name, array in arrays.items():
-            if copy_arrays and (name == "C_vectors"):
-                for name, arr in arrays["C_vectors"].items():
-                    arrays["C_vectors"][name] = arr.copy()
-            elif dense and sp.issparse(array):
+            if dense and sp.issparse(array):
                 arrays[name] = array.toarray()
-            elif copy_arrays and array is not None:
-                arrays[name] = array.copy()
         return arrays
 
     def set_arrays(
