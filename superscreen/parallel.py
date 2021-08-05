@@ -427,8 +427,7 @@ def solve_single_ray(
     **kwargs,
 ):
     """Solve a single setup (ray)."""
-    device = kwargs["device"]
-    device.set_arrays(arrays)
+    kwargs["device"].set_arrays(arrays)
 
     log_level = kwargs.pop("log_level", None)
     if log_level is not None:
@@ -447,11 +446,6 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-
-    del arrays
-    del device
-    del kwargs["device"]
-    del solutions
 
     return path
 
@@ -554,7 +548,6 @@ def solve_many_ray(
             # Load solutions from disk.
             # Set arrays with the original device arrays,
             # not the ones in shared memory.
-            del arrays
             arrays = device.get_arrays(copy_arrays=False, dense=False)
             solutions = []
             for path in paths:
@@ -578,10 +571,5 @@ def solve_many_ray(
 
     if directory is None:
         paths = None
-
-    del models
-    del arrays
-    del arrays_ref
-    del result_ids
 
     return solutions, paths
