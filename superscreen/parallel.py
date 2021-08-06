@@ -381,10 +381,13 @@ def solve_many_mp(
                 use_shared_memory=use_shared_memory,
             )
         )
-
+    if use_shared_memory:
+        shared_mem_str = "with shared memory"
+    else:
+        shared_mem_str = "without shared memory"
     logger.info(
         f"Solving {len(models)} models in parallel using multiprocessing with "
-        f"{nproc} process(es)."
+        f"{nproc} process(es) {shared_mem_str}."
     )
     with mp.Pool(processes=nproc, initializer=init, initargs=(shared_arrays,)) as pool:
         results = pool.map(solve_single_mp, kwargs)
@@ -509,8 +512,13 @@ def solve_many_ray(
     else:
         arrays_ref = arrays
 
+    if use_shared_memory:
+        shared_mem_str = "with shared memory"
+    else:
+        shared_mem_str = "without shared memory"
     logger.info(
-        f"Solving {len(models)} models in parallel using ray with {nproc} process(es)."
+        f"Solving {len(models)} models in parallel using ray with "
+        f"{nproc} process(es) {shared_mem_str}."
     )
 
     # To prevent filling up the ray object store, we save solutions to disk
