@@ -1,5 +1,7 @@
+import gc
 import os
 import time
+import psutil
 import logging
 import itertools
 import tempfile
@@ -358,7 +360,7 @@ def solve_many_mp(
     else:
         shared_arrays = arrays
 
-    nproc = min(len(models), mp.cpu_count())
+    nproc = min(len(models), psutil.cpu_count(logical=False))
     solver = f"superscreen.solve_many:multiprocessing:{nproc}"
 
     kwargs = []
@@ -449,7 +451,9 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-
+    del kwargs
+    del solution
+    del solutions
     return path
 
 
@@ -487,11 +491,13 @@ def solve_many_ray(
         product=product,
     )
 
-    nproc = mp.cpu_count()
+    initialized_ray = False
+    nproc = psutil.cpu_count(logical=False)
     if not ray.is_initialized():
         nproc = min(len(models), nproc)
         logger.info(f"Initializing ray with {nproc} process(es).")
         ray.init(num_cpus=nproc)
+        initialized_ray = True
 
     ray_resources = ray.available_resources()
     nproc = int(ray_resources["CPU"])
@@ -577,7 +583,17 @@ def solve_many_ray(
         f"({seconds_per_model:.3f} seconds per model)."
     )
 
+    if initialized_ray:
+        ray.shutdown()
+
     if directory is None:
         paths = None
+
+    del arrays
+    del arrays_ref
+    del result_ids
+    del models
+
+    gc.collect()
 
     return solutions, paths
