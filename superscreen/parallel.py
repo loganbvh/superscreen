@@ -1,4 +1,3 @@
-import gc
 import os
 import time
 import psutil
@@ -451,9 +450,7 @@ def solve_single_ray(
             solutions[-1].to_file(path, save_mesh=False)
         else:
             save_solutions(solutions, path, save_mesh=False)
-    del kwargs
-    del solution
-    del solutions
+
     return path
 
 
@@ -588,12 +585,5 @@ def solve_many_ray(
 
     if directory is None:
         paths = None
-
-    del arrays
-    del arrays_ref
-    del result_ids
-    del models
-
-    gc.collect()
 
     return solutions, paths
