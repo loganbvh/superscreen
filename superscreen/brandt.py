@@ -217,7 +217,6 @@ def brandt_layer(
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
-    check_lambda: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
@@ -235,7 +234,6 @@ def brandt_layer(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-        check_lambda: Whether to generate a warning if Lambda <= london_lambda.
 
     Returns:
         stream function, total field, film screening field
@@ -257,22 +255,8 @@ def brandt_layer(
     Q = device.Q(layer, weights=weights)
     points = device.points
     x, y = points.T
-    london_lambda = device.layers[layer].london_lambda
-    d = device.layers[layer].thickness
     if Lambda is None:
         Lambda = device.layers[layer].Lambda
-
-    if check_lambda:
-        if isinstance(london_lambda, (int, float)) and london_lambda <= d:
-            length_units = device.ureg(device.length_units).units
-            logger.warning(
-                f"Layer '{layer}': The film thickness, d = {d:.4f} {length_units:~P}"
-                f", is greater than or equal to the London penetration depth, resulting "
-                f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
-                f"{length_units:~P} <= {lambda_str} = {london_lambda:.4f} {length_units:~P}. "
-                f"The assumption that the current density is nearly constant over the "
-                f"thickness of the film may not be valid. "
-            )
 
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
@@ -444,7 +428,20 @@ def solve(
             applied_field(device.points[:, 0], device.points[:, 1], layer.z0)
             * field_conversion_magnitude
         )
+        # Check and cache penetration depth
+        london_lambda = layer.london_lambda
+        d = layer.thickness
         Lambda = layer.Lambda
+        if isinstance(london_lambda, (int, float)) and london_lambda <= d:
+            length_units = device.ureg(device.length_units).units
+            logger.warning(
+                f"Layer '{name}': The film thickness, d = {d:.4f} {length_units:~P}"
+                f", is greater than or equal to the London penetration depth, resulting "
+                f"in an effective penetration depth {Lambda_str} = {Lambda:.4f} "
+                f"{length_units:~P} <= {lambda_str} = {london_lambda:.4f} {length_units:~P}. "
+                f"The assumption that the current density is nearly constant over the "
+                f"thickness of the film may not be valid. "
+            )
         if isinstance(Lambda, (int, float)):
             Lambda = Constant(Lambda)
         layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1])
@@ -528,8 +525,7 @@ def solve(
             for name, layer in device.layers.items():
                 # Units: current_units / device.length_units
                 new_layer_fields[name] = (
-                    layer_fields[name] * field_conversion_magnitude
-                    + other_screening_fields[name]
+                    layer_fields[name] + other_screening_fields[name]
                 )
             streams = {}
             fields = {}
@@ -548,7 +544,6 @@ def solve(
                     circulating_currents=circulating_currents,
                     current_units=current_units,
                     check_inversion=check_inversion,
-                    check_lambda=False,
                 )
                 # Units: current_units
                 streams[name] = g
