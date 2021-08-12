@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -35,7 +37,9 @@ def device():
     return device
 
 
-def test_current_value(device):
+@pytest.mark.parametrize("return_solutions", [False, True])
+@pytest.mark.parametrize("save", [False, True])
+def test_current_value(device, return_solutions, save, tmp_path):
 
     applied_field = sc.sources.ConstantField(0)
 
@@ -43,28 +47,42 @@ def test_current_value(device):
         "ring_hole": "1 mA",
     }
 
-    solution = sc.solve(
+    # https://docs.pytest.org/en/stable/tmpdir.html
+    directory = str(tmp_path) if save else None
+
+    solutions = sc.solve(
         device=device,
         applied_field=applied_field,
         circulating_currents=circulating_currents,
         field_units="mT",
         iterations=1,
-    )[-1]
-
-    grid_shape = 500
-
-    xgrid, ygrid, J = solution.current_density(
-        grid_shape=grid_shape, units="uA / um", with_units=False
+        return_solutions=return_solutions,
+        directory=directory,
     )
-    jx, jy = J["layer1"]
-    x, y = sc.grids_to_vecs(xgrid, ygrid)
+    if directory is not None:
+        assert os.path.isdir(directory)
+        assert len(os.listdir(directory)) == 1
 
-    dx = x[1] - x[0]
-    dy = y[1] - y[0]
+    if return_solutions:
+        assert isinstance(solutions, list)
+        assert len(solutions) == 1
+        solution = solutions[0]
+        grid_shape = 500
 
-    N = grid_shape // 2
+        xgrid, ygrid, J = solution.current_density(
+            grid_shape=grid_shape, units="uA / um", with_units=False
+        )
+        jx, jy = J["layer1"]
+        x, y = sc.grids_to_vecs(xgrid, ygrid)
 
-    assert np.isclose(np.sum(-jy[N, :N]) * dx, 1000)
-    assert np.isclose(np.sum(+jy[N, N:]) * dx, 1000)
-    assert np.isclose(np.sum(-jx[N:, N]) * dy, 1000)
-    assert np.isclose(np.sum(+jx[:N, N]) * dy, 1000)
+        dx = x[1] - x[0]
+        dy = y[1] - y[0]
+
+        N = grid_shape // 2
+
+        assert np.isclose(np.sum(-jy[N, :N]) * dx, 1000)
+        assert np.isclose(np.sum(+jy[N, N:]) * dx, 1000)
+        assert np.isclose(np.sum(-jx[N:, N]) * dy, 1000)
+        assert np.isclose(np.sum(+jx[:N, N]) * dy, 1000)
+    else:
+        assert solutions is None

@@ -712,10 +712,7 @@ class Device(object):
                     null_key = "Lambda"
                 dill_fname = f"{layer.name}_{param.func.__name__}.dill"
                 layers[name][null_key] = None
-                layers[name][key] = {
-                    "path": dill_fname,
-                    "kwargs": param.kwargs,
-                }
+                layers[name][key] = {"path": dill_fname}
                 with open(os.path.join(directory, dill_fname), "wb") as f:
                     dill.dump(param, f)
 
