@@ -13,26 +13,13 @@ import pint
 import numpy as np
 
 from . import brandt
-from .io import load_solutions, save_solutions
+from .io import load_solutions, save_solutions, NullContextManager
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution
 
 
 logger = logging.getLogger(__name__)
-
-
-class NullContextManager(object):
-    """Does nothing."""
-
-    def __init__(self, resource=None):
-        self.resource = resource
-
-    def __enter__(self):
-        return self.resource
-
-    def __exit__(self, *args):
-        pass
 
 
 def create_models(
@@ -89,6 +76,7 @@ def create_models(
     if layer_updater and layer_update_kwargs:
         devices = []
         for kwargs in layer_update_kwargs:
+            # This does a deepcopy of Layers and Polygons
             d = device.copy(with_arrays=False)
             updated_layers = [layer_updater(layer, **kwargs) for layer in d.layers_list]
             d.layers_list = updated_layers
