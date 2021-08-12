@@ -1,3 +1,4 @@
+import os
 import itertools
 import logging
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
@@ -211,7 +212,8 @@ def brandt_layer(
     *,
     device: "Device",
     layer: str,
-    applied_field: Callable,
+    applied_field: Union[Callable, np.ndarray],
+    Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
@@ -223,7 +225,9 @@ def brandt_layer(
         device: The Device to simulate.
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
-            as a function of x, y coordinates.
+            as a function of x, y coordinates, or a vector of applied fields.
+        Lambda: A Parameter, array, or scalar defining the layer's effective penetration
+            depth, Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
@@ -255,7 +259,8 @@ def brandt_layer(
     x, y = points.T
     london_lambda = device.layers[layer].london_lambda
     d = device.layers[layer].thickness
-    Lambda = device.layers[layer].Lambda
+    if Lambda is None:
+        Lambda = device.layers[layer].Lambda
 
     if check_lambda:
         if isinstance(london_lambda, (int, float)) and london_lambda <= d:
@@ -272,13 +277,17 @@ def brandt_layer(
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
-    # Units: current_units / device.length_units.
-    Hz_applied = applied_field(points[:, 0], points[:, 1])
+    if callable(applied_field):
+        # Units: current_units / device.length_units.
+        Hz_applied = applied_field(points[:, 0], points[:, 1])
+    else:
+        Hz_applied = applied_field
 
     if isinstance(Lambda, (int, float)):
         # Make Lambda a callable
         Lambda = Constant(Lambda)
-    Lambda = Lambda(points[:, 0], points[:, 1])
+    if callable(Lambda):
+        Lambda = Lambda(points[:, 0], points[:, 1])
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -353,6 +362,8 @@ def solve(
     current_units: str = "uA",
     check_inversion: bool = True,
     iterations: int = 0,
+    return_solutions: bool = True,
+    directory: Optional[str] = None,
     log_level: int = logging.INFO,
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
@@ -383,17 +394,23 @@ def solve(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-        iterations: Number of times to compute the interactions between layers
+        iterations: Number of times to compute the interactions between layers.
+        return_solutions: Whether to return a list of Solution objects.
+        directory: If not None, resulting Solutions will be saved in this directory.
         log_level: Logging level to use, if any.
 
     Returns:
-        A list of Solutions of length ``iterations + 1``.
+        If ``return_solutions`` is True, returns a list of Solutions of
+        length ``iterations + 1``.
     """
 
     if log_level is not None:
         logging.basicConfig(level=log_level)
 
     logger = logging.getLogger(__name__)
+
+    if directory is not None:
+        os.makedirs(directory, exist_ok=True)
 
     points = device.points
     triangles = device.triangles
@@ -418,19 +435,30 @@ def solve(
         f"{field_conversion:~P}."
     )
     field_conversion_magnitude = field_conversion.magnitude
+    # Only compute the applied field and Lambda once.
+    layer_fields = {}
+    layer_Lambdas = {}
+    for name, layer in device.layers.items():
+        # Units: current_units / device.length_units
+        layer_fields[name] = (
+            applied_field(device.points[:, 0], device.points[:, 1], layer.z0)
+            * field_conversion_magnitude
+        )
+        Lambda = layer.Lambda
+        if isinstance(Lambda, (int, float)):
+            Lambda = Constant(Lambda)
+        layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1])
+
     # Compute the stream functions and fields for each layer
     # given only the applied field.
     for name, layer in device.layers.items():
         logger.info(f"Calculating {name} response to applied field.")
 
-        def layer_field(x, y):
-            # Units: current_units / device.length_units
-            return applied_field(x, y, layer.z0) * field_conversion_magnitude
-
         g, total_field, screening_field = brandt_layer(
             device=device,
             layer=name,
-            applied_field=layer_field,
+            applied_field=layer_fields[name],
+            Lambda=layer_Lambdas[name],
             circulating_currents=circulating_currents,
             current_units=current_units,
             check_inversion=check_inversion,
@@ -454,7 +482,10 @@ def solve(
         current_units=current_units,
         circulating_currents=circulating_currents,
     )
-    solutions.append(solution)
+    if directory is not None:
+        solution.to_file(os.path.join(directory, "0"))
+    if return_solutions:
+        solutions.append(solution)
 
     if iterations and len(device.layers) > 1:
 
@@ -491,7 +522,15 @@ def solve(
                 # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                 other_screening_fields[layer.name] += np.sum(tri_areas * q * g, axis=1)
 
-            # Solve again with the screening fields from all layers
+            # Solve again with the screening fields from all layers.
+            # Calculate applied fields only once per iteration.
+            new_layer_fields = {}
+            for name, layer in device.layers.items():
+                # Units: current_units / device.length_units
+                new_layer_fields[name] = (
+                    layer_fields[name] * field_conversion_magnitude
+                    + other_screening_fields[name]
+                )
             streams = {}
             fields = {}
             screening_fields = {}
@@ -501,17 +540,11 @@ def solve(
                     f"screening field from other layers ({i+1}/{iterations})."
                 )
 
-                def layer_field(x, y):
-                    # Units: current_units / device.length_units
-                    return (
-                        applied_field(x, y, layer.z0) * field_conversion_magnitude
-                        + other_screening_fields[name]
-                    )
-
                 g, total_field, screening_field = brandt_layer(
                     device=device,
                     layer=name,
-                    applied_field=layer_field,
+                    applied_field=new_layer_fields[name],
+                    Lambda=layer_Lambdas[name],
                     circulating_currents=circulating_currents,
                     current_units=current_units,
                     check_inversion=check_inversion,
@@ -536,9 +569,12 @@ def solve(
                 current_units=current_units,
                 circulating_currents=circulating_currents,
             )
-            solutions.append(solution)
-
-    return solutions
+            if directory is not None:
+                solution.to_file(os.path.join(directory, str(i + 1)))
+            if return_solutions:
+                solutions.append(solution)
+    if return_solutions:
+        return solutions
 
 
 def solve_many(
@@ -624,7 +660,7 @@ def solve_many(
             f"Valid methods are {list(parallel_methods)}."
         )
 
-    kwargs = dict(
+    solutions, paths = parallel_methods[parallel_method](
         device=device,
         applied_fields=applied_fields,
         circulating_currents=circulating_currents,
@@ -641,8 +677,6 @@ def solve_many(
         log_level=log_level,
         use_shared_memory=use_shared_memory,
     )
-
-    solutions, paths = parallel_methods[parallel_method](**kwargs)
 
     return solutions, paths
 
