@@ -36,6 +36,7 @@ def device():
 
     return device
 
+
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
 def test_current_value(device, return_solutions, save, tmp_path):
