@@ -1,4 +1,5 @@
 import json
+import inspect
 import datetime
 import tempfile
 
@@ -62,8 +63,13 @@ def test_save_and_load_solutions(solutions, return_paths):
         else:
             assert paths is None
         loaded_solutions = sc.load_solutions(directory)
+        assert isinstance(loaded_solutions, list)
+        assert all(orig == loaded for orig, loaded in zip(solutions, loaded_solutions))
 
-    assert all(orig == loaded for orig, loaded in zip(solutions, loaded_solutions))
+        assert inspect.isgeneratorfunction(sc.iload_solutions)
+        loaded_solutions = sc.iload_solutions(directory)
+        assert inspect.isgenerator(loaded_solutions)
+        assert all(orig == loaded for orig, loaded in zip(solutions, loaded_solutions))
 
 
 def test_json_serialization():
