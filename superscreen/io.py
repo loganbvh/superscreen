@@ -1,7 +1,7 @@
 import os
 import json
 import datetime
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Iterator
 
 import numpy as np
 
@@ -107,8 +107,8 @@ def load_solutions(base_directory: str) -> List[Solution]:
     return solutions
 
 
-def iload_solutions(base_directory: str) -> Solution:
-    """A generator that loads a sequence of Solutions from disk.
+def iload_solutions(base_directory: str) -> Iterator[Solution]:
+    """An iterator that loads a sequence of Solutions from disk.
 
     Args:
         base_directory: The name of the directory from which to load the solutions.
