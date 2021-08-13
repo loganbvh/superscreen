@@ -31,6 +31,8 @@ Solution
 
 .. autofunction:: superscreen.io.load_solutions
 
+.. autofunction:: superscreen.io.iload_solutions
+
 Supporting Functions
 --------------------
 

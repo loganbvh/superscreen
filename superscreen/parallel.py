@@ -1,11 +1,13 @@
 import os
 import time
+import shutil
 import psutil
 import logging
 import itertools
 import tempfile
 import warnings
 import multiprocessing as mp
+from distutils.dir_util import copy_tree
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
 import ray
@@ -13,7 +15,7 @@ import pint
 import numpy as np
 
 from . import brandt
-from .io import load_solutions, save_solutions, NullContextManager
+from .io import NullContextManager
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution
@@ -102,6 +104,29 @@ def create_models(
     return models
 
 
+def _load_solutions(
+    *,
+    directory: str,
+    num_models: int,
+    iterations: int,
+    device: Device,
+    keep_only_final_solution: bool,
+) -> Union[List[Solution], List[List[Solution]]]:
+    solutions = []
+    for i in range(num_models):
+        if keep_only_final_solution:
+            solution = Solution.from_file(os.path.join(directory, str(i)))
+            solution.device = device
+            solutions.append(solution)
+        else:
+            solutions.append([])
+            for j in range(iterations):
+                solution = Solution.from_file(os.path.join(directory, str(i), str(j)))
+                solution.device = device
+                solutions[-1].append(solution)
+    return solutions
+
+
 #######################################################################################
 # Synchronous (serial) execution
 #######################################################################################
@@ -145,46 +170,51 @@ def solve_many_serial(
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
 
-    if directory is not None:
-        device.to_file(os.path.join(directory, device.name), save_mesh=True)
-
-    if return_solutions:
-        all_solutions = []
-    if directory is not None:
-        paths = []
-
     t0 = time.time()
 
     logger.info(f"Solving {len(models)} models serially with 1 process.")
 
-    for i, (device, applied_field, circulating_currents) in enumerate(models):
+    solutions = None
+    paths = []
 
-        device.set_arrays(arrays)
+    if directory is None:
+        save_context = tempfile.TemporaryDirectory()
+    else:
+        save_context = NullContextManager(directory)
 
-        solutions = brandt.solve(
-            device=device,
-            applied_field=applied_field,
-            circulating_currents=circulating_currents,
-            field_units=field_units,
-            current_units=current_units,
-            iterations=iterations,
-            check_inversion=check_inversion,
-            log_level=log_level,
-        )
-        for solution in solutions:
-            solution._solver = solver
-        if directory is not None:
-            path = os.path.abspath(os.path.join(directory, str(i)))
-            if keep_only_final_solution:
-                solutions[-1].to_file(path, save_mesh=False)
-            else:
-                save_solutions(solutions, path, save_mesh=False)
+    with save_context as savedir:
+        for i, (device, applied_field, circulating_currents) in enumerate(models):
+            path = os.path.join(savedir, str(i))
+            device.set_arrays(arrays)
+            _ = brandt.solve(
+                device=device,
+                applied_field=applied_field,
+                circulating_currents=circulating_currents,
+                field_units=field_units,
+                current_units=current_units,
+                iterations=iterations,
+                check_inversion=check_inversion,
+                log_level=log_level,
+                return_solutions=False,
+                directory=path,
+                _solver=solver,
+            )
             paths.append(path)
+
+        if keep_only_final_solution:
+            for path in paths:
+                copy_tree(os.path.join(path, str(iterations)), path)
+                for j in range(iterations + 1):
+                    shutil.rmtree(os.path.join(path, str(j)))
+
         if return_solutions:
-            if keep_only_final_solution:
-                all_solutions.append(solutions[-1])
-            else:
-                all_solutions.append(solutions)
+            solutions = _load_solutions(
+                directory=savedir,
+                num_models=len(models),
+                iterations=iterations,
+                device=device,
+                keep_only_final_solution=keep_only_final_solution,
+            )
 
     t1 = time.time()
     elapsed_seconds = t1 - t0
@@ -196,10 +226,8 @@ def solve_many_serial(
 
     if directory is None:
         paths = None
-    if not return_solutions:
-        all_solutions = None
 
-    return all_solutions, paths
+    return solutions, paths
 
 
 #######################################################################################
@@ -253,11 +281,6 @@ def init(shared_arrays):
 
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     """Solve a single setup (multiprocessing)."""
-    directory = kwargs.pop("directory", None)
-    index = kwargs.pop("index")
-    return_solutions = kwargs.pop("return_solutions")
-    keep_only_final_solution = kwargs.pop("keep_only_final_solution")
-    solver = kwargs.pop("solver")
     use_shared_memory = kwargs.pop("use_shared_memory")
 
     device = kwargs["device"]
@@ -279,26 +302,9 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     device.set_arrays(numpy_arrays)
     kwargs["device"] = device
 
-    solutions = brandt.solve(**kwargs)
+    _ = brandt.solve(**kwargs)
 
-    for solution in solutions:
-        solution._solver = solver
-
-    if directory is None:
-        path = None
-    else:
-        path = os.path.abspath(os.path.join(directory, str(index)))
-        if keep_only_final_solution:
-            solutions[-1].to_file(path, save_mesh=False)
-        else:
-            save_solutions(solutions, path, save_mesh=False)
-    s = None
-    if return_solutions:
-        if keep_only_final_solution:
-            s = solutions[-1]
-        else:
-            s = solutions
-    return s, path
+    return kwargs["directory"]
 
 
 def solve_many_mp(
@@ -334,9 +340,6 @@ def solve_many_mp(
         product=product,
     )
 
-    if directory is not None:
-        device.to_file(os.path.join(directory, device.name), save_mesh=True)
-
     t0 = time.time()
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
@@ -350,38 +353,63 @@ def solve_many_mp(
     nproc = min(len(models), psutil.cpu_count(logical=False))
     solver = f"superscreen.solve_many:multiprocessing:{nproc}"
 
-    kwargs = []
-    for i, (device, applied_field, circulating_currents) in enumerate(models):
-        kwargs.append(
-            dict(
-                directory=directory,
-                index=i,
-                return_solutions=return_solutions,
-                keep_only_final_solution=keep_only_final_solution,
-                device=device,
-                applied_field=applied_field,
-                circulating_currents=circulating_currents,
-                field_units=field_units,
-                current_units=current_units,
-                iterations=iterations,
-                check_inversion=check_inversion,
-                log_level=log_level,
-                solver=solver,
-                use_shared_memory=use_shared_memory,
-            )
-        )
-    if use_shared_memory:
-        shared_mem_str = "with shared memory"
+    solutions = None
+    paths = None
+
+    if directory is None:
+        save_context = tempfile.TemporaryDirectory()
     else:
-        shared_mem_str = "without shared memory"
-    logger.info(
-        f"Solving {len(models)} models in parallel using multiprocessing with "
-        f"{nproc} process(es) {shared_mem_str}."
-    )
-    with mp.Pool(processes=nproc, initializer=init, initargs=(shared_arrays,)) as pool:
-        results = pool.map(solve_single_mp, kwargs)
-        pool.close()
-        pool.join()
+        save_context = NullContextManager(directory)
+
+    with save_context as savedir:
+        kwargs = []
+        for i, (device, applied_field, circulating_currents) in enumerate(models):
+            path = os.path.join(savedir, str(i))
+            kwargs.append(
+                dict(
+                    directory=os.path.join(savedir, path),
+                    return_solutions=return_solutions,
+                    device=device,
+                    applied_field=applied_field,
+                    circulating_currents=circulating_currents,
+                    field_units=field_units,
+                    current_units=current_units,
+                    iterations=iterations,
+                    check_inversion=check_inversion,
+                    log_level=log_level,
+                    _solver=solver,
+                    use_shared_memory=use_shared_memory,
+                )
+            )
+        if use_shared_memory:
+            shared_mem_str = "with shared memory"
+        else:
+            shared_mem_str = "without shared memory"
+        logger.info(
+            f"Solving {len(models)} models in parallel using multiprocessing with "
+            f"{nproc} process(es) {shared_mem_str}."
+        )
+        with mp.Pool(
+            processes=nproc, initializer=init, initargs=(shared_arrays,)
+        ) as pool:
+            paths = pool.map(solve_single_mp, kwargs)
+            pool.close()
+            pool.join()
+
+        if keep_only_final_solution:
+            for path in paths:
+                copy_tree(os.path.join(path, str(iterations)), path)
+                for j in range(iterations + 1):
+                    shutil.rmtree(os.path.join(path, str(j)))
+
+        if return_solutions:
+            solutions = _load_solutions(
+                directory=savedir,
+                num_models=len(models),
+                iterations=iterations,
+                device=device,
+                keep_only_final_solution=keep_only_final_solution,
+            )
 
     t1 = time.time()
     elapsed_seconds = t1 - t0
@@ -392,15 +420,10 @@ def solve_many_mp(
         f"({seconds_per_model:.3f} seconds per model)."
     )
 
-    all_solutions, paths = zip(*results)
-    all_solutions = list(all_solutions)
-    paths = list(paths)
-    if all(s is None for s in all_solutions):
-        all_solutions = None
-    if all(p is None for p in paths):
+    if directory is None:
         paths = None
 
-    return all_solutions, paths
+    return solutions, paths
 
 
 #######################################################################################
@@ -411,11 +434,7 @@ def solve_many_mp(
 @ray.remote
 def solve_single_ray(
     *,
-    directory,
-    index,
     arrays,
-    keep_only_final_solution,
-    solver,
     **kwargs,
 ):
     """Solve a single setup (ray)."""
@@ -425,21 +444,9 @@ def solve_single_ray(
     if log_level is not None:
         logging.basicConfig(level=log_level)
 
-    solutions = brandt.solve(**kwargs)
+    _ = brandt.solve(**kwargs)
 
-    for solution in solutions:
-        solution._solver = solver
-
-    if directory is None:
-        path = None
-    else:
-        path = os.path.abspath(os.path.join(directory, str(index)))
-        if keep_only_final_solution:
-            solutions[-1].to_file(path, save_mesh=False)
-        else:
-            save_solutions(solutions, path, save_mesh=False)
-
-    return path
+    return kwargs["directory"]
 
 
 def solve_many_ray(
@@ -490,9 +497,6 @@ def solve_many_ray(
 
     solver = f"superscreen.solve_many:ray:{nproc}"
 
-    if directory is not None:
-        device.to_file(os.path.join(directory, device.name), save_mesh=True)
-
     t0 = time.time()
 
     # Put the device's big arrays in shared memory.
@@ -512,23 +516,22 @@ def solve_many_ray(
         f"{nproc} process(es) {shared_mem_str}."
     )
 
-    # To prevent filling up the ray object store, we save solutions to disk
-    # even if return_solutions is True.
+    solutions = None
+    paths = None
+
     if directory is None:
         save_context = tempfile.TemporaryDirectory()
     else:
         save_context = NullContextManager(directory)
+        paths = []
 
-    with save_context as save_directory:
-        result_ids = []
+    result_ids = []
+    with save_context as savedir:
         for i, (device_copy, applied_field, circulating_currents) in enumerate(models):
+            path = os.path.join(savedir, str(i))
             result_ids.append(
                 solve_single_ray.remote(
-                    directory=save_directory,
-                    index=i,
                     arrays=arrays_ref,
-                    keep_only_final_solution=keep_only_final_solution,
-                    solver=solver,
                     device=device_copy,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
@@ -537,27 +540,28 @@ def solve_many_ray(
                     iterations=iterations,
                     check_inversion=check_inversion,
                     log_level=log_level,
+                    return_solutions=False,
+                    directory=path,
+                    _solver=solver,
                 )
             )
 
         paths = ray.get(result_ids)
 
-        solutions = None
-        if return_solutions:
-            # Load solutions from disk.
-            # Set arrays with the original device arrays,
-            # not the ones in shared memory.
-            arrays = device.get_arrays(copy_arrays=False, dense=False)
-            solutions = []
+        if keep_only_final_solution:
             for path in paths:
-                if keep_only_final_solution:
-                    solution = Solution.from_file(path)
-                    solution.device.set_arrays(arrays)
-                    solutions.append(solution)
-                else:
-                    solutions.append(load_solutions(path))
-                    for solution in solutions[-1]:
-                        solution.device.set_arrays(arrays)
+                copy_tree(os.path.join(path, str(iterations)), path)
+                for j in range(iterations + 1):
+                    shutil.rmtree(os.path.join(path, str(j)))
+
+        if return_solutions:
+            solutions = _load_solutions(
+                directory=savedir,
+                num_models=len(models),
+                iterations=iterations,
+                device=device,
+                keep_only_final_solution=keep_only_final_solution,
+            )
 
     t1 = time.time()
     elapsed_seconds = t1 - t0
