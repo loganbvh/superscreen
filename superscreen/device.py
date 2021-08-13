@@ -608,7 +608,7 @@ class Device(object):
         ax.set_aspect("equal")
         ax.grid(grid)
         if legend:
-            ax.legend(loc="best")
+            ax.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
         units = self.ureg(self.length_units).units
         ax.set_xlabel(f"$x$ $[{units:~L}]$")
         ax.set_ylabel(f"$y$ $[{units:~L}]$")
