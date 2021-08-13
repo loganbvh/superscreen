@@ -105,3 +105,16 @@ def load_solutions(base_directory: str) -> List[Solution]:
         path = os.path.join(base_directory, subdir)
         solutions.append(Solution.from_file(path))
     return solutions
+
+
+def iload_solutions(base_directory: str) -> Solution:
+    """A generator that loads a sequence of Solutions from disk.
+
+    Args:
+        base_directory: The name of the directory from which to load the solutions.
+
+    Yields:
+        Solution instances loaded from ``base_directory``
+    """
+    for subdir in sorted(os.listdir(base_directory), key=int):
+        yield Solution.from_file(os.path.join(base_directory, subdir))
