@@ -349,6 +349,7 @@ def solve(
     return_solutions: bool = True,
     directory: Optional[str] = None,
     log_level: int = logging.INFO,
+    _solver: str = "superscreen.solve",
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
 
@@ -382,6 +383,8 @@ def solve(
         return_solutions: Whether to return a list of Solution objects.
         directory: If not None, resulting Solutions will be saved in this directory.
         log_level: Logging level to use, if any.
+        _solver: Name of the solver method used.
+
 
     Returns:
         If ``return_solutions`` is True, returns a list of Solutions of
@@ -478,9 +481,10 @@ def solve(
         field_units=field_units,
         current_units=current_units,
         circulating_currents=circulating_currents,
+        solver=_solver,
     )
     if directory is not None:
-        solution.to_file(os.path.join(directory, "0"))
+        solution.to_file(os.path.join(directory, str(0)))
     if return_solutions:
         solutions.append(solution)
 
@@ -563,6 +567,7 @@ def solve(
                 field_units=field_units,
                 current_units=current_units,
                 circulating_currents=circulating_currents,
+                solver=_solver,
             )
             if directory is not None:
                 solution.to_file(os.path.join(directory, str(i + 1)))

@@ -83,8 +83,10 @@ def test_solve_many(
         if save:
             assert paths is not None
             dirs = os.listdir(directory)
-            assert device.name in dirs
-            assert len(dirs) == len(circulating_currents) + 1
+            assert len(dirs) == len(circulating_currents)
+            if keep_only_final_solution:
+                for d in dirs:
+                    _ = sc.Solution.from_file(os.path.join(directory, d))
         else:
             assert paths is None
         if return_solutions:
@@ -122,8 +124,10 @@ def test_solve_many(
         if save:
             assert paths is not None
             dirs = os.listdir(directory)
-            assert device.name in dirs
-            assert len(dirs) == len(circulating_currents) + 1
+            assert len(dirs) == len(circulating_currents)
+            if keep_only_final_solution:
+                for d in dirs:
+                    _ = sc.Solution.from_file(os.path.join(directory, d))
         else:
             assert paths is None
         if return_solutions:
@@ -160,8 +164,10 @@ def test_solve_many(
         if save:
             assert paths is not None
             dirs = os.listdir(directory)
-            assert device.name in dirs
-            assert len(dirs) == len(circulating_currents) + 1
+            assert len(dirs) == len(circulating_currents)
+            if keep_only_final_solution:
+                for d in dirs:
+                    _ = sc.Solution.from_file(os.path.join(directory, d))
         else:
             assert paths is None
         if return_solutions:
@@ -177,17 +183,17 @@ def test_solve_many(
         else:
             assert solutions is None
 
-        if return_solutions:
-            if keep_only_final_solution:
-                for sol_serial, sol_mp, sol_ray in zip(
-                    solutions_serial, solutions_mp, solutions_ray
-                ):
+    if return_solutions:
+        if keep_only_final_solution:
+            for sol_serial, sol_mp, sol_ray in zip(
+                solutions_serial, solutions_mp, solutions_ray
+            ):
+                assert sol_serial.equals(sol_mp)
+                assert sol_serial.equals(sol_ray)
+                assert sol_ray.equals(sol_mp)
+        else:
+            for solutions in zip(solutions_serial, solutions_mp, solutions_ray):
+                for sol_serial, sol_mp, sol_ray in zip(*solutions):
                     assert sol_serial.equals(sol_mp)
                     assert sol_serial.equals(sol_ray)
                     assert sol_ray.equals(sol_mp)
-            else:
-                for solutions in zip(solutions_serial, solutions_mp, solutions_ray):
-                    for sol_serial, sol_mp, sol_ray in zip(*solutions):
-                        assert sol_serial.equals(sol_mp)
-                        assert sol_serial.equals(sol_ray)
-                        assert sol_ray.equals(sol_mp)
