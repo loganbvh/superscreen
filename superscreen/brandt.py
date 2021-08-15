@@ -548,57 +548,57 @@ def solve(
                     other_screening_fields[layer.name] += np.sum(
                         tri_areas * q * g, axis=1
                     )
-            # Solve again with the screening fields from all layers.
-            # Calculate applied fields only once per iteration.
-            new_layer_fields = {}
-            for name, layer in device.layers.items():
-                # Units: current_units / device.length_units
-                new_layer_fields[name] = (
-                    layer_fields[name] + other_screening_fields[name]
-                )
-            streams = {}
-            fields = {}
-            screening_fields = {}
-            for name, layer in device.layers.items():
-                logger.info(
-                    f"Calculating {name} response to applied field and "
-                    f"screening field from other layers ({i+1}/{iterations})."
-                )
-                g, total_field, screening_field = brandt_layer(
-                    device=device,
-                    layer=name,
-                    applied_field=new_layer_fields[name],
-                    Lambda=layer_Lambdas[name],
-                    circulating_currents=circulating_currents,
-                    current_units=current_units,
-                    check_inversion=check_inversion,
-                )
-                # Units: current_units
-                streams[name] = g
-                # Units: current_units / device.length_units
-                fields[name] = total_field
-                screening_fields[name] = screening_field
+                # Solve again with the screening fields from all layers.
+                # Calculate applied fields only once per iteration.
+                new_layer_fields = {}
+                for name, layer in device.layers.items():
+                    # Units: current_units / device.length_units
+                    new_layer_fields[name] = (
+                        layer_fields[name] + other_screening_fields[name]
+                    )
+                streams = {}
+                fields = {}
+                screening_fields = {}
+                for name, layer in device.layers.items():
+                    logger.info(
+                        f"Calculating {name} response to applied field and "
+                        f"screening field from other layers ({i+1}/{iterations})."
+                    )
+                    g, total_field, screening_field = brandt_layer(
+                        device=device,
+                        layer=name,
+                        applied_field=new_layer_fields[name],
+                        Lambda=layer_Lambdas[name],
+                        circulating_currents=circulating_currents,
+                        current_units=current_units,
+                        check_inversion=check_inversion,
+                    )
+                    # Units: current_units
+                    streams[name] = g
+                    # Units: current_units / device.length_units
+                    fields[name] = total_field
+                    screening_fields[name] = screening_field
 
-            solution = Solution(
-                device=device,
-                streams=streams,
-                fields={
-                    # Units: field_units
-                    layer: field / field_conversion_magnitude
-                    for layer, field in fields.items()
-                },
-                applied_field=applied_field,
-                field_units=field_units,
-                current_units=current_units,
-                circulating_currents=circulating_currents,
-                solver=_solver,
-            )
-            if directory is not None:
-                solution.to_file(os.path.join(directory, str(i + 1)))
-            if return_solutions:
-                solutions.append(solution)
-            else:
-                del solution
+                solution = Solution(
+                    device=device,
+                    streams=streams,
+                    fields={
+                        # Units: field_units
+                        layer: field / field_conversion_magnitude
+                        for layer, field in fields.items()
+                    },
+                    applied_field=applied_field,
+                    field_units=field_units,
+                    current_units=current_units,
+                    circulating_currents=circulating_currents,
+                    solver=_solver,
+                )
+                if directory is not None:
+                    solution.to_file(os.path.join(directory, str(i + 1)))
+                if return_solutions:
+                    solutions.append(solution)
+                else:
+                    del solution
     if return_solutions:
         return solutions
 
