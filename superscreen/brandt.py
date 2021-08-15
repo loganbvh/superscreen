@@ -1,6 +1,7 @@
 import os
-import itertools
 import logging
+import tempfile
+import itertools
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
 
 import pint
@@ -10,6 +11,7 @@ import scipy.sparse as sp
 from scipy.spatial.distance import cdist
 
 from .fem import areas, centroids
+from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution
 from .sources import ConstantField
@@ -487,42 +489,65 @@ def solve(
         solution.to_file(os.path.join(directory, str(0)))
     if return_solutions:
         solutions.append(solution)
+    else:
+        del solution
 
-    if iterations and len(device.layers) > 1:
-
+    layer_names = list(device.layers)
+    num_layers = len(layer_names)
+    if iterations and num_layers > 1:
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
-
-        layer_names = list(device.layers)
-        # Cache kernel matrices
+        # Cache kernel matrices.
+        # If num_layers > 2, save kernel matrices to disk to avoid
+        # filling up memory. Otherwise, just stick all the
+        # kernel matrices in a dictionary.
         kernels = {}
-        for i in range(iterations):
-            # Calculate the screening fields at each layer from every other layer
-            other_screening_fields = {
-                name: np.zeros(points.shape[0], dtype=float) for name in layer_names
-            }
-            for layer, other_layer in itertools.product(device.layers_list, repeat=2):
-                if layer.name == other_layer.name:
-                    continue
-                logger.info(
-                    f"Calculating screening field at {layer.name} "
-                    f"from {other_layer.name} ({i+1}/{iterations})."
-                )
-                # Average stream function over all vertices in each triangle to
-                # estimate the stream function value at the centroid of the triangle.
-                g = streams[other_layer.name][triangles].mean(axis=1)
-                dz = other_layer.z0 - layer.z0
-                key = frozenset([layer.name, other_layer.name])
-                q = kernels.get(key, None)
-                if q is None:
-                    q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                    kernels[key] = q
-                # Calculate the dipole kernel and integrate
-                # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                other_screening_fields[layer.name] += np.sum(tri_areas * q * g, axis=1)
-
+        if num_layers > 2:
+            temp_context = tempfile.TemporaryDirectory()
+        else:
+            temp_context = NullContextManager()
+        with temp_context as tempdir:
+            for i in range(iterations):
+                # Calculate the screening fields at each layer from every other layer
+                other_screening_fields = {
+                    name: np.zeros(points.shape[0], dtype=float) for name in layer_names
+                }
+                for layer, other_layer in itertools.product(
+                    device.layers_list, repeat=2
+                ):
+                    if layer.name == other_layer.name:
+                        continue
+                    logger.info(
+                        f"Calculating screening field at {layer.name} "
+                        f"from {other_layer.name} ({i+1}/{iterations})."
+                    )
+                    # Average stream function over all vertices in each triangle to
+                    # estimate the stream function value at the centroid of the triangle.
+                    g = streams[other_layer.name][triangles].mean(axis=1)
+                    dz = other_layer.z0 - layer.z0
+                    key = frozenset([layer.name, other_layer.name])
+                    # Get the cached kernel matrix,
+                    # or calculate it if it's not yet in the cache.
+                    q = kernels.get(key, None)
+                    if q is None:
+                        q = (2 * dz ** 2 - rho2) / (
+                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                        )
+                        if tempdir is not None:
+                            fname = os.path.join(tempdir, "_".join(key))
+                            np.save(fname, q)
+                            kernels[key] = f"{fname}.npy"
+                        else:
+                            kernels[key] = q
+                    elif isinstance(q, str):
+                        q = np.load(q)
+                    # Calculate the dipole kernel and integrate
+                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                    other_screening_fields[layer.name] += np.sum(
+                        tri_areas * q * g, axis=1
+                    )
             # Solve again with the screening fields from all layers.
             # Calculate applied fields only once per iteration.
             new_layer_fields = {}
@@ -539,7 +564,6 @@ def solve(
                     f"Calculating {name} response to applied field and "
                     f"screening field from other layers ({i+1}/{iterations})."
                 )
-
                 g, total_field, screening_field = brandt_layer(
                     device=device,
                     layer=name,
@@ -573,6 +597,8 @@ def solve(
                 solution.to_file(os.path.join(directory, str(i + 1)))
             if return_solutions:
                 solutions.append(solution)
+            else:
+                del solution
     if return_solutions:
         return solutions
 
