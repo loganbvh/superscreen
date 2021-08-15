@@ -1,6 +1,7 @@
 import os
-import itertools
 import logging
+import tempfile
+import itertools
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
 
 import pint
@@ -487,92 +488,107 @@ def solve(
         solution.to_file(os.path.join(directory, str(0)))
     if return_solutions:
         solutions.append(solution)
+    else:
+        del solution
 
-    if iterations and len(device.layers) > 1:
-
+    layer_names = list(device.layers)
+    num_layers = len(layer_names)
+    if iterations and num_layers > 1:
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
-
-        layer_names = list(device.layers)
-        # Cache kernel matrices
+        # Cache kernel matrices.
+        # Save kernel matrices to disk to avoid filling up memory.
         kernels = {}
-        for i in range(iterations):
-            # Calculate the screening fields at each layer from every other layer
-            other_screening_fields = {
-                name: np.zeros(points.shape[0], dtype=float) for name in layer_names
-            }
-            for layer, other_layer in itertools.product(device.layers_list, repeat=2):
-                if layer.name == other_layer.name:
-                    continue
-                logger.info(
-                    f"Calculating screening field at {layer.name} "
-                    f"from {other_layer.name} ({i+1}/{iterations})."
-                )
-                # Average stream function over all vertices in each triangle to
-                # estimate the stream function value at the centroid of the triangle.
-                g = streams[other_layer.name][triangles].mean(axis=1)
-                dz = other_layer.z0 - layer.z0
-                key = frozenset([layer.name, other_layer.name])
-                q = kernels.get(key, None)
-                if q is None:
-                    q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                    kernels[key] = q
-                # Calculate the dipole kernel and integrate
-                # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                other_screening_fields[layer.name] += np.sum(tri_areas * q * g, axis=1)
+        with tempfile.TemporaryDirectory() as tempdir:
+            for i in range(iterations):
+                # Calculate the screening fields at each layer from every other layer
+                other_screening_fields = {
+                    name: np.zeros(points.shape[0], dtype=float) for name in layer_names
+                }
+                for layer, other_layer in itertools.product(
+                    device.layers_list, repeat=2
+                ):
+                    if layer.name == other_layer.name:
+                        continue
+                    logger.info(
+                        f"Calculating screening field at {layer.name} "
+                        f"from {other_layer.name} ({i+1}/{iterations})."
+                    )
+                    # Average stream function over all vertices in each triangle to
+                    # estimate the stream function value at the centroid of the triangle.
+                    g = streams[other_layer.name][triangles].mean(axis=1)
+                    dz = other_layer.z0 - layer.z0
+                    key = frozenset([layer.name, other_layer.name])
+                    # Get the cached kernel matrix,
+                    # or calculate it if it's not yet in the cache.
+                    q = kernels.get(key, None)
+                    if q is None:
+                        q = (2 * dz ** 2 - rho2) / (
+                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                        )
+                        fname = os.path.join(tempdir, "_".join(key))
+                        np.save(fname, q)
+                        kernels[key] = f"{fname}.npy"
+                    elif isinstance(q, str):
+                        q = np.load(q)
+                    # Calculate the dipole kernel and integrate
+                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                    other_screening_fields[layer.name] += np.sum(
+                        tri_areas * q * g, axis=1
+                    )
+                # Solve again with the screening fields from all layers.
+                # Calculate applied fields only once per iteration.
+                new_layer_fields = {}
+                for name, layer in device.layers.items():
+                    # Units: current_units / device.length_units
+                    new_layer_fields[name] = (
+                        layer_fields[name] + other_screening_fields[name]
+                    )
+                streams = {}
+                fields = {}
+                screening_fields = {}
+                for name, layer in device.layers.items():
+                    logger.info(
+                        f"Calculating {name} response to applied field and "
+                        f"screening field from other layers ({i+1}/{iterations})."
+                    )
+                    g, total_field, screening_field = brandt_layer(
+                        device=device,
+                        layer=name,
+                        applied_field=new_layer_fields[name],
+                        Lambda=layer_Lambdas[name],
+                        circulating_currents=circulating_currents,
+                        current_units=current_units,
+                        check_inversion=check_inversion,
+                    )
+                    # Units: current_units
+                    streams[name] = g
+                    # Units: current_units / device.length_units
+                    fields[name] = total_field
+                    screening_fields[name] = screening_field
 
-            # Solve again with the screening fields from all layers.
-            # Calculate applied fields only once per iteration.
-            new_layer_fields = {}
-            for name, layer in device.layers.items():
-                # Units: current_units / device.length_units
-                new_layer_fields[name] = (
-                    layer_fields[name] + other_screening_fields[name]
-                )
-            streams = {}
-            fields = {}
-            screening_fields = {}
-            for name, layer in device.layers.items():
-                logger.info(
-                    f"Calculating {name} response to applied field and "
-                    f"screening field from other layers ({i+1}/{iterations})."
-                )
-
-                g, total_field, screening_field = brandt_layer(
+                solution = Solution(
                     device=device,
-                    layer=name,
-                    applied_field=new_layer_fields[name],
-                    Lambda=layer_Lambdas[name],
-                    circulating_currents=circulating_currents,
+                    streams=streams,
+                    fields={
+                        # Units: field_units
+                        layer: field / field_conversion_magnitude
+                        for layer, field in fields.items()
+                    },
+                    applied_field=applied_field,
+                    field_units=field_units,
                     current_units=current_units,
-                    check_inversion=check_inversion,
+                    circulating_currents=circulating_currents,
+                    solver=_solver,
                 )
-                # Units: current_units
-                streams[name] = g
-                # Units: current_units / device.length_units
-                fields[name] = total_field
-                screening_fields[name] = screening_field
-
-            solution = Solution(
-                device=device,
-                streams=streams,
-                fields={
-                    # Units: field_units
-                    layer: field / field_conversion_magnitude
-                    for layer, field in fields.items()
-                },
-                applied_field=applied_field,
-                field_units=field_units,
-                current_units=current_units,
-                circulating_currents=circulating_currents,
-                solver=_solver,
-            )
-            if directory is not None:
-                solution.to_file(os.path.join(directory, str(i + 1)))
-            if return_solutions:
-                solutions.append(solution)
+                if directory is not None:
+                    solution.to_file(os.path.join(directory, str(i + 1)))
+                if return_solutions:
+                    solutions.append(solution)
+                else:
+                    del solution
     if return_solutions:
         return solutions
 

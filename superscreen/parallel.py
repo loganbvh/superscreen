@@ -7,7 +7,6 @@ import itertools
 import tempfile
 import warnings
 import multiprocessing as mp
-from distutils.dir_util import copy_tree
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
 import ray
@@ -127,6 +126,15 @@ def _load_solutions(
     return solutions
 
 
+def _cleanup(paths: List[str], iterations: int) -> None:
+    for path in paths:
+        final = os.path.join(path, str(iterations))
+        for f in os.listdir(final):
+            shutil.move(os.path.join(final, f), path)
+        for j in range(iterations + 1):
+            shutil.rmtree(os.path.join(path, str(j)))
+
+
 #######################################################################################
 # Synchronous (serial) execution
 #######################################################################################
@@ -200,13 +208,8 @@ def solve_many_serial(
                 _solver=solver,
             )
             paths.append(path)
-
         if keep_only_final_solution:
-            for path in paths:
-                copy_tree(os.path.join(path, str(iterations)), path)
-                for j in range(iterations + 1):
-                    shutil.rmtree(os.path.join(path, str(j)))
-
+            _cleanup(paths, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,
@@ -395,13 +398,8 @@ def solve_many_mp(
             paths = pool.map(solve_single_mp, kwargs)
             pool.close()
             pool.join()
-
         if keep_only_final_solution:
-            for path in paths:
-                copy_tree(os.path.join(path, str(iterations)), path)
-                for j in range(iterations + 1):
-                    shutil.rmtree(os.path.join(path, str(j)))
-
+            _cleanup(paths, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,
@@ -545,15 +543,9 @@ def solve_many_ray(
                     _solver=solver,
                 )
             )
-
         paths = ray.get(result_ids)
-
         if keep_only_final_solution:
-            for path in paths:
-                copy_tree(os.path.join(path, str(iterations)), path)
-                for j in range(iterations + 1):
-                    shutil.rmtree(os.path.join(path, str(j)))
-
+            _cleanup(paths, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,

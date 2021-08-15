@@ -24,11 +24,13 @@ def device():
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
+        sc.Layer("layer2", london_lambda=3, thickness=0.05, z0=1.0),
     ]
 
     films = [
         sc.Polygon("disk", layer="layer0", points=sc.geometry.circle(5)),
         sc.Polygon("ring1", layer="layer1", points=sc.geometry.circle(4)),
+        sc.Polygon("disk2", layer="layer2", points=sc.geometry.circle(6)),
     ]
 
     holes = [
