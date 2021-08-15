@@ -11,7 +11,6 @@ import scipy.sparse as sp
 from scipy.spatial.distance import cdist
 
 from .fem import areas, centroids
-from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution
 from .sources import ConstantField
@@ -500,15 +499,9 @@ def solve(
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = cdist(points, tri_points, metric="sqeuclidean")
         # Cache kernel matrices.
-        # If num_layers > 2, save kernel matrices to disk to avoid
-        # filling up memory. Otherwise, just stick all the
-        # kernel matrices in a dictionary.
+        # Save kernel matrices to disk to avoid filling up memory.
         kernels = {}
-        if num_layers > 2:
-            temp_context = tempfile.TemporaryDirectory()
-        else:
-            temp_context = NullContextManager()
-        with temp_context as tempdir:
+        with tempfile.TemporaryDirectory() as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
                 other_screening_fields = {
@@ -535,12 +528,9 @@ def solve(
                         q = (2 * dz ** 2 - rho2) / (
                             4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
                         )
-                        if tempdir is not None:
-                            fname = os.path.join(tempdir, "_".join(key))
-                            np.save(fname, q)
-                            kernels[key] = f"{fname}.npy"
-                        else:
-                            kernels[key] = q
+                        fname = os.path.join(tempdir, "_".join(key))
+                        np.save(fname, q)
+                        kernels[key] = f"{fname}.npy"
                     elif isinstance(q, str):
                         q = np.load(q)
                     # Calculate the dipole kernel and integrate
