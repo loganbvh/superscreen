@@ -492,8 +492,7 @@ def solve(
         del solution
 
     layer_names = list(device.layers)
-    num_layers = len(layer_names)
-    if iterations and num_layers > 1:
+    if iterations and len(layer_names) > 1:
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
