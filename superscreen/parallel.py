@@ -126,13 +126,12 @@ def _load_solutions(
     return solutions
 
 
-def _cleanup(paths: List[str], iterations: int) -> None:
-    for path in paths:
-        final = os.path.join(path, str(iterations))
-        for f in os.listdir(final):
-            shutil.move(os.path.join(final, f), path)
-        for j in range(iterations + 1):
-            shutil.rmtree(os.path.join(path, str(j)))
+def _cleanup(directory: str, iterations: int) -> None:
+    final = os.path.join(directory, str(iterations))
+    for f in os.listdir(final):
+        shutil.move(os.path.join(final, f), directory)
+    for j in range(iterations + 1):
+        shutil.rmtree(os.path.join(directory, str(j)))
 
 
 #######################################################################################
@@ -208,8 +207,8 @@ def solve_many_serial(
                 _solver=solver,
             )
             paths.append(path)
-        if keep_only_final_solution:
-            _cleanup(paths, iterations)
+            if keep_only_final_solution:
+                _cleanup(path, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,
@@ -285,7 +284,7 @@ def init(shared_arrays):
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     """Solve a single setup (multiprocessing)."""
     use_shared_memory = kwargs.pop("use_shared_memory")
-
+    keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     device = kwargs["device"]
 
     if use_shared_memory:
@@ -306,6 +305,9 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     kwargs["device"] = device
 
     _ = brandt.solve(**kwargs)
+
+    if keep_only_final_solution:
+        _cleanup(kwargs["directory"], kwargs["iterations"])
 
     return kwargs["directory"]
 
@@ -372,6 +374,7 @@ def solve_many_mp(
                 dict(
                     directory=os.path.join(savedir, path),
                     return_solutions=return_solutions,
+                    keep_only_final_solution=keep_only_final_solution,
                     device=device,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
@@ -398,8 +401,6 @@ def solve_many_mp(
             paths = pool.map(solve_single_mp, kwargs)
             pool.close()
             pool.join()
-        if keep_only_final_solution:
-            _cleanup(paths, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,
@@ -436,6 +437,7 @@ def solve_single_ray(
     **kwargs,
 ):
     """Solve a single setup (ray)."""
+    keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     kwargs["device"].set_arrays(arrays)
 
     log_level = kwargs.pop("log_level", None)
@@ -443,6 +445,9 @@ def solve_single_ray(
         logging.basicConfig(level=log_level)
 
     _ = brandt.solve(**kwargs)
+
+    if keep_only_final_solution:
+        _cleanup(kwargs["directory"], kwargs["iterations"])
 
     return kwargs["directory"]
 
@@ -539,13 +544,12 @@ def solve_many_ray(
                     check_inversion=check_inversion,
                     log_level=log_level,
                     return_solutions=False,
+                    keep_only_final_solution=keep_only_final_solution,
                     directory=path,
                     _solver=solver,
                 )
             )
         paths = ray.get(result_ids)
-        if keep_only_final_solution:
-            _cleanup(paths, iterations)
         if return_solutions:
             solutions = _load_solutions(
                 directory=savedir,
