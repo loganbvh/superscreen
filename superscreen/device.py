@@ -326,7 +326,9 @@ class Device(object):
         self,
         copy_arrays: bool = False,
         dense: bool = True,
-    ) -> Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]:
+    ) -> Optional[
+        Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]
+    ]:
         """Returns a dict of the large arrays that belong to the device.
 
         Args:
@@ -335,9 +337,12 @@ class Device(object):
             dense: Whether to convert any sparse matrices to dense numpy arrays.
 
         Returns:
-            A dict of arrays, with keys specified by ``Device.ARRAY_NAMES``
+            A dict of arrays, with keys specified by ``Device.ARRAY_NAMES``,
+            or None if the arrays don't exist.
         """
-        arrays = {name: getattr(self, name) for name in self.ARRAY_NAMES}
+        arrays = {name: getattr(self, name, None) for name in self.ARRAY_NAMES}
+        if all(val is None for val in arrays.values()):
+            return None
         if copy_arrays:
             arrays = deepcopy(arrays)
         for name, array in arrays.items():
@@ -412,8 +417,9 @@ class Device(object):
             length_units=self.length_units,
         )
         if with_arrays:
-            device.set_arrays(self.get_arrays(copy_arrays=copy_arrays))
-
+            arrays = self.get_arrays(copy_arrays=copy_arrays)
+            if arrays is not None:
+                device.set_arrays(arrays)
         return device
 
     def __copy__(self) -> "Device":
