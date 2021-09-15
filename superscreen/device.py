@@ -326,7 +326,9 @@ class Device(object):
         self,
         copy_arrays: bool = False,
         dense: bool = True,
-    ) -> Optional[Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]]:
+    ) -> Optional[
+        Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]
+    ]:
         """Returns a dict of the large arrays that belong to the device.
 
         Args:
