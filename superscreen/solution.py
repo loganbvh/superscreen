@@ -7,6 +7,7 @@ import dill
 import pint
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.tri import Triangulation, LinearTriInterpolator
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
 
@@ -372,7 +373,10 @@ class Solution(object):
         for name, layer in device.layers.items():
             dz = zs - layer.z0
             if np.all(dz == 0):
-                Hz = self.fields[name]
+                # Interpolate field in the plane of an existing layer
+                tri = Triangulation(points[:, 0], points[:, 1], triangles=triangles)
+                Hz_interp = LinearTriInterpolator(tri, self.fields[name])
+                Hz = np.asarray(Hz_interp(positions[:, 0], positions[:, 1]))
             else:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -415,9 +419,9 @@ class Solution(object):
                 magnitude=(not with_units),
             )
         if return_sum:
-            fields = sum(fields.values()) + H_applied
+            fields = sum(fields.values()) + H_applied.squeeze()
         else:
-            fields["applied_field"] = H_applied
+            fields["applied_field"] = H_applied.squeeze()
         return fields
 
     def to_file(
