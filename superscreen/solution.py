@@ -7,6 +7,7 @@ import dill
 import pint
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.tri import Triangulation, LinearTriInterpolator
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
 
@@ -371,19 +372,29 @@ class Solution(object):
         # Compute the fields at the specified positions from the currents in each layer
         for name, layer in device.layers.items():
             dz = zs - layer.z0
-            if np.any(dz == 0):
-                raise ValueError(
-                    f"Cannot calculate fields in the same plane as layer {name}."
-                )
-            # g has units of [current]
-            g = self.streams[name][triangles].mean(axis=1)
-            # Q is the dipole kernel for the z component, Hz
-            # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
-            Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-            # tri_areas has units of [length]^2
-            # So here Hz is in units of [current] * [length]^(-1)
-            Hz = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+            if np.all(dz == 0):
+                # Interpolate field in the plane of an existing layer
+                tri = Triangulation(points[:, 0], points[:, 1], triangles=triangles)
+                Hz_interp = LinearTriInterpolator(tri, self.fields[name])
+                Hz = np.asarray(Hz_interp(positions[:, 0], positions[:, 1]))
+            else:
+                if np.any(dz == 0):
+                    raise ValueError(
+                        f"Cannot calculate fields in the same plane as layer {name}."
+                    )
+                # g has units of [current]
+                g = self.streams[name][triangles].mean(axis=1)
+                # Q is the dipole kernel for the z component, Hz
+                # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
+                Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                # tri_areas has units of [length]^2
+                # So here Hz is in units of [current] * [length]^(-1)
+                Hz = np.asarray(np.sum(tri_areas * Q * g, axis=1))
             if vector:
+                if np.any(dz == 0):
+                    raise ValueError(
+                        f"Cannot calculate fields in the same plane as layer {name}."
+                    )
                 # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
                 # Pairwise difference between all x positions
                 d = np.subtract.outer(positions[:, 0], tri_points[:, 0])
@@ -408,9 +419,9 @@ class Solution(object):
                 magnitude=(not with_units),
             )
         if return_sum:
-            fields = sum(fields.values()) + H_applied
+            fields = sum(fields.values()) + H_applied.squeeze()
         else:
-            fields["applied_field"] = H_applied
+            fields["applied_field"] = H_applied.squeeze()
         return fields
 
     def to_file(
