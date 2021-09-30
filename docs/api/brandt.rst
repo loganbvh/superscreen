@@ -33,6 +33,9 @@ Solution
 
 .. autofunction:: superscreen.io.iload_solutions
 
+.. autoclass:: superscreen.solution.Fluxoid
+    :show-inheritance:
+
 Supporting Functions
 --------------------
 

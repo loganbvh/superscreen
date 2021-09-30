@@ -8,7 +8,7 @@ import pint
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse as sp
-from scipy.spatial.distance import cdist
+from scipy.spatial import distance
 
 from .fem import areas, centroids
 from .parameter import Constant, Parameter
@@ -40,7 +40,7 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
         Shape (n, n) array, qij
     """
     # Euclidean distance between points
-    distances = cdist(points, points, metric="euclidean")
+    distances = distance.cdist(points, points, metric="euclidean")
     q = np.zeros_like(distances)
     # Diagonals of distances are zero by definition, so q[i,i] will diverge
     nz = np.nonzero(distances)
@@ -496,7 +496,7 @@ def solve(
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = cdist(points, tri_points, metric="sqeuclidean")
+        rho2 = distance.cdist(points, tri_points, metric="sqeuclidean")
         # Cache kernel matrices.
         # Save kernel matrices to disk to avoid filling up memory.
         kernels = {}
