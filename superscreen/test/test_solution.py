@@ -1,5 +1,6 @@
 import tempfile
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pint
 import pytest
@@ -24,8 +25,18 @@ def device():
         sc.Polygon("ring_hole", layer="layer1", points=sc.geometry.circle(2)),
     ]
 
-    device = sc.Device("device", layers=layers, films=films, holes=holes)
-    device.make_mesh(min_triangles=2500)
+    abstract_regions = [
+        sc.Polygon("bounding_box", layer="layer0", points=sc.geometry.square(12)),
+    ]
+
+    device = sc.Device(
+        "device",
+        layers=layers,
+        films=films,
+        holes=holes,
+        abstract_regions=abstract_regions,
+    )
+    device.make_mesh(min_triangles=5000)
 
     return device
 
@@ -71,11 +82,21 @@ def test_solution_equals(solution1, solution2):
     assert solution1 == solution1
     assert solution2 == solution2
     assert solution1 != solution2
+    assert solution1 != 0
 
 
 @pytest.mark.parametrize("dataset", ["streams", "fields", "screening_fields"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_grid_data(solution1, dataset, with_units):
+
+    with pytest.raises(ValueError):
+        _ = solution1.grid_data("invalid_dataset")
+
+    with pytest.raises(ValueError):
+        _ = solution1.grid_data("streams", layers="invalid_layer")
+
+    with pytest.raises(TypeError):
+        _ = solution1.grid_data("streams", grid_shape=(100, 100, 2))
 
     xgrid, ygrid, zgrids = solution1.grid_data(
         dataset,
@@ -142,6 +163,9 @@ def test_current_density(solution1, units, with_units):
 @pytest.mark.parametrize("units", [None, "Phi_0", "mT * um**2"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_polygon_flux(solution2, units, with_units):
+
+    with pytest.raises(ValueError):
+        _ = solution2.polygon_flux(polygons="invalid_polygon")
 
     flux_dict = solution2.polygon_flux(units=units, with_units=with_units)
 
@@ -247,3 +271,111 @@ def test_save_solution(solution1, solution2, save_mesh, compressed):
         solution2.to_file(other_directory, save_mesh=save_mesh, compressed=compressed)
         loaded_solution2 = sc.Solution.from_file(other_directory)
     assert solution2 == loaded_solution2
+
+
+@pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
+@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
+@pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("flux_units", ["Phi_0", None])
+def test_fluxoid_simply_connected(solution1, flux_units, with_units, layers, center):
+
+    if layers is None:
+        with pytest.raises(ValueError):
+            _ = solution1.rectangle_fluxoid(
+                width=3,
+                height=3,
+                x_points=200,
+                y_points=200,
+                center=center,
+                layers=layers,
+                flux_units=flux_units,
+                with_units=with_units,
+            )
+        return
+
+    if center == (-4, 0):
+        # The rectangle goes outside of the film -> raise ValueError
+        context = pytest.raises(ValueError)
+    else:
+        context = sc.io.NullContextManager()
+
+    with context:
+        fluxoid_dict = solution1.rectangle_fluxoid(
+            width=3,
+            height=3,
+            x_points=200,
+            y_points=200,
+            center=center,
+            layers=layers,
+            flux_units=flux_units,
+            with_units=with_units,
+        )
+
+    if center == (-4, 0):
+        return
+
+    for name, fluxoid in fluxoid_dict.items():
+        assert name in solution1.device.layers
+        flux_part, supercurrent_part = fluxoid
+        desired_type = pint.Quantity if with_units else float
+        assert isinstance(flux_part, desired_type)
+        assert isinstance(supercurrent_part, desired_type)
+        total_fluxoid = sum(fluxoid)
+        if with_units:
+            flux_part = flux_part.m
+            total_fluxoid = total_fluxoid.m
+        # Total fluxoid should vanish for a simply connected region,
+        # so we assert that it's small relative to the flux part.
+        assert abs(total_fluxoid) / abs(flux_part) < 2e-2
+
+
+@pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("units", ["uA / um", None])
+@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
+@pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
+@pytest.mark.parametrize("positions", [[0, 0], np.array([[1, 0], [0, 1]]), None])
+def test_interp_current_density(
+    solution1, positions, method, layers, units, with_units
+):
+    if positions is None:
+        positions = solution1.device.points
+
+    with pytest.raises(ValueError):
+        _ = solution1.interp_current_density(
+            positions,
+            layers=layers,
+            method="invalid_method",
+            units=units,
+            with_units=with_units,
+        )
+
+    current_densities = solution1.interp_current_density(
+        positions,
+        layers=layers,
+        method=method,
+        units=units,
+        with_units=with_units,
+    )
+    if layers is None:
+        assert set(current_densities) == set(solution1.device.layers)
+    else:
+        assert set(current_densities) == set(["layer0"])
+    for array in current_densities.values():
+        assert array.shape == np.atleast_2d(positions).shape
+        if with_units:
+            assert isinstance(array, pint.Quantity)
+
+
+def test_visualization(solution1):
+    with sc.visualization.non_gui_backend():
+        fig, _ = solution1.plot_streams()
+        plt.close(fig)
+
+        fig, _ = solution1.plot_fields()
+        plt.close(fig)
+
+        fig, _ = solution1.plot_currents()
+        plt.close(fig)
+
+        fig, _ = solution1.plot_field_at_positions(solution1.device.points, zs=0.3333)
+        plt.close(fig)

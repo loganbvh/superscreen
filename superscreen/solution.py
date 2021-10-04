@@ -1,24 +1,47 @@
 import os
 import json
 from datetime import datetime
-from typing import Optional, Union, Callable, Dict, Tuple, List, Any
+from typing import Optional, Union, Callable, Dict, Tuple, List, Any, NamedTuple
 
 import dill
 import pint
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation, LinearTriInterpolator
-from scipy.interpolate import griddata
-from scipy.spatial.distance import cdist
+from scipy import interpolate
+from scipy.spatial import distance
 
+from . import geometry
 from .about import version_dict
-from .device import Device
+from .device import Device, Polygon
 from .fem import areas, centroids
-
+from .parameter import Constant
 
 from backports.datetime_fromisoformat import MonkeyPatch
 
 MonkeyPatch.patch_fromisoformat()
+
+
+class Fluxoid(NamedTuple):
+    """The fluxoid for a closed region :math:`S` is defined as:
+
+    .. math::
+
+        \\Phi^f_S = \\underbrace{
+            \\int_S \\mu_0 H_z(\\vec{r})\\,\\mathrm{d}^2r
+        }_{\\text{flux part}}
+        + \\underbrace{
+            \\oint_{\\Omega S}
+            \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
+        }_{\\text{supercurrent part}}
+
+    Args:
+        flux_part: The flux portion of the fluxoid.
+        supercurrent_part: The supercurrent portion of the fluxoid.
+    """
+
+    flux_part: Union[float, pint.Quantity]
+    supercurrent_part: Union[float, pint.Quantity]
 
 
 class Solution(object):
@@ -106,8 +129,8 @@ class Solution(object):
     def grid_data(
         self,
         dataset: str,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         method: str = "cubic",
         with_units: bool = False,
         **kwargs,
@@ -119,9 +142,9 @@ class Solution(object):
         Args:
             dataset: Name of the dataset to interpolate
                 (one of "streams", "fields", or "screening_fields").
-            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
-                then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate results.
+            grid_shape: Shape of the desired rectangular grid. If a single integer
+                N is given, then the grid will be square, shape = (N, N).
             method: Interpolation method to use (see scipy.interpolate.griddata).
             with_units: Whether to return arrays of pint.Quantities with units attached.
 
@@ -146,7 +169,8 @@ class Solution(object):
             grid_shape = (grid_shape, grid_shape)
         if not isinstance(grid_shape, (tuple, list)) or len(grid_shape) != 2:
             raise TypeError(
-                f"Expected a tuple of length 2, but got {grid_shape} ({type(grid_shape)})."
+                f"Expected a tuple of length 2, but got {grid_shape} "
+                f"({type(grid_shape)})."
             )
 
         points = self.device.points
@@ -158,7 +182,9 @@ class Solution(object):
         zgrids = {}
         for name, array in datasets.items():
             if name in layers:
-                zgrid = griddata(points, array, (xgrid, ygrid), method=method, **kwargs)
+                zgrid = interpolate.griddata(
+                    points, array, (xgrid, ygrid), method=method, **kwargs
+                )
                 zgrids[name] = zgrid
         if with_units:
             xgrid = xgrid * self.device.ureg(self.device.length_units)
@@ -174,8 +200,8 @@ class Solution(object):
 
     def current_density(
         self,
-        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         layers: Optional[Union[str, List[str]]] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         method: str = "cubic",
         units: Optional[str] = None,
         with_units: bool = False,
@@ -186,9 +212,9 @@ class Solution(object):
         Keyword arguments are passed to scipy.interpolate.griddata().
 
         Args:
-            grid_shape: Shape of the desired rectangular grid. If a single integer N is given,
-                then the grid will be square, shape = (N, N).
             layers: Name(s) of the layer(s) for which to interpolate current density.
+            grid_shape: Shape of the desired rectangular grid. If a single integer
+                N is given, then the grid will be square, shape = (N, N).
             method: Interpolation method to use (see scipy.interpolate.griddata).
             units: The desired units for the current density. Defaults to
                 ``self.current_units / self.device.length_units``.
@@ -222,13 +248,75 @@ class Solution(object):
             ygrid = ygrid.magnitude
         return xgrid, ygrid, Js
 
+    def interp_current_density(
+        self,
+        positions: np.ndarray,
+        layers: Optional[Union[str, List[str]]] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        method: str = "cubic",
+        units: Optional[str] = None,
+        with_units: bool = False,
+        **kwargs,
+    ):
+        """Computes the current density ``J = [dg/dy, -dg/dx]``
+        at unstructured coordinates via interpolation.
+
+        Keyword arguments are passed to scipy.interpolate.griddata().
+
+        Args:
+            positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
+                the current density.
+            layers: Name(s) of the layer(s) for which to interpolate current density.
+            grid_shape: Shape of the desired rectangular grid. If a single integer
+                N is given, then the grid will be square, shape = (N, N).
+            method: Interpolation method to use (see scipy.interpolate.griddata).
+            units: The desired units for the current density. Defaults to
+                ``self.current_units / self.device.length_units``.
+            with_units: Whether to return arrays of pint.Quantities with units attached.
+
+        Returns:
+            A dict of interpolated current density for each layer.
+        """
+        valid_methods = ("nearest", "linear", "cubic")
+        if method not in valid_methods:
+            raise ValueError(
+                f"Interpolation method must be one of {valid_methods} (got {method})."
+            )
+        if method == "nearest":
+            interpolator = interpolate.NearestNDInterpolator
+        elif method == "linear":
+            interpolator = interpolate.LinearNDInterpolator
+        else:  # "cubic"
+            interpolator = interpolate.CloughTocher2DInterpolator
+        if units is None:
+            units = f"{self.current_units} / {self.device.length_units}"
+        positions = np.atleast_2d(positions)
+        xgrid, ygrid, Jgrids = self.current_density(
+            layers=layers,
+            grid_shape=grid_shape,
+            method=method,
+            units=units,
+            with_units=False,
+            **kwargs,
+        )
+        xy = np.stack([xgrid.ravel(), ygrid.ravel()], axis=1)
+        interpolated_Js = {}
+        for layer, (Jx, Jy) in Jgrids.items():
+            Jx_interp = interpolator(xy, Jx.ravel())
+            Jy_interp = interpolator(xy, Jy.ravel())
+            J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
+            if with_units:
+                J = J * self.device.ureg(units)
+            interpolated_Js[layer] = J
+        return interpolated_Js
+
     def polygon_flux(
         self,
         polygons: Optional[Union[str, List[str]]] = None,
         units: Optional[Union[str, pint.Unit]] = None,
         with_units: bool = True,
     ) -> Dict[str, Union[float, pint.Quantity]]:
-        """Compute the flux through all polygons (films, holes, and flux regions)
+        """Computes the flux through all polygons (films, holes, and flux regions)
         by integrating the calculated fields.
 
         Args:
@@ -287,6 +375,143 @@ class Solution(object):
                 fluxes[name] = flux.magnitude
         return fluxes
 
+    def rectangle_fluxoid(
+        self,
+        *,
+        width: float,
+        height: float,
+        x_points: int,
+        y_points: int,
+        center: Tuple[float, float] = (0, 0),
+        layers: Optional[Union[str, List[str]]] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        interp_method: str = "cubic",
+        flux_units: Optional[str] = None,
+        with_units: bool = True,
+        exclude_holes: bool = True,
+    ) -> Dict[str, Fluxoid]:
+        """Computes the :class:`Fluxoid` (flux + supercurrent) for
+        a given rectangular region.
+
+        The fluxoid for a closed region :math:`S` is defined as:
+
+        .. math::
+
+            \\Phi^f_S = \\underbrace{
+                \\int_S \\mu_0 H_z(\\vec{r})\\,\\mathrm{d}^2r
+            }_{\\text{flux part}}
+            + \\underbrace{
+                \\oint_{\\Omega S}
+                \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
+            }_{\\text{supercurrent part}}
+
+        Args:
+            width: Width of the rectangle (in the x direction).
+            height: Height of the rectangle (in the y direction).
+            x_points: Number of points in the top and bottom of the rectangle.
+            y_points: Number of points in the sides of the rectangle.
+            center: Coordinates of the center of the rectangle.
+            layers: Name(s) of the layer(s) for which to compute the fluxoid.
+            grid_shape: Shape of the desired rectangular grid. If a single integer
+                N is given, then the grid will be square, shape = (N, N).
+            interp_method: Interpolation method to use.
+            flux_units: The desired units for the current density. Defaults to
+                ``self.current_units / self.device.length_units``.
+            with_units: Whether to return values as pint.Quantities with units attached.
+            exclude_holes: Whether to raise an exception if the rectangle intersects a
+                hole (fluxoid quantization is not enforced for multiply-connected films).
+
+        Returns:
+            A dict of ``{layer_name: fluxoid}`` for each specified layer, where ``fluxoid``
+            is an instance of :class:`Fluxoid`.
+        """
+        device = self.device
+        ureg = device.ureg
+        if layers is None:
+            layers = list(device.layers)
+        if isinstance(layers, str):
+            layers = [layers]
+        # Evaluating the supercurrent line integral for an arbitrary closed path
+        # seems a bit too involved, so here we will only handle rectangles aligned
+        # with the coordinate axes.
+        points = geometry.rectangle(
+            width,
+            height,
+            x_points=x_points,
+            y_points=y_points,
+            center=center,
+        )
+        rectangle = Polygon(
+            "_rectangle",
+            layer=layers[0],
+            points=points,
+        )
+        err_msg = "The rectangle must lie completely within a superconducting film."
+        if not any(
+            film.contains_points(points[:, 0], points[:, 1]).all()
+            for film in device.films_list
+        ):
+            raise ValueError(err_msg)
+        if exclude_holes:
+            err_msg = err_msg[:-1] + " and cannot intersect any holes."
+            for hole in device.holes_list:
+                if hole.layer not in layers:
+                    continue
+                if hole.contains_points(points[:, 0], points[:, 1]).any():
+                    raise ValueError(err_msg)
+                if rectangle.contains_points(
+                    hole.points[:, 0], hole.points[:, 1]
+                ).any():
+                    raise ValueError(err_msg)
+
+        # Evaluate the supercurrent density at the rectangle coordinates.
+        J_units = f"{self.current_units} / {device.length_units}"
+        J_rects = self.interp_current_density(
+            points,
+            grid_shape=grid_shape,
+            layers=layers,
+            method=interp_method,
+            units=J_units,
+            with_units=False,
+        )
+
+        old_regions = device.abstract_regions_list
+        fluxoids = {}
+        for layer in layers:
+            # Compute the flux part of the fluxoid:
+            # \int_{rect} \mu_0 H_z(x, y) dx dy
+            try:
+                rectangle.layer = layer
+                device.abstract_regions_list = old_regions + [rectangle]
+                flux_part = self.polygon_flux(
+                    polygons=rectangle.name,
+                    units=flux_units,
+                    with_units=True,
+                )[rectangle.name]
+                if flux_units is None:
+                    flux_units = str(flux_part.units)
+            finally:
+                device.abstract_regions_list = old_regions
+
+            # Compute the supercurrent part of the fluxoid:
+            # \oint_{rect} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
+            J_rect = J_rects[layer][:-1]
+            Lambda = device.layers[layer].Lambda
+            if not callable(Lambda):
+                Lambda = Constant(Lambda)
+            Lambda_rect = Lambda(points[:, 0], points[:, 1])[:-1]
+            # \Lambda\vec{J}\cdot\mathrm{d}\vec{r}
+            integrand = Lambda_rect * np.sum(J_rect * np.diff(points, axis=0), axis=1)
+            # \oint_{rect}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
+            int_J = np.trapz(integrand)
+            int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
+            supercurrent_part = (ureg("mu_0") * int_J).to(flux_units)
+            if not with_units:
+                flux_part = flux_part.magnitude
+                supercurrent_part = supercurrent_part.magnitude
+            fluxoids[layer] = Fluxoid(flux_part, supercurrent_part)
+        return fluxoids
+
     def field_at_position(
         self,
         positions: np.ndarray,
@@ -296,28 +521,31 @@ class Solution(object):
         with_units: bool = True,
         return_sum: bool = True,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
-        """Calculate the field due to currents in the device at any point(s) in space.
+        """Calculates the field due to currents in the device at any point(s) in space.
 
         Args:
-            positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array of (x, y, z)
-                coordinates at which to calculate the magnetic field. A single list like [x, y]
-                or [x, y, z] is also allowed.
-            zs: z coordinates at which to calculate the field. If positions has shape (m, 3), then
-                this argument is not allowed. If zs is a scalar, then the fields are calculated in
-                a plane parallel to the x-y plane. If zs is any array, then it must be same length
-                as positions.
-            vector: Whether to return the full vector magnetic field or just the z component.
-            units: Units to which to convert the fields (can be either magnetic field H or
-                magnetic flux density B = mu0 * H). If not give, then the fields are returned in
-                units of ``self.field_units``.
-            with_units: Whether to return the fields as ``pint.Quantity`` with units attached.
-            return_sum: Whether to return the sum of the fields from all layers in the device,
-                or a dict of ``{layer_name: field_from_layer}``.
+            positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array
+                of (x, y, z) coordinates at which to calculate the magnetic field.
+                A single list like [x, y] or [x, y, z] is also allowed.
+            zs: z coordinates at which to calculate the field. If positions has shape
+                (m, 3), then this argument is not allowed. If zs is a scalar, then
+                the fields are calculated in a plane parallel to the x-y plane.
+                If zs is any array, then it must be same length as positions.
+            vector: Whether to return the full vector magnetic field
+                or just the z component.
+            units: Units to which to convert the fields (can be either magnetic field H
+                or magnetic flux density B = mu0 * H). If not given, then the fields
+                are returned in units of ``self.field_units``.
+            with_units: Whether to return the fields as ``pint.Quantity``
+                with units attached.
+            return_sum: Whether to return the sum of the fields from all layers in
+                the device, or a dict of ``{layer_name: field_from_layer}``.
 
         Returns:
-            An np.ndarray if return_sum is True, otherwise a dict of ``{layer_name: field_from_layer}``.
-            If with_units is True, then the array(s) will contain pint.Quantities. ``field_from_layer``
-            will have shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
+            An np.ndarray if return_sum is True, otherwise a dict of
+            ``{layer_name: field_from_layer}``. If with_units is True, then the
+            array(s) will contain pint.Quantities. ``field_from_layer`` will have
+            shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
         """
         from .brandt import convert_field
 
@@ -350,7 +578,7 @@ class Solution(object):
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = cdist(positions, tri_points, metric="sqeuclidean")
+        rho2 = distance.cdist(positions, tri_points, metric="sqeuclidean")
 
         Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
         if vector:
@@ -539,7 +767,7 @@ class Solution(object):
         other: Any,
         require_same_timestamp: bool = False,
     ) -> bool:
-        """Check whether two solutions are equal.
+        """Checks whether two solutions are equal.
 
         Args:
             other: The Solution to compare for equality.
@@ -549,14 +777,11 @@ class Solution(object):
         Returns:
             bool indicating whether the two solutions are equal
         """
-
+        # First check things that are "easy" to check
         if other is self:
             return True
-
         if not isinstance(other, Solution):
             return False
-
-        # First check things that are "easy" to check
         if not (
             self.device == other.device
             and self.field_units == other.field_units
@@ -565,11 +790,10 @@ class Solution(object):
             and self.applied_field == other.applied_field
         ):
             return False
-
         if require_same_timestamp and (self.time_created != other.time_created):
             return False
 
-        # Then check the arrays, which may take longer
+        # Then check the arrays, which will take longer
         for name, array in self.streams.items():
             if not np.allclose(array, other.streams[name]):
                 return False

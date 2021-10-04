@@ -21,6 +21,9 @@ def rotate(coords: np.ndarray, angle_degrees: float) -> np.ndarray:
     Returns:
         Shape (n, 2) array of rotated coordinates (x', y')
     """
+    coords = np.asarray(coords)
+    assert coords.ndim == 2
+    assert coords.shape[1] == 2
     R = rotation_matrix(np.radians(angle_degrees))
     return (R @ coords.T).T
 
@@ -95,11 +98,11 @@ def rectangle(
     centered at the specified center.
 
     Args:
-        width: Width of the rectangle (in the x direction)
-        height: Height of the rectangle (in the y direction)
+        width: Width of the rectangle (in the x direction).
+        height: Height of the rectangle (in the y direction).
         x_points: Number of points in the top and bottom of the rectangle.
         y_points: Number of points in the sides of the rectangle.
-        center: Coordinates of the center of the rectangle
+        center: Coordinates of the center of the rectangle.
         angle: Angle (in degrees) by which to rotate counterclockwise about (0, 0)
             **before** translating to the specified center.
 
@@ -111,18 +114,18 @@ def rectangle(
     x0, y0 = center
     xs = np.concatenate(
         [
-            np.linspace(-width / 2, width / 2, x_points),
             width / 2 * np.ones(y_points),
             np.linspace(width / 2, -width / 2, x_points),
             -width / 2 * np.ones(y_points),
+            np.linspace(-width / 2, width / 2, x_points),
         ]
     )
     ys = np.concatenate(
         [
+            np.linspace(-height / 2, height / 2, y_points),
             height / 2 * np.ones(x_points),
             np.linspace(height / 2, -height / 2, y_points),
             -height / 2 * np.ones(x_points),
-            np.linspace(-height / 2, height / 2, y_points),
         ]
     )
     coords = np.stack([xs, ys], axis=1)
