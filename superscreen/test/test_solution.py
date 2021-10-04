@@ -1,5 +1,6 @@
 import tempfile
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pint
 import pytest
@@ -81,11 +82,21 @@ def test_solution_equals(solution1, solution2):
     assert solution1 == solution1
     assert solution2 == solution2
     assert solution1 != solution2
+    assert solution1 != 0
 
 
 @pytest.mark.parametrize("dataset", ["streams", "fields", "screening_fields"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_grid_data(solution1, dataset, with_units):
+
+    with pytest.raises(ValueError):
+        _ = solution1.grid_data("invalid_dataset")
+
+    with pytest.raises(ValueError):
+        _ = solution1.grid_data("streams", layers="invalid_layer")
+
+    with pytest.raises(TypeError):
+        _ = solution1.grid_data("streams", grid_shape=(100, 100, 2))
 
     xgrid, ygrid, zgrids = solution1.grid_data(
         dataset,
@@ -152,6 +163,9 @@ def test_current_density(solution1, units, with_units):
 @pytest.mark.parametrize("units", [None, "Phi_0", "mT * um**2"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_polygon_flux(solution2, units, with_units):
+
+    with pytest.raises(ValueError):
+        _ = solution2.polygon_flux(polygons="invalid_polygon")
 
     flux_dict = solution2.polygon_flux(units=units, with_units=with_units)
 
@@ -260,9 +274,24 @@ def test_save_solution(solution1, solution2, save_mesh, compressed):
 
 
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
-@pytest.mark.parametrize("layers", ["layer0", ["layer0"]])
+@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
 @pytest.mark.parametrize("with_units", [False, True])
-def test_fluxoid_simply_connected(solution1, with_units, layers, center):
+@pytest.mark.parametrize("flux_units", ["Phi_0", None])
+def test_fluxoid_simply_connected(solution1, flux_units, with_units, layers, center):
+
+    if layers is None:
+        with pytest.raises(ValueError):
+            _ = solution1.rectangle_fluxoid(
+                width=3,
+                height=3,
+                x_points=200,
+                y_points=200,
+                center=center,
+                layers=layers,
+                flux_units=flux_units,
+                with_units=with_units,
+            )
+        return
 
     if center == (-4, 0):
         # The rectangle goes outside of the film -> raise ValueError
@@ -278,7 +307,7 @@ def test_fluxoid_simply_connected(solution1, with_units, layers, center):
             y_points=200,
             center=center,
             layers=layers,
-            flux_units="Phi_0",
+            flux_units=flux_units,
             with_units=with_units,
         )
 
@@ -301,17 +330,30 @@ def test_fluxoid_simply_connected(solution1, with_units, layers, center):
 
 
 @pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("units", ["uA / um", None])
 @pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
 @pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
 @pytest.mark.parametrize("positions", [[0, 0], np.array([[1, 0], [0, 1]]), None])
-def test_interp_current_density(solution1, positions, method, layers, with_units):
+def test_interp_current_density(
+    solution1, positions, method, layers, units, with_units
+):
     if positions is None:
         positions = solution1.device.points
+
+    with pytest.raises(ValueError):
+        _ = solution1.interp_current_density(
+            positions,
+            layers=layers,
+            method="invalid_method",
+            units=units,
+            with_units=with_units,
+        )
+
     current_densities = solution1.interp_current_density(
         positions,
         layers=layers,
         method=method,
-        units="uA / um",
+        units=units,
         with_units=with_units,
     )
     if layers is None:
@@ -322,3 +364,18 @@ def test_interp_current_density(solution1, positions, method, layers, with_units
         assert array.shape == np.atleast_2d(positions).shape
         if with_units:
             assert isinstance(array, pint.Quantity)
+
+
+def test_visualization(solution1):
+    with sc.visualization.non_gui_backend():
+        fig, _ = solution1.plot_streams()
+        plt.close(fig)
+        
+        fig, _ = solution1.plot_fields()
+        plt.close(fig)
+
+        fig, _ = solution1.plot_currents()
+        plt.close(fig)
+
+        fig, _ = solution1.plot_field_at_positions(solution1.device.points, zs=0.3333)
+        plt.close(fig)

@@ -266,7 +266,10 @@ class Device(object):
     @layers.setter
     def layers(self, layers_dict: Dict[str, Layer]) -> None:
         """Dict of ``{layer_name: layer}``"""
-        if not all(isinstance(obj, Layer) for obj in layers_dict.values()):
+        if not (
+            isinstance(layers_dict, dict)
+            and all(isinstance(obj, Layer) for obj in layers_dict.values())
+        ):
             raise TypeError("Layers must be a dict of {layer_name: Layer}.")
         self.layers_list = list(layers_dict.values())
 
@@ -278,7 +281,10 @@ class Device(object):
     @films.setter
     def films(self, films_dict: Dict[str, Polygon]) -> None:
         """Dict of ``{film_name: film_polygon}``"""
-        if not all(isinstance(obj, Polygon) for obj in films_dict.values()):
+        if not (
+            isinstance(films_dict, dict)
+            and all(isinstance(obj, Polygon) for obj in films_dict.values())
+        ):
             raise TypeError("Films must be a dict of {film_name: Polygon}.")
         self.films_list = list(films_dict.values())
 
@@ -290,7 +296,10 @@ class Device(object):
     @holes.setter
     def holes(self, holes_dict: Dict[str, Polygon]) -> None:
         """Dict of ``{hole_name: hole_polygon}``"""
-        if not all(isinstance(obj, Polygon) for obj in holes_dict.values()):
+        if not (
+            isinstance(holes_dict, dict)
+            and all(isinstance(obj, Polygon) for obj in holes_dict.values())
+        ):
             raise TypeError("Holes must be a dict of {hole_name: Polygon}.")
         self.holes_list = list(holes_dict.values())
 
@@ -302,7 +311,10 @@ class Device(object):
     @abstract_regions.setter
     def abstract_regions(self, regions_dict: Dict[str, Polygon]) -> None:
         """Dict of ``{region_name: region_polygon}``"""
-        if not all(isinstance(obj, Polygon) for obj in regions_dict.values()):
+        if not (
+            isinstance(regions_dict, dict)
+            and all(isinstance(obj, Polygon) for obj in regions_dict.values())
+        ):
             raise TypeError(
                 "Abstract regions must be a dict of {region_name: Polygon}."
             )
@@ -426,7 +438,7 @@ class Device(object):
         # Shallow copy (create new references to existing arrays).
         return self.copy(with_arrays=True, copy_arrays=False)
 
-    def __deepcopy__(self) -> "Device":
+    def __deepcopy__(self, memo) -> "Device":
         # Deep copy (copy all arrays and return references to copies)
         return self.copy(with_arrays=True, copy_arrays=True)
 

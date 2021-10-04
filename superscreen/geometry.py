@@ -21,6 +21,9 @@ def rotate(coords: np.ndarray, angle_degrees: float) -> np.ndarray:
     Returns:
         Shape (n, 2) array of rotated coordinates (x', y')
     """
+    coords = np.asarray(coords)
+    assert coords.ndim == 2
+    assert coords.shape[1] == 2
     R = rotation_matrix(np.radians(angle_degrees))
     return (R @ coords.T).T
 

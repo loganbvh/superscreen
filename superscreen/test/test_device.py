@@ -1,3 +1,4 @@
+import copy
 import pickle
 import tempfile
 
@@ -18,22 +19,55 @@ def device():
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
     ]
 
+    with pytest.raises(ValueError):
+        sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(2, 3))
+
     films = [
         sc.Polygon("disk", layer="layer0", points=sc.geometry.circle(5)),
-        sc.Polygon("ring", layer="layer1", points=sc.geometry.circle(4)),
+        sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    holes = [
-        sc.Polygon("ring_hole", layer="layer1", points=sc.geometry.circle(2)),
+    assert films[0].contains_points(0, 0)
+
+    abstract_regions = [
+        sc.Polygon(
+            "bounding_box",
+            layer="layer0",
+            points=sc.geometry.square(12, angle=90),
+        ),
     ]
 
-    device = sc.Device("device", layers=layers, films=films, holes=holes)
+    device = sc.Device(
+        "device",
+        layers=layers,
+        films=films,
+        holes=None,
+        abstract_regions=abstract_regions,
+    )
+
+    with pytest.raises(AttributeError):
+        device.layers["layer0"].Lambda = 0
+    with pytest.raises(ValueError):
+        device.compute_matrices()
+
+    assert device.get_arrays() is None
 
     return device
 
 
+def test_layer_bad_init():
+    with pytest.raises(ValueError):
+        _ = sc.Layer("layer0", Lambda=10, london_lambda=1, thickness=0.1, z0=0)
+
+    with pytest.raises(ValueError):
+        _ = sc.Layer("layer0", Lambda=None, london_lambda=1, thickness=None, z0=0)
+
+
 @pytest.fixture(scope="module")
 def device_with_mesh():
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon("poly", layer="", points=sc.geometry.circle(1).T)
 
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
@@ -50,18 +84,47 @@ def device_with_mesh():
     ]
 
     device = sc.Device("device", layers=layers, films=films, holes=holes)
+    assert device.abstract_regions == {}
     device.make_mesh(min_triangles=2500)
 
+    print(device)
+    assert device == device
+    assert all(film == film for film in films)
+    assert all(layer == layer for layer in layers)
+    assert films[0] != layers[0]
+    assert layers[0] != films[0]
+    assert layers[0] == layers[0].copy()
+    assert layers[0] is not layers[0].copy()
+    assert films[0] == films[0].copy()
+    assert films[0] is not films[0].copy()
+    assert device != layers[0]
+    with pytest.raises(TypeError):
+        device.layers = []
+    with pytest.raises(TypeError):
+        device.films = []
+    with pytest.raises(TypeError):
+        device.holes = []
+    with pytest.raises(TypeError):
+        device.abstract_regions = []
+    device.layers["layer1"].Lambda = sc.Constant(3)
+
+    assert (
+        copy.deepcopy(device)
+        == copy.copy(device)
+        == device.copy(with_arrays=True)
+        == device
+    )
     return device
 
 
-def test_plot_polygons(device, device_with_mesh):
+@pytest.mark.parametrize("legend", [False, True])
+def test_plot_polygons(device, device_with_mesh, legend):
     with non_gui_backend():
-        ax = device.plot_polygons()
+        ax = device.plot_polygons(legend=legend)
         assert isinstance(ax, plt.Axes)
         plt.close(ax.figure)
 
-        ax = device_with_mesh.plot_polygons()
+        ax = device_with_mesh.plot_polygons(legend=legend)
         assert isinstance(ax, plt.Axes)
         plt.close(ax.figure)
 
@@ -82,16 +145,24 @@ def test_plot_mesh(device, device_with_mesh, edges, vertices):
 @pytest.mark.parametrize("optimesh_steps", [None, 20])
 @pytest.mark.parametrize("sparse", [False, True])
 @pytest.mark.parametrize(
-    "weight_method", ["uniform", "half_cotangent", "inv_euclidean"]
+    "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
 )
 def test_make_mesh(device, min_triangles, optimesh_steps, sparse, weight_method):
+    if weight_method == "invalid":
+        context = pytest.raises(ValueError)
+    else:
+        context = sc.io.NullContextManager()
 
-    device.make_mesh(
-        min_triangles=min_triangles,
-        optimesh_steps=optimesh_steps,
-        sparse=sparse,
-        weight_method=weight_method,
-    )
+    with context:
+        device.make_mesh(
+            min_triangles=min_triangles,
+            optimesh_steps=optimesh_steps,
+            sparse=sparse,
+            weight_method=weight_method,
+        )
+
+    if weight_method == "invalid":
+        return
 
     assert device.points is not None
     assert device.triangles is not None

@@ -184,10 +184,7 @@ class Parameter(object):
             return False
 
         # Check if function bytecode is the same
-        if self.__call__.__code__ != other.__call__.__code__:
-            return False
-
-        if self.func.__name__ != other.func.__name__:
+        if self.func.__code__ != other.func.__code__:
             return False
 
         return self.kwargs == other.kwargs
@@ -208,7 +205,7 @@ class CompositeParameter(Parameter):
     Args:
         left: The object on the left-hand side of the operator.
         right: The object on the right-hand side of the operator.
-        operator: The operator acting on left and right.
+        operator_: The operator acting on left and right (or its string representation).
     """
 
     VALID_OPERATORS = {
@@ -223,7 +220,7 @@ class CompositeParameter(Parameter):
         self,
         left: Union[int, float, Parameter, "CompositeParameter"],
         right: Union[int, float, Parameter, "CompositeParameter"],
-        operator: Callable,
+        operator_: Union[Callable, str],
     ):
         valid_types = (int, float, Parameter, CompositeParameter)
         if not isinstance(left, valid_types):
@@ -240,14 +237,17 @@ class CompositeParameter(Parameter):
             raise TypeError(
                 "Either left or right must be a Parameter or CompositeParameter."
             )
-        if operator not in self.VALID_OPERATORS:
+        if isinstance(operator_, str):
+            operators = {v: k for k, v in self.VALID_OPERATORS.items()}
+            operator_ = operators.get(operator_.strip(), None)
+        if operator_ not in self.VALID_OPERATORS:
             raise ValueError(
                 f"Unknown operator, {operator}. "
                 f"Valid operators are {list(self.VALID_OPERATORS)}."
             )
         self.left = left
         self.right = right
-        self.operator = operator
+        self.operator = operator_
 
     def __call__(
         self,
@@ -318,7 +318,7 @@ class Constant(Parameter):
 
     def __init__(self, value, dimensions=2):
         if dimensions not in (2, 3):
-            raise ValueError("Dimensions must be 2 or 3.")
+            raise ValueError(f"Dimensions must be 2 or 3, got {dimensions}.")
         if dimensions == 2:
 
             def constant(x, y, value=0):
