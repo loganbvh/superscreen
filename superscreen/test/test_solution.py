@@ -370,7 +370,7 @@ def test_visualization(solution1):
     with sc.visualization.non_gui_backend():
         fig, _ = solution1.plot_streams()
         plt.close(fig)
-        
+
         fig, _ = solution1.plot_fields()
         plt.close(fig)
 
