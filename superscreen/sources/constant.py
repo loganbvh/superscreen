@@ -2,7 +2,7 @@ from typing import Union
 
 import numpy as np
 
-from .parameter import Parameter
+from ..parameter import Parameter
 
 
 def constant(
@@ -21,4 +21,12 @@ def constant(
 
 
 def ConstantField(value: float) -> Parameter:
+    """Returns a Parameter that computes a constant as a function of x, y, z.
+
+    Args:
+        value: The constant value of the field.
+
+    Returns:
+        A Parameter that returns ``value``.
+    """
     return Parameter(constant, value=value)
