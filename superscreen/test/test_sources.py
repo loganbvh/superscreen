@@ -1,11 +1,11 @@
-from superscreen.sources.dipole import DipoleField
 import pytest
 import numpy as np
 
 from superscreen import Parameter
 from superscreen.sources import ConstantField, VortexField, DipoleField
 
-@pytest.mark.parametrize("shape", [(1, ), (10, ), (100, )])
+
+@pytest.mark.parametrize("shape", [(1,), (10,), (100,)])
 def test_constant_field(shape):
     size = np.prod(shape)
     x = np.random.random(size).reshape(shape)
@@ -20,7 +20,7 @@ def test_constant_field(shape):
     assert np.all(field == value)
 
 
-@pytest.mark.parametrize("shape", [(1, ), (10, ), (100, )])
+@pytest.mark.parametrize("shape", [(1,), (10,), (100,)])
 @pytest.mark.parametrize("vortex_position", [(0, 0, 0), (1, 0, 1), (5, -5, 4)])
 def test_vortex_field(shape, vortex_position):
     size = np.prod(shape)
@@ -35,11 +35,11 @@ def test_vortex_field(shape, vortex_position):
     assert field.shape == shape
     assert np.all(field != 0)
 
+
 @pytest.mark.parametrize(
-    "dipole_positions",
-    [(0, 0, 0), np.array([[0, 0, 0]]), np.array([1, 5, 2])]
+    "dipole_positions", [(0, 0, 0), np.array([[0, 0, 0]]), np.array([1, 5, 2])]
 )
-@pytest.mark.parametrize("shape", [(1, ), (10, ), (100, )])
+@pytest.mark.parametrize("shape", [(1,), (10,), (100,)])
 def test_dipole_field_single(shape, dipole_positions):
     size = np.prod(shape)
     x = np.random.random(size).reshape(shape)
@@ -70,8 +70,8 @@ def test_dipole_field_single(shape, dipole_positions):
 
 
 @pytest.mark.parametrize("num_dipoles", [1, 5, 200])
-@pytest.mark.parametrize("shape", [(1, ), (10, ), (100, )])
-def test_dipole_field_single(shape, num_dipoles):
+@pytest.mark.parametrize("shape", [(1,), (10,), (100,)])
+def test_dipole_field(shape, num_dipoles):
     size = np.prod(shape)
     x = np.random.random(size).reshape(shape)
     y = np.random.random(size).reshape(shape)
