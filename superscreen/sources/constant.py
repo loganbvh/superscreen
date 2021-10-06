@@ -20,7 +20,7 @@ def constant(
     return value * np.ones_like(x)
 
 
-def ConstantField(value: float) -> Parameter:
+def ConstantField(value: float = 0) -> Parameter:
     """Returns a Parameter that computes a constant as a function of x, y, z.
 
     Args:
@@ -29,4 +29,4 @@ def ConstantField(value: float) -> Parameter:
     Returns:
         A Parameter that returns ``value``.
     """
-    return Parameter(constant, value=value)
+    return Parameter(constant, value=float(value))

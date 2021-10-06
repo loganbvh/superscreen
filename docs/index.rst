@@ -75,6 +75,7 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
    api/brandt.rst
    api/fem.rst
    api/visualization.rst
+   api/sources.rst
 
 .. toctree::
    :maxdepth: 2

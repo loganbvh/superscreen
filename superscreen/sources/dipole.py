@@ -67,9 +67,9 @@ def dipole_distribution(
     dipole_positions: np.ndarray,
     dipole_moments: Union[np.ndarray, Tuple[float, float, float]],
 ) -> np.ndarray:
-    """Returns the 3D field from a distribution of dipoles with given moments
-    (in units of Bohr magnetons) located at the given positions, evaluated
-    at coordinates (x, y, z).
+    """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}` from a
+    distribution of dipoles with given moments (in units of Bohr magnetons)
+    located at the given positions, evaluated at coordinates (x, y, z).
 
     Args:
         x: x-coordinate(s) at which to evaluate the field. Either a scalar
@@ -108,13 +108,14 @@ def dipole_distribution(
 
 def dipole_distribution_comp(x, y, z, *, dipole_positions, dipole_moments, component):
     index = "xyz".index(component)
-    return dipole_distribution(
+    B = dipole_distribution(
         x,
         y,
         z,
         dipole_positions=dipole_positions,
         dipole_moments=dipole_moments,
-    )[:, index]
+    )
+    return np.atleast_2d(B)[:, index]
 
 
 def DipoleField(
@@ -127,9 +128,23 @@ def DipoleField(
     a distribution of dipoles with given moments (in units of the Bohr magneton)
     located at the given positions.
 
+    Given dipole positions :math:`\\vec{r}_{0, i}` and moments :math:`\\vec{m}_i`,
+    the magnetic field is:
+
+    .. math::
+
+        \\mu_0\\vec{H}(\\vec{r}) = \\sum_i\\frac{\\mu_0}{4\\pi}
+            \\frac{
+                3\\hat{r}_i(\\hat{r}_i\\cdot\\vec{m}_i) - \\vec{m}_i
+            }{
+                |\\vec{r}_i|^3
+            },
+
+    where :math:`\\vec{r}_i=(x, y, z) - \\vec{r}_{0, i}`.
+
     Args:
         dipole_positions: Coordinates (x0_i, y0_i, z0_i) of the position of
-            each dipole i, shape (3, ) or (1, 3) for a single dipole or
+            each dipole i. Shape (3, ) or (1, 3) for a single dipole, or
             shape (m, 3) for m dipoles.
         dipole_moments: Dipole moments (mx_i, my_i, mz_i) in units of the
             Bohr magneton. If dipole_moments has shape (3,) or (1, 3), then
@@ -139,7 +154,7 @@ def DipoleField(
 
     Returns:
         A Parameter that computes a given component of the field
-        :math:`\vec{B}(x, y, z)` in Tesla for a given distribution of dipoles.
+        :math:`\\mu_0\\vec{H}(x, y, z)` in Tesla for a given distribution of dipoles.
     """
     if component.lower() not in "xyz":
         raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")

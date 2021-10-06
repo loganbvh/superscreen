@@ -14,12 +14,12 @@ def vortex(
     z0: float = 0,
     nPhi0: Union[int, float] = 1,
 ) -> Union[float, np.ndarray]:
-    """Field :math:`H_z` from an isolated vortex (monopole)
+    """Field :math:`\\mu_0H_z` from an isolated vortex (monopole)
     in units of Phi_0 / (length units)**2.
 
     .. math::
 
-        H_z(\\vec{r}-\\vec{r}_0) = \\frac{n\\Phi_0}{2\\pi\\mu_0}
+        \\mu_0H_z(\\vec{r}-\\vec{r}_0) = \\frac{n\\Phi_0}{2\\pi}
             \\frac{(\\vec{r}-\\vec{r}_0)\\cdot\\hat{z}}{|(\\vec{r}-\\vec{r}_0)|^3}
 
     Args:
@@ -42,6 +42,11 @@ def VortexField(
 ) -> Parameter:
     """Returns a Parameter that computes the z-component of the field from a vortex
     (monopole) located at position (x0, y0, z0) containing a total of nPhi0 flux quanta.
+
+    .. math::
+
+        \\mu_0H_z(\\vec{r}-\\vec{r}_0) = \\frac{n\\Phi_0}{2\\pi}
+            \\frac{(\\vec{r}-\\vec{r}_0)\\cdot\\hat{z}}{|(\\vec{r}-\\vec{r}_0)|^3}
 
     Args:
         x0, y0, z0: Coordinates of the vortex position.
