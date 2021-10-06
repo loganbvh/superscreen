@@ -68,7 +68,7 @@ def dipole_distribution(
     dipole_moments: Union[np.ndarray, Tuple[float, float, float]],
 ) -> np.ndarray:
     """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}` from a
-    distribution of dipoles with given moments (in units of Bohr magnetons)
+    distribution of dipoles with given moments (in units of the Bohr magneton)
     located at the given positions, evaluated at coordinates (x, y, z).
 
     Args:
