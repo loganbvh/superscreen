@@ -2,7 +2,7 @@ from typing import Union
 
 import numpy as np
 
-from .parameter import Parameter
+from ..parameter import Parameter
 
 
 def constant(
@@ -20,5 +20,13 @@ def constant(
     return value * np.ones_like(x)
 
 
-def ConstantField(value: float) -> Parameter:
-    return Parameter(constant, value=value)
+def ConstantField(value: float = 0) -> Parameter:
+    """Returns a Parameter that computes a constant as a function of x, y, z.
+
+    Args:
+        value: The constant value of the field.
+
+    Returns:
+        A Parameter that returns ``value``.
+    """
+    return Parameter(constant, value=float(value))
