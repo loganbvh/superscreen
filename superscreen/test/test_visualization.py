@@ -111,6 +111,21 @@ def test_cross_section(solution, cross_section_coords, interp_method):
         assert np.array_equal(coords[0], cross_section_coords)
 
 
+def test_cross_section_bad_shape(solution):
+
+    dataset_coords = solution.device.points
+    dataset_values = solution.fields[list(solution.device.layers)[0]]
+    cross_section_coords = np.stack([np.ones(101)]*3, axis=1)
+
+    with pytest.raises(ValueError):
+        _ = sc.visualization.cross_section(
+            dataset_coords,
+            dataset_values,
+            cross_section_coords,
+            interp_method="invalid",
+        )
+
+
 @pytest.mark.parametrize("layers", [None, "layer0"])
 @pytest.mark.parametrize("units", [None, "mA/um"])
 @pytest.mark.parametrize("streamplot", [False, True])
