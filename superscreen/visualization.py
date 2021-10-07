@@ -1,10 +1,9 @@
 import warnings
 from contextlib import contextmanager
-from typing import Optional, Union, Tuple, List, Dict
+from typing import Optional, Union, Tuple, List, Dict, Sequence
 
 import numpy as np
-import scipy.ndimage
-from scipy.interpolate import griddata
+from scipy import interpolate
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colorbar import Colorbar
@@ -181,171 +180,61 @@ def setup_color_limits(
 
 
 def cross_section(
-    solution: Solution,
-    dataset: Optional[str] = None,
-    layers: Optional[Union[List[str], str]] = None,
-    xs: Optional[Union[float, List[float]]] = None,
-    ys: Optional[Union[float, List[float]]] = None,
-    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-    angle: Optional[float] = None,
-) -> Tuple[
-    Union[np.ndarray, List[np.ndarray]],
-    np.ndarray,
-    Union[Dict[str, Union[np.ndarray, List[np.ndarray]]], np.ndarray],
-]:
-    """Takes a cross-section of the specified dataset for each layer along the line
-    specified by ``x`` or ``y`` after rotating counterclockwise about the center of
-    the grid by ``angle``.
+    dataset_coords: np.ndarray,
+    dataset_values: np.ndarray,
+    cross_section_coords: Union[np.ndarray, Sequence[np.ndarray]],
+    interp_method: str = "cubic",
+) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    """Takes a cross-section of the specified dataset values along
+    a path given by the given dataset coordinates.
 
     Args:
-        solution: The Solution from which to extract the data
-        dataset: The dataset of which to take a cross-section. Required if
-            existing grids are not provided, in which case dataset must
-            be "streams", "fields", or "screening_fields".
-        layers: Name(s) of the layer(s) for which to extract cross-sections.
-        xs: x value(s) for a vertical cross-section(s) (required if ys is None).
-        ys: y value(s) for a horizontal cross-section(s) (required if x is None).
-        grid_shape: Shape of the desired rectangular grid for triangle-to-
-            rectangle interpolation. Note that the shape of the output
-            (cross-section) arrays depends upon ``angle``.
-        angle: The angle by which to rotate the z-grids prior to taking
-            a vertical or horizontal cross-section.
+        dataset_coords: A shape (n, 2) array of (x, y) coordinates for the dataset.
+        dataset_values: A shape (n, ) array of dataset values of which
+            to take a cross-section.
+        cross_section_coords: A shape (m, 2) array of (x, y) coordinates specifying
+            the cross-section path (or a list of such arrays for multiple
+            cross sections).
+        interp_method: The interpolation method to use: "nearest", "linear", "cubic".
 
     Returns:
-        cross-section coordinates [shape (m, 3) array or list thereof],
-        cross-section axis [shape (m, ) array],
-        dict of z values of cross-section(s) for each layer [shape (m, ) array
-        or list thereof]
+        A list of coordinate arrays, a list of curvilinear coordinate (path) arrays,
+        and a list of cross section values.
     """
-    xgrid, ygrid, zgrids = solution.grid_data(
-        dataset, grid_shape=grid_shape, layers=layers
-    )
-    slice_coords, slice_axis, cross_sections = image_cross_section(
-        xgrid,
-        ygrid,
-        zgrids,
-        xs=xs,
-        ys=ys,
-        angle=angle,
-    )
+    valid_methods = ("nearest", "linear", "cubic")
+    if interp_method not in valid_methods:
+        raise ValueError(
+            f"Interpolation method must be one of {valid_methods} "
+            f"(got {interp_method})."
+        )
+    if interp_method == "nearest":
+        interpolator = interpolate.NearestNDInterpolator
+    elif interp_method == "linear":
+        interpolator = interpolate.LinearNDInterpolator
+    else:  # "cubic"
+        interpolator = interpolate.CloughTocher2DInterpolator
 
-    if xs is None:
-        if len(xs) == 1:
-            cross_sections = {
-                name: crosses[0] for name, crosses in cross_sections.item()
-            }
-            slice_coords = slice_coords[0]
-    else:
-        if len(ys) == 1:
-            cross_sections = {
-                name: crosses[0] for name, crosses in cross_sections.item()
-            }
-            slice_coords = slice_coords[0]
-    return slice_coords, slice_axis, cross_sections
-
-
-def image_cross_section(
-    xgrid: np.ndarray,
-    ygrid: np.ndarray,
-    zgrids: np.ndarray,
-    xs: Optional[Union[float, List[float]]] = None,
-    ys: Optional[Union[float, List[float]]] = None,
-    angle: Optional[float] = None,
-) -> Tuple[
-    List[np.ndarray],
-    np.ndarray,
-    Union[Dict[str, List[np.ndarray]], List[np.ndarray]],
-]:
-    """Takes cross-section(s) of the given data along the line(s) specified by ``xs``
-    or ``ys``, rotated counterclockwise about the center of the grid by ``angle``.
-
-    Args:
-        xgrid: xgrid to use. If not given, xgrid, ygrid, and zgrids
-            will be calculated using ``solution.grid_data()``.
-        ygrid: ygrid to use. If not given, xgrid, ygrid, and zgrids
-            will be calculated using ``solution.grid_data()``.
-        zgrids: Either a dict of zgrids to slice, or a single zgrid.
-        xs: x value(s) for a vertical cross-section(s) (required if ys is None).
-        ys: y value(s) for a horizontal cross-section(s) (required if x is None).
-        angle: The angle by which to rotate the vertical or horizontal line
-            about the center of the grid
-
-    Returns:
-        Cross-section x coordinates, cross-section y coordinates, and either
-        a dict of cross-section z values for each grid in zgrids or a single
-        array of zvalues (if zgrids was given as an array).
-    """
-    if xs is not None and ys is not None:
-        raise ValueError("Can only take one cross section at a time.")
-    if xs is None and ys is None:
-        raise ValueError("Cross section axis not specified.")
-    if xs is not None and isinstance(xs, (int, float)):
-        xs = [xs]
-    if ys is not None and isinstance(ys, (int, float)):
-        ys = [ys]
-
-    xvec, yvec = grids_to_vecs(xgrid, ygrid)
-
-    if isinstance(zgrids, np.ndarray):
-        # "None" is just a filler
-        zgrids = {"None": zgrids}
-
-    names = list(zgrids)
-
-    if xs is None:
-        slice_coords = [np.stack([xvec, y * np.ones_like(xvec)], axis=1) for y in ys]
-    else:
-        slice_coords = [np.stack([x * np.ones_like(yvec), yvec], axis=1) for x in xs]
-
-    if angle:
-        rotated_zgrids = {
-            name: scipy.ndimage.rotate(grid, angle, cval=np.nan)
-            for name, grid in zgrids.items()
-        }
-        z = zgrids[names[0]]
-        rotated_z = rotated_zgrids[names[0]]
-        x0 = xvec.mean()
-        y0 = yvec.mean()
-        tr = mpl.transforms.Affine2D().rotate_deg_around(x0, y0, angle)
-        try:
-            plt.ioff()
-            fig, ax = plt.subplots()
-            _ = ax.pcolormesh(
-                xvec, yvec, z, shading="auto", transform=(tr + ax.transData)
+    if not (isinstance(cross_section_coords, Sequence)):
+        cross_section_coords = [cross_section_coords]
+    cross_section_coords = [np.asarray(c) for c in cross_section_coords]
+    for i, arr in enumerate(cross_section_coords):
+        if arr.ndim != 2 or arr.shape[1] != 2:
+            raise ValueError(
+                f"Invalid shape for coordinate array {i}: {arr.shape}. "
+                f"Coordinate arrays must have shape (n, 2)."
             )
-            xvec = np.linspace(*ax.get_xlim(), rotated_z.shape[1])
-            yvec = np.linspace(*ax.get_ylim(), rotated_z.shape[0])
-            plt.close(fig)
-        finally:
-            plt.ion()
-        zgrids = rotated_zgrids
+    # Calculcate curvilinear cross section coordinates
+    paths = []
+    for c in cross_section_coords:
+        path = np.cumsum(np.sqrt(np.sum(np.diff(c, axis=0) ** 2, axis=1)))
+        paths.append(np.concatenate([[0], path], axis=0))
+    # Calculate cross sections.
+    cross_sections = []
+    z_interp = interpolator(dataset_coords, dataset_values)
+    for c in cross_section_coords:
+        cross_sections.append(z_interp(c[:, 0], c[:, 1]))
 
-    cross_sections = {name: [] for name in names}
-    if xs is None:
-        slice_axis = xvec
-        for y in ys:
-            i = np.argmin(np.abs(yvec - y))
-            for name in names:
-                cross_sections[name].append(zgrids[name][i, :])
-        if angle:
-            slice_coords = [
-                tr.transform(np.stack([xvec, y * np.ones_like(xvec)], axis=1))
-                for y in ys
-            ]
-    else:
-        slice_axis = yvec
-        for x in xs:
-            j = np.argmin(np.abs(xvec - x))
-            for name in names:
-                cross_sections[name].append(zgrids[name][:, j])
-        if angle:
-            slice_coords = [
-                tr.transform(np.stack([x * np.ones_like(yvec), yvec], axis=1))
-                for x in xs
-            ]
-    if len(names) == 1 and names[0] == "None":
-        cross_sections = cross_sections["None"]
-    return slice_coords, slice_axis, cross_sections
+    return cross_section_coords, paths, cross_sections
 
 
 def plot_streams_layer(
@@ -475,9 +364,7 @@ def plot_fields(
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    cross_section_xs: Optional[Union[float, List[float]]] = None,
-    cross_section_ys: Optional[Union[float, List[float]]] = None,
-    cross_section_angle: Optional[float] = None,
+    cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots either the total field or the screening field for
@@ -504,10 +391,8 @@ def plot_fields(
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
         vmax: Color scale maximum to use for all layers
-        cross_section_xs: x coordinate(s) for vertical cross-section(s)
-        cross_section_ys: y coordinate(s) for horizontal cross_sections(s)
-        cross_section_angle: Angle in degrees by which to rotate the cross-section
-            lines above the center of the grid.
+        cross_section_coords: Shape (m, 2) array of (x, y) coordinates for a
+            cross-section (or a list of such arrays).
 
     Returns:
         matplotlib figure and axes
@@ -584,41 +469,35 @@ def plot_fields(
         ax.set_xlim(xgrid.min(), xgrid.max())
         ax.set_ylim(ygrid.min(), ygrid.max())
         used_axes.append(ax)
-        if colorbar:
-            if cross_section_xs is not None or cross_section_ys is not None:
-                cbar_size = "5%"
-                cbar_pad = "4%"
-            else:
-                cbar_size = "8%"
-                cbar_pad = "4%"
-            ax_divider = make_axes_locatable(ax)
-            cax = ax_divider.append_axes("right", size=cbar_size, pad=cbar_pad)
-            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
-            cbar.set_label(clabel)
-            used_axes.append(cbar.ax)
-        if cross_section_xs is not None or cross_section_ys is not None:
+        if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            coords, axis, cross_sections = image_cross_section(
-                xgrid,
-                ygrid,
-                field,
-                xs=cross_section_xs,
-                ys=cross_section_ys,
-                angle=cross_section_angle,
+            coords, paths, cross_sections = cross_section(
+                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
+                field.ravel(),
+                cross_section_coords=cross_section_coords,
             )
-            xs = axis - axis.min()
-            for coord, cross in zip(coords, cross_sections):
-                ax.plot(*coord.T, ls="--", lw=2)
-                cax.plot(xs, cross, lw=2)
+            for i, (coord, path, cross) in enumerate(
+                zip(coords, paths, cross_sections)
+            ):
+                color = f"C{i % 10}"
+                ax.plot(*coord.T, "--", color=color, lw=2)
+                ax.plot(*coord[0], "o", color=color)
+                ax.plot(*coord[-1], "s", color=color)
+                cax.plot(path, cross, color=color, lw=2)
+                cax.plot(path[0], cross[0], "o", color=color)
+                cax.plot(path[-1], cross[-1], "s", color=color)
             cax.grid(True)
             cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
             cax.set_ylabel(clabel)
             used_axes.append(cax)
+        if colorbar:
+            cbar = fig.colorbar(im, ax=ax, orientation="vertical")
+            cbar.set_label(clabel)
+            used_axes.append(cbar.ax)
     for ax in fig.axes:
         if ax not in used_axes:
             fig.delaxes(ax)
-    fig.tight_layout()
     return fig, axes
 
 
@@ -638,9 +517,7 @@ def plot_currents(
     vmax: Optional[float] = None,
     streamplot: bool = True,
     min_stream_amp: float = 0.025,
-    cross_section_xs: Optional[Union[float, List[float]]] = None,
-    cross_section_ys: Optional[Union[float, List[float]]] = None,
-    cross_section_angle: Optional[float] = None,
+    cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the current density (sheet current) for each layer in a Device.
@@ -670,10 +547,8 @@ def plot_currents(
         min_stream_amp: Streamlines will not be drawn anywhere the
             current density is less than min_stream_amp * max(current_density).
             This avoids streamlines being drawn where there is no current flowing.
-        cross_section_xs: x coordinate(s) for vertical cross-section(s)
-        cross_section_ys: y coordinate(s) for horizontal cross_sections(s)
-        cross_section_angle: Angle in degrees by which to rotate the cross-section
-            lines above the center of the grid.
+        cross_section_coords: Shape (m, 2) array of (x, y) coordinates for a
+            cross-section (or a list of such arrays).
 
     Returns:
         matplotlib figure and axes
@@ -726,33 +601,24 @@ def plot_currents(
         ax.set_xlim(xgrid.min(), xgrid.max())
         ax.set_ylim(ygrid.min(), ygrid.max())
         used_axes.append(ax)
-        if colorbar:
-            if cross_section_xs is not None or cross_section_ys is not None:
-                cbar_size = "5%"
-                cbar_pad = "4%"
-            else:
-                cbar_size = "8%"
-                cbar_pad = "4%"
-            ax_divider = make_axes_locatable(ax)
-            cax = ax_divider.append_axes("right", size=cbar_size, pad=cbar_pad)
-            cbar = fig.colorbar(im, cax=cax)
-            cbar.set_label(clabel)
-            used_axes.append(cbar.ax)
-        if cross_section_xs is not None or cross_section_ys is not None:
+        if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            coords, axis, cross_sections = image_cross_section(
-                xgrid,
-                ygrid,
-                J,
-                xs=cross_section_xs,
-                ys=cross_section_ys,
-                angle=cross_section_angle,
+            coords, paths, cross_sections = cross_section(
+                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
+                J.ravel(),
+                cross_section_coords,
             )
-            xs = axis - axis.min()
-            for coord, cross in zip(coords, cross_sections):
-                ax.plot(*coord.T, ls="--", lw=2)
-                cax.plot(xs, cross, lw=2)
+            for i, (coord, path, cross) in enumerate(
+                zip(coords, paths, cross_sections)
+            ):
+                color = f"C{i % 10}"
+                ax.plot(*coord.T, "--", color=color, lw=2)
+                ax.plot(*coord[0], "o", color=color)
+                ax.plot(*coord[-1], "s", color=color)
+                cax.plot(path, cross, color=color, lw=2)
+                cax.plot(path[0], cross[0], "o", color=color)
+                cax.plot(path[-1], cross[-1], "s", color=color)
             cax.grid(True)
             cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
             cax.set_ylabel(clabel)
@@ -763,10 +629,13 @@ def plot_currents(
                 Jx[J < cutoff] = np.nan
                 Jy[J < cutoff] = np.nan
             ax.streamplot(xgrid, ygrid, Jx, Jy, color="w", density=1, linewidth=0.75)
+        if colorbar:
+            cbar = fig.colorbar(im, ax=ax, orientation="vertical")
+            cbar.set_label(clabel)
+            used_axes.append(cbar.ax)
     for ax in fig.axes:
         if ax not in used_axes:
             fig.delaxes(ax)
-    fig.tight_layout()
     return fig, axes
 
 
@@ -785,9 +654,7 @@ def plot_field_at_positions(
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    cross_section_xs: Optional[Union[float, List[float]]] = None,
-    cross_section_ys: Optional[Union[float, List[float]]] = None,
-    cross_section_angle: Optional[float] = None,
+    cross_section_coords: Optional[Union[float, List[float]]] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the total field (either all three components or just the
@@ -818,10 +685,8 @@ def plot_field_at_positions(
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
         vmin: Color scale minimum to use for all layers
         vmax: Color scale maximum to use for all layers
-        cross_section_xs: x coordinate(s) for vertical cross-section(s)
-        cross_section_ys: y coordinate(s) for horizontal cross_sections(s)
-        cross_section_angle: Angle in degrees by which to rotate the cross-section
-            lines above the center of the grid.
+        cross_section_coords: Shape (m, 2) array of (x, y) coordinates for a
+            cross-section (or a list of such arrays).
 
     Returns:
         matplotlib figure and axes
@@ -858,7 +723,12 @@ def plot_field_at_positions(
     ys = np.linspace(y.min(), y.max(), grid_shape[0])
     xgrid, ygrid = np.meshgrid(xs, ys)
     # Shape grid_shape or (grid_shape + (3, ))
-    fields = griddata(positions[:, :2], fields, (xgrid, ygrid), method=grid_method)
+    fields = interpolate.griddata(
+        positions[:, :2],
+        fields,
+        (xgrid, ygrid),
+        method=grid_method,
+    )
     clabels = [f"{label} [${units:~L}$]" for label in ["$H_x$ ", "$H_y$ ", "$H_z$ "]]
     if "[mass]" in units.dimensionality:
         # We want flux density, B = mu0 * H
@@ -885,36 +755,30 @@ def plot_field_at_positions(
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
         ax.set_xlim(xgrid.min(), xgrid.max())
         ax.set_ylim(ygrid.min(), ygrid.max())
-        if colorbar:
-            if cross_section_xs is not None or cross_section_ys is not None:
-                cbar_size = "5%"
-                cbar_pad = "4%"
-            else:
-                cbar_size = "8%"
-                cbar_pad = "4%"
-            ax_divider = make_axes_locatable(ax)
-            cax = ax_divider.append_axes("right", size=cbar_size, pad=cbar_pad)
-            cbar = fig.colorbar(im, cax=cax, orientation="vertical")
-            cbar.set_label(label)
-        if cross_section_xs is not None or cross_section_ys is not None:
+        if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            coords, axis, cross_sections = image_cross_section(
-                xgrid,
-                ygrid,
-                field,
-                xs=cross_section_xs,
-                ys=cross_section_ys,
-                angle=cross_section_angle,
+            coords, paths, cross_sections = cross_section(
+                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
+                field.ravel(),
+                cross_section_coords=cross_section_coords,
             )
-            cross_xs = axis - axis.min()
-            for coord, cross in zip(coords, cross_sections):
-                ax.plot(*coord.T, ls="--", lw=2)
-                cax.plot(cross_xs, cross, lw=2)
+            for i, (coord, path, cross) in enumerate(
+                zip(coords, paths, cross_sections)
+            ):
+                color = f"C{i % 10}"
+                ax.plot(*coord.T, "--", color=color, lw=2)
+                ax.plot(*coord[0], "o", color=color)
+                ax.plot(*coord[-1], "s", color=color)
+                cax.plot(path, cross, color=color, lw=2)
+                cax.plot(path[0], cross[0], "o", color=color)
+                cax.plot(path[-1], cross[-1], "s", color=color)
             cax.grid(True)
             cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
             cax.set_ylabel(label)
-    fig.tight_layout()
+        if colorbar:
+            cbar = fig.colorbar(im, ax=ax, orientation="vertical")
+            cbar.set_label(label)
     return fig, axes
 
 
