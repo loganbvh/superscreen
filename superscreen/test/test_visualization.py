@@ -3,7 +3,7 @@ import pytest
 import matplotlib.pyplot as plt
 
 import superscreen as sc
-from superscreen.visualization import cross_section, non_gui_backend
+from superscreen.visualization import non_gui_backend
 
 
 @pytest.fixture(scope="module")
@@ -63,7 +63,7 @@ cross_section_coord_params = [
     [
         np.stack([np.linspace(-1, 1, 101), 1 * np.ones(101)], axis=1),
         np.stack([1 * np.ones(101), np.linspace(-1, 1, 101)], axis=1),
-    ]
+    ],
 ]
 thetas = np.linspace(0, 2 * np.pi, endpoint=False)
 cross_section_coord_params.append(
