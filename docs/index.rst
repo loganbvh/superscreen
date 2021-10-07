@@ -60,15 +60,6 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
 
 .. toctree::
    :maxdepth: 2
-   :caption: Users Guide
-
-   notebooks/guide-device-meshing.ipynb
-   notebooks/guide-self-inductance.ipynb
-   notebooks/guide-mutual-inductance.ipynb
-   notebooks/guide-parameters.ipynb
-
-.. toctree::
-   :maxdepth: 2
    :caption: API Reference
 
    api/device.rst

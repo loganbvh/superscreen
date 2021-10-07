@@ -57,10 +57,79 @@ def test_plot_streams(solution, layers, units):
         plt.close(fig)
 
 
+cross_section_coord_params = [
+    None,
+    np.stack([np.linspace(-1, 1, 101), 1 * np.ones(101)], axis=1),
+    [
+        np.stack([np.linspace(-1, 1, 101), 1 * np.ones(101)], axis=1),
+        np.stack([1 * np.ones(101), np.linspace(-1, 1, 101)], axis=1),
+    ],
+]
+thetas = np.linspace(0, 2 * np.pi, endpoint=False)
+cross_section_coord_params.append(
+    [r * np.stack([np.cos(thetas), np.sin(thetas)], axis=1) for r in (0.5, 1.0, 1.5)]
+)
+
+
+@pytest.mark.parametrize("interp_method", ["nearest", "linear", "cubic"])
+@pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
+def test_cross_section(solution, cross_section_coords, interp_method):
+    if cross_section_coords is None:
+        return
+
+    dataset_coords = solution.device.points
+    dataset_values = solution.fields[list(solution.device.layers)[0]]
+
+    with pytest.raises(ValueError):
+        _ = sc.visualization.cross_section(
+            dataset_coords,
+            dataset_values,
+            cross_section_coords,
+            interp_method="invalid",
+        )
+
+    coords, paths, cross_sections = sc.visualization.cross_section(
+        dataset_coords,
+        dataset_values,
+        cross_section_coords,
+        interp_method=interp_method,
+    )
+    for item in (coords, paths, cross_sections):
+        assert isinstance(item, list)
+    for c, p, cs in zip(coords, paths, cross_sections):
+        assert p.shape == cs.shape
+        assert c.shape == (p.shape[0], 2)
+    if isinstance(cross_section_coords, list):
+        assert (
+            len(coords)
+            == len(paths)
+            == len(cross_sections)
+            == len(cross_section_coords)
+        )
+    else:
+        assert len(coords) == len(paths) == len(cross_sections) == 1
+        assert np.array_equal(coords[0], cross_section_coords)
+
+
+def test_cross_section_bad_shape(solution):
+
+    dataset_coords = solution.device.points
+    dataset_values = solution.fields[list(solution.device.layers)[0]]
+    cross_section_coords = np.stack([np.ones(101)] * 3, axis=1)
+
+    with pytest.raises(ValueError):
+        _ = sc.visualization.cross_section(
+            dataset_coords,
+            dataset_values,
+            cross_section_coords,
+            interp_method="invalid",
+        )
+
+
 @pytest.mark.parametrize("layers", [None, "layer0"])
 @pytest.mark.parametrize("units", [None, "mA/um"])
 @pytest.mark.parametrize("streamplot", [False, True])
-@pytest.mark.parametrize("cross_section_xs, cross_section_ys", [(None, 0), (0, None)])
+@pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
 # @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
 # @pytest.mark.parametrize("share_color_scale", [False, True])
 # @pytest.mark.parametrize("symmetric_color_scale", [False, True])
@@ -69,8 +138,7 @@ def test_plot_currents_and_fields(
     layers,
     units,
     streamplot,
-    cross_section_xs,
-    cross_section_ys,
+    cross_section_coords,
     share_color_scale=True,
     symmetric_color_scale=True,
     auto_range_cutoff=1,
@@ -81,9 +149,7 @@ def test_plot_currents_and_fields(
             grid_shape=(50, 50),
             layers=layers,
             units=units,
-            cross_section_xs=cross_section_xs,
-            cross_section_ys=cross_section_ys,
-            cross_section_angle=45,
+            cross_section_coords=cross_section_coords,
             streamplot=streamplot,
             auto_range_cutoff=auto_range_cutoff,
             share_color_scale=share_color_scale,
@@ -96,9 +162,7 @@ def test_plot_currents_and_fields(
             grid_shape=(50, 50),
             layers=layers,
             units=units,
-            cross_section_xs=cross_section_xs,
-            cross_section_ys=cross_section_ys,
-            cross_section_angle=45,
+            cross_section_coords=cross_section_coords,
             auto_range_cutoff=auto_range_cutoff,
             share_color_scale=share_color_scale,
             symmetric_color_scale=symmetric_color_scale,
@@ -116,15 +180,14 @@ def test_plot_currents_and_fields(
     ],
 )
 @pytest.mark.parametrize("units", [None, "mT"])
-@pytest.mark.parametrize("cross_section_xs, cross_section_ys", [(None, 0), (0, None)])
 @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
+@pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
 def test_plot_field_at_positions(
     solution,
     positions,
     zs,
     units,
-    cross_section_xs,
-    cross_section_ys,
+    cross_section_coords,
     auto_range_cutoff,
     vector,
 ):
@@ -136,9 +199,7 @@ def test_plot_field_at_positions(
             vector=vector,
             grid_shape=(50, 50),
             units=units,
-            cross_section_xs=cross_section_xs,
-            cross_section_ys=cross_section_ys,
-            cross_section_angle=45,
+            cross_section_coords=cross_section_coords,
             auto_range_cutoff=auto_range_cutoff,
         )
         plt.close(fig)

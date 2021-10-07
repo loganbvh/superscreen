@@ -8,7 +8,7 @@ Visualization
 *************
 
 The ``superscreen.visualization`` module contains functions used to visualize
-the results contained in a :class:`superscreen.brandt.Solution`.
+the results contained in a :class:`superscreen.solution.Solution`.
 
 Fields
 ------
@@ -40,7 +40,5 @@ Supporting Functions
 .. autofunction:: superscreen.visualization.setup_color_limits
 
 .. autofunction:: superscreen.visualization.plot_streams_layer
-
-.. autofunction:: superscreen.visualization.image_cross_section
 
 .. autofunction:: superscreen.visualization.cross_section
