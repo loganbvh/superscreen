@@ -328,7 +328,7 @@ def plot_streams(
         layers = [layers]
     fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
     used_axes = []
-    for layer, ax in zip(layers, fig.axes):
+    for ax, layer in zip(fig.axes, layers):
         ax, cbar = plot_streams_layer(
             solution,
             layer,
