@@ -68,6 +68,23 @@ def test_dipole_field_single(shape, dipole_positions):
     with pytest.raises(ValueError):
         field = param(x, y, z)
 
+    for comp in "xyz":
+        assert isinstance(
+            DipoleField(
+                dipole_positions=dipole_positions,
+                dipole_moments=moments,
+                component=comp,
+            ),
+            Parameter,
+        )
+
+    with pytest.raises(ValueError):
+        _ = DipoleField(
+            dipole_positions=dipole_positions,
+            dipole_moments=moments,
+            component="invalid",
+        )
+
 
 @pytest.mark.parametrize("num_dipoles", [1, 5, 200])
 @pytest.mark.parametrize("shape", [(1,), (10,), (100,)])
