@@ -108,9 +108,6 @@ def dipole_distribution(
 
 
 def dipole_distribution_comp(x, y, z, *, dipole_positions, dipole_moments, component):
-    component = component.lower()
-    if component not in "xyz":
-        raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")
     index = "xyz".index(component)
     B = dipole_distribution(
         x,
@@ -160,6 +157,9 @@ def DipoleField(
         A Parameter that computes a given component of the field
         :math:`\\mu_0\\vec{H}(x, y, z)` in Tesla for a given distribution of dipoles.
     """
+    component = component.lower()
+    if component not in "xyz":
+        raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")
     dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
     return Parameter(
         dipole_distribution_comp,
