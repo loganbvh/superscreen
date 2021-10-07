@@ -115,7 +115,7 @@ def test_cross_section_bad_shape(solution):
 
     dataset_coords = solution.device.points
     dataset_values = solution.fields[list(solution.device.layers)[0]]
-    cross_section_coords = np.stack([np.ones(101)]*3, axis=1)
+    cross_section_coords = np.stack([np.ones(101)] * 3, axis=1)
 
     with pytest.raises(ValueError):
         _ = sc.visualization.cross_section(
