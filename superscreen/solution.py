@@ -617,7 +617,7 @@ class Solution(object):
                 Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
                 # tri_areas has units of [length]^2
                 # So here Hz is in units of [current] * [length]^(-1)
-                Hz = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+                Hz = np.einsum("ij,j -> i", Q, tri_areas * g)
             if vector:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -628,13 +628,13 @@ class Solution(object):
                 d = np.subtract.outer(positions[:, 0], tri_points[:, 0])
                 # Kernel for x component, Hx
                 Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hx = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+                Hx = np.einsum("ij,j -> i", Q, tri_areas * g)
 
                 # Pairwise difference between all y positions
                 d = np.subtract.outer(positions[:, 1], tri_points[:, 1])
                 # Kernel for y component, Hy
                 Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hy = np.asarray(np.sum(tri_areas * Q * g, axis=1))
+                Hy = np.einsum("ij,j -> i", Q, tri_areas * g)
 
                 H = np.stack([Hx, Hy, Hz], axis=1)
             else:

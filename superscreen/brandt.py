@@ -115,7 +115,7 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     q = q.copy()
     np.fill_diagonal(q, 0)
     Q = -q
-    np.fill_diagonal(Q, (C + np.sum(q * weights, axis=1)) / np.diag(weights))
+    np.fill_diagonal(Q, (C + np.einsum("ij,ij -> i", q, weights)) / np.diag(weights))
     return Q
 
 
@@ -519,7 +519,7 @@ def solve(
                     # estimate the stream function value at the centroid of the triangle.
                     g = streams[other_layer.name][triangles].mean(axis=1)
                     dz = other_layer.z0 - layer.z0
-                    key = frozenset([layer.name, other_layer.name])
+                    key = frozenset((layer.name, other_layer.name))
                     # Get the cached kernel matrix,
                     # or calculate it if it's not yet in the cache.
                     q = kernels.get(key, None)
@@ -534,9 +534,7 @@ def solve(
                         q = np.load(q)
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    other_screening_fields[layer.name] += np.sum(
-                        tri_areas * q * g, axis=1
-                    )
+                    other_screening_fields[layer.name] += np.einsum("ij,j -> i", q, tri_areas * g)
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
                 new_layer_fields = {}
