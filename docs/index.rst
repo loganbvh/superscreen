@@ -7,12 +7,22 @@
 SuperScreen
 ***********
 
+.. image:: images/logo_currents.png
+   :alt: SuperScreen Logo
+   :target: https://github.com/loganbvh/superscreen
+   :width: 500
+   :align: center
+
 .. image:: https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main
    :alt: GitHub Workflow Status (branch)
 
 .. image:: https://readthedocs.org/projects/superscreen/badge/?version=latest
    :target: https://superscreen.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
+
+.. image:: https://codecov.io/gh/loganbvh/superscreen/branch/main/graph/badge.svg?token=XW7LSY8WVD
+   :target: https://codecov.io/gh/loganbvh/superscreen
+   :alt: Test Coverage
 
 .. image:: https://img.shields.io/github/license/loganbvh/superscreen
    :alt: GitHub
@@ -40,9 +50,11 @@ models of superconducting devices.
 For quick demonstration of ``SuperScreen``, see the :ref:`quickstart notebook </notebooks/quickstart.ipynb>`.
 Better yet, click the badge below to try ``SuperScreen`` interactively online via `Binder <https://mybinder.org/>`_:
 
+
 .. image:: https://mybinder.org/badge_logo.svg
    :target: https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD?filepath=docs%2Fnotebooks
    :align: center
+
 
 .. note::
 

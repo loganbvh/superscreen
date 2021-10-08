@@ -21,12 +21,12 @@ def constant(
 
 
 def ConstantField(value: float = 0) -> Parameter:
-    """Returns a Parameter that computes a constant as a function of x, y, z.
+    """Returns a Parameter that computes a constant as a function of ``x, y, z``.
 
     Args:
         value: The constant value of the field.
 
     Returns:
-        A Parameter that returns ``value``.
+        A Parameter that returns ``value`` at all ``x, y, z``.
     """
     return Parameter(constant, value=float(value))

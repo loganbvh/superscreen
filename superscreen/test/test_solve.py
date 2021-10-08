@@ -18,7 +18,11 @@ def device():
     ]
 
     holes = [
-        sc.Polygon("ring_hole", layer="layer1", points=sc.geometry.circle(3)),
+        sc.Polygon(
+            "ring_hole",
+            layer="layer1",
+            points=sc.geometry.circle(3, center=(0.5, 0.5)),
+        ),
     ]
 
     abstract_regions = [

@@ -15,8 +15,8 @@ def dipole_field(
     moment: Union[np.ndarray, Tuple[float, float, float]] = (0, 0, 0),
 ) -> np.ndarray:
     """Returns the 3D field from a single dipole with the given moment
-    (in units of the Bohr magneton) located at the position r0, evaluated
-    at coordinates (x, y, z).
+    (in units of the Bohr magneton) located at the position ``r0``, evaluated
+    at coordinates ``(x, y, z)``.
 
     Given :math:`\\vec{r}=(x, y, z) - \\vec{r}_0`, the magnetic field is:
 
@@ -31,19 +31,20 @@ def dipole_field(
 
     Args:
         x: x-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
+            or vector with shape ``(n, )``.
         y: y-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
+            or vector with shape ``(n, )``.
         z: z-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
-        r0: Coordinates (x0, y0, z0) of the dipole position, shape (3,) or (1, 3).
-        moment: Dipole moment (mx, my, mz) in units of the Bohr magneton,
-            shape (3,) or (1, 3).
+            or vector with shape ``(n, )``.
+        r0: Coordinates ``(x0, y0, z0)`` of the dipole position,
+            shape ``(3,)`` or ``(1, 3)``.
+        moment: Dipole moment ``(mx, my, mz)`` in units of the Bohr magneton,
+            shape ``(3,)`` or ``(1, 3)``.
 
     Returns:
-        Magnetic field (Bx, By, Bz) in Tesla evaluated at (x, y, z):
-        An array with shape (3, ) if x, y, z are scalars, or shape (n, 3)
-        if x, y, z are vectors with shape (n, ).
+        Magnetic field ``(Bx, By, Bz)`` in Tesla evaluated at ``(x, y, z)``:
+        An array with shape ``(3, )`` if ``x, y, z`` are scalars, or shape ``(n, 3)``
+        if ``x, y, z`` are vectors with shape ``(n, )``.
     """
     moment, r0 = np.atleast_1d(moment, r0)
     x, y, z = np.atleast_1d(x, y, z)
@@ -69,26 +70,26 @@ def dipole_distribution(
 ) -> np.ndarray:
     """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}` from a
     distribution of dipoles with given moments (in units of the Bohr magneton)
-    located at the given positions, evaluated at coordinates (x, y, z).
+    located at the given positions, evaluated at coordinates ``(x, y, z)``.
 
     Args:
         x: x-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
+            or vector with shape ``(n, )``.
         y: y-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
+            or vector with shape ``(n, )``.
         z: z-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape (n, ).
-        dipole_positions: Coordinates (x0_i, y0_i, z0_i) of the position of
-            each dipole i, shape (m, 3).
-        dipole_moments: Dipole moments (mx_i, my_i, mz_i) in units of the
-            Bohr magneton. If dipole_moments has shape (3,) or (1, 3), then
-            all dipoles are assigned the same moment. Otherwise, dipole_moments
-            must have shape (m, 3), i.e. the moment is specified for each dipole.
+            or vector with shape ``(n, )``.
+        dipole_positions: Coordinates ``(x0_i, y0_i, z0_i)`` of the position of
+            each dipole ``i``, shape ``(m, 3)``.
+        dipole_moments: Dipole moments ``(mx_i, my_i, mz_i)`` in units of the
+            Bohr magneton. If dipole_moments has shape ``(3, )`` or ``(1, 3)``,
+            then all dipoles are assigned the same moment. Otherwise, dipole_moments
+            must have shape ``(m, 3)``, i.e. the moment is specified for each dipole.
 
     Returns:
-        Magnetic field (Bx, By, Bz) in Tesla evaluated at (x, y, z):
-        An array with shape (3, ) if x, y, z are scalars, or shape (n, 3)
-        if x, y, z are vectors with shape (n, ).
+        Magnetic field ``(Bx, By, Bz)`` in Tesla evaluated at ``(x, y, z)``:
+        An array with shape ``(3, )`` if ``x, y, z`` are scalars, or shape ``(n, 3)``
+        if ``x, y, z`` are vectors with shape ``(n, )``.
     """
     dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
     if dipole_moments.shape[0] == 1:
@@ -143,22 +144,22 @@ def DipoleField(
     where :math:`\\vec{r}_i=(x, y, z) - \\vec{r}_{0, i}`.
 
     Args:
-        dipole_positions: Coordinates (x0_i, y0_i, z0_i) of the position of
-            each dipole i. Shape (3, ) or (1, 3) for a single dipole, or
-            shape (m, 3) for m dipoles.
-        dipole_moments: Dipole moments (mx_i, my_i, mz_i) in units of the
-            Bohr magneton. If dipole_moments has shape (3,) or (1, 3), then
+        dipole_positions: Coordinates ``(x0_i, y0_i, z0_i)`` of the position of
+            each dipole ``i``. Shape ``(3, )`` or ``(1, 3)`` for a single dipole, or
+            shape ``(m, 3)`` for m dipoles.
+        dipole_moments: Dipole moments ``(mx_i, my_i, mz_i)`` in units of the
+            Bohr magneton. If dipole_moments has shape ``(3, )`` or ``(1, 3)``, then
             all dipoles are assigned the same moment. Otherwise, dipole_moments
-            must have shape (m, 3), i.e. the moment is specified for each dipole.
+            must have shape ``(m, 3)``, i.e. the moment is specified for each dipole.
         component: The component of the field to calculate: "x", "y", or "z".
 
     Returns:
         A Parameter that computes a given component of the field
         :math:`\\mu_0\\vec{H}(x, y, z)` in Tesla for a given distribution of dipoles.
     """
-    if component.lower() not in "xyz":
-        raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")
     component = component.lower()
+    if component not in "xyz":
+        raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")
     dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
     return Parameter(
         dipole_distribution_comp,
