@@ -10,7 +10,8 @@ SuperScreen
 .. image:: images/logo_currents.png
    :alt: SuperScreen Logo
    :target: https://github.com/loganbvh/superscreen
-   :width: 500
+   :height: 300px
+   :width: 300px
    :align: center
 
 .. image:: https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main
