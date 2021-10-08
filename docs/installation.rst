@@ -4,7 +4,7 @@
 Installation
 ************
 
-``SuperScreen`` requires ``Python >=3.6, <3.10``, and can only be installed from source.
+``SuperScreen`` requires ``Python >=3.6, <3.10`` and can only be installed from source.
 In the future, the package will be added to `PyPi <https://pypi.org/>`_, the Python Package index,
 making it ``pip``-installable.
 
