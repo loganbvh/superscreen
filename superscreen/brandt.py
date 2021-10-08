@@ -534,7 +534,9 @@ def solve(
                         q = np.load(q)
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    other_screening_fields[layer.name] += np.einsum("ij,j -> i", q, tri_areas * g)
+                    other_screening_fields[layer.name] += np.einsum(
+                        "ij,j -> i", q, tri_areas * g
+                    )
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
                 new_layer_fields = {}
