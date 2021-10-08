@@ -20,7 +20,7 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com, lbvh@stanford.edu"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.6"
+PYTHON_VERSION = ">=3.6, <3.10"
 
 INSTALL_REQUIRES = [
     "backports-datetime-fromisoformat",
