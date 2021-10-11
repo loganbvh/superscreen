@@ -5,12 +5,14 @@ import itertools
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
 
 import pint
+import psutil
 import numpy as np
 import scipy.linalg as la
 import scipy.sparse as sp
 from scipy.spatial import distance
 
 from .fem import areas, centroids
+from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution
 from .sources import ConstantField
@@ -214,6 +216,8 @@ def brandt_layer(
     device: "Device",
     layer: str,
     applied_field: Union[Callable, np.ndarray],
+    weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
+    Del2: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
     Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
@@ -226,6 +230,8 @@ def brandt_layer(
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y coordinates, or a vector of applied fields.
+        weights: The Device's weight matrix.
+        Del2: The Device's Laplacian operator.
         Lambda: A Parameter, array, or scalar defining the layer's effective penetration
             depth, Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
@@ -246,8 +252,10 @@ def brandt_layer(
     if device.weights is None:
         device.make_mesh(compute_matrices=True)
 
-    weights = device.weights
-    Del2 = device.Del2
+    if weights is None:
+        weights = device.weights
+    if Del2 is None:
+        Del2 = device.Del2
     # We need to do slicing, etc., so its easiest to just use numpy arrays
     if sp.issparse(weights):
         weights = weights.toarray()
@@ -349,6 +357,7 @@ def solve(
     iterations: int = 0,
     return_solutions: bool = True,
     directory: Optional[str] = None,
+    cache_memory_cutoff: float = np.inf,
     log_level: int = logging.INFO,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
@@ -383,6 +392,12 @@ def solve(
         iterations: Number of times to compute the interactions between layers.
         return_solutions: Whether to return a list of Solution objects.
         directory: If not None, resulting Solutions will be saved in this directory.
+        cache_memory_cutoff: If the memory needed for layer-to-layer kernel
+            matrices exceeds ``cache_memory_cutoff`` times the current available
+            system memory, then the kernel matrices will be cached to disk rather than
+            in memory. Setting this value to ``inf`` disables caching to disk. In this
+            case, the arrays will remain in memory unless they are swapped to disk
+            by the operating system.
         log_level: Logging level to use, if any.
         _solver: Name of the solver method used.
 
@@ -402,6 +417,13 @@ def solve(
 
     points = device.points
     triangles = device.triangles
+    weights = device.weights
+    Del2 = device.Del2
+    # We need to do slicing, etc., so its easiest to just use numpy arrays
+    if sp.issparse(weights):
+        weights = weights.toarray()
+    if sp.issparse(Del2):
+        Del2 = Del2.toarray()
 
     solutions = []
 
@@ -459,6 +481,8 @@ def solve(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
+            weights=weights,
+            Del2=Del2,
             Lambda=layer_Lambdas[name],
             circulating_currents=circulating_currents,
             current_units=current_units,
@@ -492,15 +516,33 @@ def solve(
         del solution
 
     layer_names = list(device.layers)
-    if iterations and len(layer_names) > 1:
+    nlayers = len(layer_names)
+    if iterations and nlayers > 1:
         tri_points = centroids(points, triangles)
         tri_areas = areas(points, triangles)
         # Compute ||(x, y) - (xt, yt)||^2
         rho2 = distance.cdist(points, tri_points, metric="sqeuclidean")
         # Cache kernel matrices.
-        # Save kernel matrices to disk to avoid filling up memory.
         kernels = {}
-        with tempfile.TemporaryDirectory() as tempdir:
+        if cache_memory_cutoff is None:
+            cache_memory_cutoff = np.inf
+        if cache_memory_cutoff < 0:
+            raise ValueError(
+                f"Kernel cache memory cutoff must be greater than zero "
+                f"(got {cache_memory_cutoff})."
+            )
+        nkernels = nlayers * (nlayers - 1) // 2
+        total_bytes = nkernels * rho2.nbytes
+        available_bytes = psutil.virtual_memory().available
+        if total_bytes > cache_memory_cutoff * available_bytes:
+            # Save kernel matrices to disk to avoid filling up memory.
+            cache_kernels_to_disk = True
+            context = tempfile.TemporaryDirectory()
+        else:
+            # Cache kernels in memory (much faster than saving to/loading from disk).
+            cache_kernels_to_disk = False
+            context = NullContextManager()
+        with context as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
                 other_screening_fields = {
@@ -511,7 +553,17 @@ def solve(
                 ):
                     if layer.name == other_layer.name:
                         continue
-                    logger.info(
+                    if (
+                        i == 0
+                        and layer.name == layer_names[0]
+                        and other_layer.name == layer_names[1]
+                    ):
+                        logger.info(
+                            f"Caching {nkernels} layer-to-layer kernels "
+                            f"({total_bytes / 1024 ** 2:.0f} MB total) "
+                            f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
+                        )
+                    logger.debug(
                         f"Calculating screening field at {layer.name} "
                         f"from {other_layer.name} ({i+1}/{iterations})."
                     )
@@ -527,16 +579,21 @@ def solve(
                         q = (2 * dz ** 2 - rho2) / (
                             4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
                         )
-                        fname = os.path.join(tempdir, "_".join(key))
-                        np.save(fname, q)
-                        kernels[key] = f"{fname}.npy"
+                        if cache_kernels_to_disk:
+                            fname = os.path.join(tempdir, "_".join(key))
+                            np.save(fname, q)
+                            kernels[key] = f"{fname}.npy"
+                        else:
+                            kernels[key] = q
                     elif isinstance(q, str):
+                        # Kernel was cached to disk, so load it into memory.
                         q = np.load(q)
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     other_screening_fields[layer.name] += np.einsum(
                         "ij,j -> i", q, tri_areas * g
                     )
+                    del q, g
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
                 new_layer_fields = {}
@@ -557,6 +614,8 @@ def solve(
                         device=device,
                         layer=name,
                         applied_field=new_layer_fields[name],
+                        weights=weights,
+                        Del2=Del2,
                         Lambda=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
                         current_units=current_units,
@@ -613,6 +672,7 @@ def solve_many(
     directory: Optional[str] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
+    cache_memory_cutoff: float = np.inf,
     log_level: int = logging.INFO,
     use_shared_memory: bool = True,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
@@ -649,6 +709,12 @@ def solve_many(
         return_solutions: Whether to return the Solution objects.
         keep_only_final_solution: Whether to keep/save only the Solution from
             the final iteration of superscreen.brandt.solve for each setup.
+        cache_memory_cutoff: If the memory needed for layer-to-layer kernel
+            matrices exceeds ``cache_memory_cutoff`` times the current available
+            system memory, then the kernel matrices will be cached to disk rather than
+            in memory. Setting this value to ``inf`` disables caching to disk. In this
+            case, the arrays will remain in memory unless they are swapped to disk
+            by the operating system.
         log_level: Logging level to use, if any.
         use_shared_memory: Whether to use shared memory if parallel_method is not None.
 
@@ -689,6 +755,7 @@ def solve_many(
         directory=directory,
         return_solutions=return_solutions,
         keep_only_final_solution=keep_only_final_solution,
+        cache_memory_cutoff=cache_memory_cutoff,
         log_level=log_level,
         use_shared_memory=use_shared_memory,
     )
