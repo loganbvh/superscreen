@@ -25,13 +25,11 @@ def in_polygon(
     """
     xq = np.asarray(xq)
     yq = np.asarray(yq)
+    xp = np.asarray(xp)
+    yp = np.asarray(yp)
     shape = xq.shape
-    xq = np.asarray(xq).reshape(-1)
-    yq = np.asarray(yq).reshape(-1)
-    xp = np.asarray(xp).reshape(-1)
-    yp = np.asarray(yp).reshape(-1)
-    q = list(zip(xq, yq))
-    p = Path(list(zip(xp, yp)))
+    q = np.stack([xq.ravel(), yq.ravel()], axis=1)
+    p = Path(np.stack([xp.ravel(), yp.ravel()], axis=1))
     bool_array = p.contains_points(q).reshape(shape).squeeze()
     if len(bool_array.shape) == 0:
         bool_array = bool_array.item()
