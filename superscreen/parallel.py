@@ -159,6 +159,7 @@ def solve_many_serial(
     directory: Optional[str] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
+    cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
 ):
@@ -203,6 +204,7 @@ def solve_many_serial(
                 check_inversion=check_inversion,
                 log_level=log_level,
                 return_solutions=False,
+                cache_memory_cutoff=cache_memory_cutoff,
                 directory=path,
                 _solver=solver,
             )
@@ -332,6 +334,7 @@ def solve_many_mp(
     directory: Optional[str] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
+    cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
 ) -> List[str]:
@@ -383,6 +386,7 @@ def solve_many_mp(
                     iterations=iterations,
                     check_inversion=check_inversion,
                     log_level=log_level,
+                    cache_memory_cutoff=cache_memory_cutoff,
                     _solver=solver,
                     use_shared_memory=use_shared_memory,
                 )
@@ -472,6 +476,7 @@ def solve_many_ray(
     directory: Optional[str] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
+    cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
 ):
@@ -545,6 +550,7 @@ def solve_many_ray(
                     log_level=log_level,
                     return_solutions=False,
                     keep_only_final_solution=keep_only_final_solution,
+                    cache_memory_cutoff=cache_memory_cutoff,
                     directory=path,
                     _solver=solver,
                 )
