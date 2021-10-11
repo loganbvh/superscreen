@@ -774,7 +774,7 @@ class Solution(object):
                 equal if they have the exact same time_created.
 
         Returns:
-            bool indicating whether the two solutions are equal
+            A boolean indicating whether the two solutions are equal
         """
         # First check things that are "easy" to check
         if other is self:

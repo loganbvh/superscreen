@@ -1,3 +1,4 @@
+from datetime import datetime
 import tempfile
 
 import matplotlib.pyplot as plt
@@ -218,7 +219,23 @@ def test_field_at_positions(
                     with_units=with_units,
                     return_sum=return_sum,
                 )
-            return
+        with pytest.raises(ValueError):
+            H = solution2.field_at_position(
+                np.stack(
+                    [
+                        positions[:, 0],
+                        positions[:, 1],
+                        0.111 + zs * np.ones(positions.shape[0]),
+                    ],
+                    axis=1,
+                ),
+                zs=zs,
+                vector=vector,
+                units=units,
+                with_units=with_units,
+                return_sum=return_sum,
+            )
+        return
 
     H = solution2.field_at_position(
         positions,
@@ -272,6 +289,14 @@ def test_save_solution(solution1, solution2, save_mesh, compressed):
         loaded_solution2 = sc.Solution.from_file(other_directory)
     assert solution2 == loaded_solution2
 
+    loaded_solution2._time_created = datetime.now()
+    assert solution2 != loaded_solution2
+
+    with tempfile.TemporaryDirectory() as directory:
+        solution1.to_file(directory, save_mesh=save_mesh, compressed=compressed)
+        with pytest.raises(IOError):
+            solution1.to_file(directory, save_mesh=save_mesh, compressed=compressed)
+
 
 @pytest.mark.parametrize("polygon_shape", ["circle", "rectangle"])
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
@@ -290,7 +315,9 @@ def test_fluxoid_simply_connected(
     if polygon_shape == "circle":
         coords = sc.geometry.circle(1.5, points=501, center=center)
     else:
-        coords = sc.geometry.rectangle(3, 2, x_points=100, y_points=100, center=center)
+        coords = sc.geometry.rectangle(3, 2, x_points=100, y_points=100, center=center)[
+            ::-1
+        ]
 
     if layers is None:
         with pytest.raises(ValueError):
