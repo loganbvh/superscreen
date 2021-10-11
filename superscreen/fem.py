@@ -29,7 +29,7 @@ def in_polygon(
     yp = np.asarray(yp)
     shape = xq.shape
     q = np.stack([xq.ravel(), yq.ravel()], axis=1)
-    p = Path(np.stack([xp.ravel(), yp.ravel()], axis=1))
+    p = Path(np.stack([xp.ravel(), yp.ravel()], axis=1), closed=True)
     bool_array = p.contains_points(q).reshape(shape).squeeze()
     if len(bool_array.shape) == 0:
         bool_array = bool_array.item()

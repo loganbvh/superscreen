@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from datetime import datetime
 from typing import Optional, Union, Callable, Dict, Tuple, List, Any, NamedTuple
 
@@ -11,7 +12,6 @@ from matplotlib.tri import Triangulation, LinearTriInterpolator
 from scipy import interpolate
 from scipy.spatial import distance
 
-from . import geometry
 from .about import version_dict
 from .device import Device, Polygon
 from .fem import areas, centroids
@@ -20,6 +20,9 @@ from .parameter import Constant
 from backports.datetime_fromisoformat import MonkeyPatch
 
 MonkeyPatch.patch_fromisoformat()
+
+
+logger = logging.getLogger(__name__)
 
 
 class Fluxoid(NamedTuple):
@@ -129,6 +132,7 @@ class Solution(object):
     def grid_data(
         self,
         dataset: str,
+        *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         method: str = "cubic",
@@ -200,6 +204,7 @@ class Solution(object):
 
     def current_density(
         self,
+        *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         method: str = "cubic",
@@ -251,6 +256,7 @@ class Solution(object):
     def interp_current_density(
         self,
         positions: np.ndarray,
+        *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         method: str = "cubic",
@@ -312,6 +318,7 @@ class Solution(object):
 
     def polygon_flux(
         self,
+        *,
         polygons: Optional[Union[str, List[str]]] = None,
         units: Optional[Union[str, pint.Unit]] = None,
         with_units: bool = True,
@@ -375,23 +382,19 @@ class Solution(object):
                 fluxes[name] = flux.magnitude
         return fluxes
 
-    def rectangle_fluxoid(
+    def polygon_fluxoid(
         self,
+        polygon_points: np.ndarray,
         *,
-        width: float,
-        height: float,
-        x_points: int,
-        y_points: int,
-        center: Tuple[float, float] = (0, 0),
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         interp_method: str = "cubic",
-        flux_units: Optional[str] = None,
+        flux_units: Optional[str] = "Phi_0",
         with_units: bool = True,
         exclude_holes: bool = True,
     ) -> Dict[str, Fluxoid]:
         """Computes the :class:`Fluxoid` (flux + supercurrent) for
-        a given rectangular region.
+        a given polygonal region.
 
         The fluxoid for a closed region :math:`S` is defined as:
 
@@ -406,24 +409,23 @@ class Solution(object):
             }_{\\text{supercurrent part}}
 
         Args:
-            width: Width of the rectangle (in the x direction).
-            height: Height of the rectangle (in the y direction).
-            x_points: Number of points in the top and bottom of the rectangle.
-            y_points: Number of points in the sides of the rectangle.
-            center: Coordinates of the center of the rectangle.
+            polygon_points: A shape ``(n, 2)`` array of ``(x, y)`` coordinates of
+                polygon vertices defining the closed region :math:`S`. The polygon
+                vertices must be oriented counter-clockwise; if not, the vertices will
+                be reversed prior to calculating the fluxoid (with a warning).
             layers: Name(s) of the layer(s) for which to compute the fluxoid.
-            grid_shape: Shape of the desired rectangular grid. If a single integer
-                N is given, then the grid will be square, shape = (N, N).
+            grid_shape: Shape of the desired rectangular grid to use for interpolation.
+                If a single integer N is given, then the grid will be square,
+                shape = (N, N).
             interp_method: Interpolation method to use.
-            flux_units: The desired units for the current density. Defaults to
-                ``self.current_units / self.device.length_units``.
+            flux_units: The desired units for the current density. Defaults to ``Phi_0``.
             with_units: Whether to return values as pint.Quantities with units attached.
-            exclude_holes: Whether to raise an exception if the rectangle intersects a
+            exclude_holes: Whether to raise an exception if the polygon intersects a
                 hole (fluxoid quantization is not enforced for multiply-connected films).
 
         Returns:
-            A dict of ``{layer_name: fluxoid}`` for each specified layer, where ``fluxoid``
-            is an instance of :class:`Fluxoid`.
+            A dict of ``{layer_name: fluxoid}`` for each specified layer, where
+            ``fluxoid`` is an instance of :class:`Fluxoid`.
         """
         device = self.device
         ureg = device.ureg
@@ -431,22 +433,22 @@ class Solution(object):
             layers = list(device.layers)
         if isinstance(layers, str):
             layers = [layers]
-        # Evaluating the supercurrent line integral for an arbitrary closed path
-        # seems a bit too involved, so here we will only handle rectangles aligned
-        # with the coordinate axes.
-        points = geometry.rectangle(
-            width,
-            height,
-            x_points=x_points,
-            y_points=y_points,
-            center=center,
-        )
-        rectangle = Polygon(
-            "_rectangle",
+        if flux_units is None:
+            flux_units = f"{self.field_units} * {self.device.length_units} ** 2"
+        polygon = Polygon(
+            "__polygon",
             layer=layers[0],
-            points=points,
+            points=polygon_points,
         )
-        err_msg = "The rectangle must lie completely within a superconducting film."
+        if polygon.clockwise:
+            logger.warning(
+                "The provided polygon vertices are oriented clockwise. Reversing them "
+                "to counter-clockwise before calculating the fluxoid."
+            )
+            polygon.points = polygon_points[::-1]
+        assert polygon.counter_clockwise
+        points = polygon.points
+        err_msg = "The polygon must lie completely within a superconducting film."
         if not any(
             film.contains_points(points[:, 0], points[:, 1]).all()
             for film in device.films_list
@@ -459,14 +461,12 @@ class Solution(object):
                     continue
                 if hole.contains_points(points[:, 0], points[:, 1]).any():
                     raise ValueError(err_msg)
-                if rectangle.contains_points(
-                    hole.points[:, 0], hole.points[:, 1]
-                ).any():
+                if polygon.contains_points(hole.points[:, 0], hole.points[:, 1]).any():
                     raise ValueError(err_msg)
 
-        # Evaluate the supercurrent density at the rectangle coordinates.
+        # Evaluate the supercurrent density at the polygon coordinates.
         J_units = f"{self.current_units} / {device.length_units}"
-        J_rects = self.interp_current_density(
+        J_polys = self.interp_current_density(
             points,
             grid_shape=grid_shape,
             layers=layers,
@@ -479,31 +479,29 @@ class Solution(object):
         fluxoids = {}
         for layer in layers:
             # Compute the flux part of the fluxoid:
-            # \int_{rect} \mu_0 H_z(x, y) dx dy
+            # \int_{poly} \mu_0 H_z(x, y) dx dy
             try:
-                rectangle.layer = layer
-                device.abstract_regions_list = old_regions + [rectangle]
+                polygon.layer = layer
+                device.abstract_regions_list = old_regions + [polygon]
                 flux_part = self.polygon_flux(
-                    polygons=rectangle.name,
+                    polygons=polygon.name,
                     units=flux_units,
                     with_units=True,
-                )[rectangle.name]
-                if flux_units is None:
-                    flux_units = str(flux_part.units)
+                )[polygon.name]
             finally:
                 device.abstract_regions_list = old_regions
 
             # Compute the supercurrent part of the fluxoid:
-            # \oint_{rect} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
-            J_rect = J_rects[layer][:-1]
+            # \oint_{poly} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
+            J_poly = J_polys[layer][:-1]
             Lambda = device.layers[layer].Lambda
             if not callable(Lambda):
                 Lambda = Constant(Lambda)
-            Lambda_rect = Lambda(points[:, 0], points[:, 1])[:-1]
-            # \Lambda\vec{J}\cdot\mathrm{d}\vec{r}
-            integrand = Lambda_rect * np.sum(J_rect * np.diff(points, axis=0), axis=1)
-            # \oint_{rect}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
-            int_J = np.trapz(integrand)
+            Lambda_poly = Lambda(points[:, 0], points[:, 1])[1:]
+            # \oint_{poly}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
+            int_J = np.trapz(
+                Lambda_poly * np.sum(J_poly * np.diff(points, axis=0), axis=1)
+            )
             int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
             supercurrent_part = (ureg("mu_0") * int_J).to(flux_units)
             if not with_units:
@@ -515,6 +513,7 @@ class Solution(object):
     def field_at_position(
         self,
         positions: np.ndarray,
+        *,
         zs: Optional[Union[float, np.ndarray]] = None,
         vector: bool = False,
         units: Optional[str] = None,
@@ -775,7 +774,7 @@ class Solution(object):
                 equal if they have the exact same time_created.
 
         Returns:
-            bool indicating whether the two solutions are equal
+            A boolean indicating whether the two solutions are equal
         """
         # First check things that are "easy" to check
         if other is self:
