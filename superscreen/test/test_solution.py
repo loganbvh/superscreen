@@ -273,20 +273,29 @@ def test_save_solution(solution1, solution2, save_mesh, compressed):
     assert solution2 == loaded_solution2
 
 
+@pytest.mark.parametrize("polygon_shape", ["circle", "rectangle"])
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
 @pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("flux_units", ["Phi_0", None])
-def test_fluxoid_simply_connected(solution1, flux_units, with_units, layers, center):
+def test_fluxoid_simply_connected(
+    solution1,
+    flux_units,
+    with_units,
+    layers,
+    center,
+    polygon_shape,
+):
+
+    if polygon_shape == "circle":
+        coords = sc.geometry.circle(1.5, points=501, center=center)
+    else:
+        coords = sc.geometry.rectangle(3, 2, x_points=100, y_points=100, center=center)
 
     if layers is None:
         with pytest.raises(ValueError):
-            _ = solution1.rectangle_fluxoid(
-                width=3,
-                height=3,
-                x_points=200,
-                y_points=200,
-                center=center,
+            _ = solution1.polygon_fluxoid(
+                polygon_points=coords,
                 layers=layers,
                 flux_units=flux_units,
                 with_units=with_units,
@@ -294,18 +303,14 @@ def test_fluxoid_simply_connected(solution1, flux_units, with_units, layers, cen
         return
 
     if center == (-4, 0):
-        # The rectangle goes outside of the film -> raise ValueError
+        # The polygon goes outside of the film -> raise ValueError
         context = pytest.raises(ValueError)
     else:
         context = sc.io.NullContextManager()
 
     with context:
-        fluxoid_dict = solution1.rectangle_fluxoid(
-            width=3,
-            height=3,
-            x_points=200,
-            y_points=200,
-            center=center,
+        fluxoid_dict = solution1.polygon_fluxoid(
+            polygon_points=coords,
             layers=layers,
             flux_units=flux_units,
             with_units=with_units,
@@ -326,7 +331,7 @@ def test_fluxoid_simply_connected(solution1, flux_units, with_units, layers, cen
             total_fluxoid = total_fluxoid.m
         # Total fluxoid should vanish for a simply connected region,
         # so we assert that it's small relative to the flux part.
-        assert abs(total_fluxoid) / abs(flux_part) < 2e-2
+        assert (abs(total_fluxoid) / abs(flux_part)) < 2e-2
 
 
 @pytest.mark.parametrize("with_units", [False, True])

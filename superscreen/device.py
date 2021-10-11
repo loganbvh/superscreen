@@ -131,9 +131,27 @@ class Polygon(object):
         self.name = name
         self.layer = layer
         self.points = np.asarray(points)
+        # Ensure that it is a closed polygon.
+        if not np.array_equal(self.points[0], self.points[-1]):
+            self.points = np.concatenate([self.points, self.points[:1]], axis=0)
 
         if self.points.ndim != 2 or self.points.shape[-1] != 2:
             raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
+
+    @property
+    def clockwise(self) -> bool:
+        """Returns True if the polygon vertices are oriented clockwise."""
+        # https://stackoverflow.com/a/1165943
+        # https://www.element84.com/blog/
+        # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        return np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1])) > 0
+
+    @property
+    def counter_clockwise(self) -> bool:
+        """Returns True if the polygon vertices are oriented counter-clockwise."""
+        return not self.clockwise
 
     def contains_points(
         self,
@@ -156,8 +174,7 @@ class Polygon(object):
             of the same shape as xq and yq indicating whether each point
             lies within the polygon.
         """
-        x, y = self.points.T
-        bool_array = fem.in_polygon(xq, yq, x, y)
+        bool_array = fem.in_polygon(xq, yq, self.points[:, 0], self.points[:, 1])
         if index:
             return np.where(bool_array)[0]
         return bool_array
@@ -615,14 +632,11 @@ class Device(object):
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
         for name, film in self.films.items():
-            points = np.concatenate([film.points, film.points[:1]], axis=0)
-            ax.plot(*points.T, label=name, **kwargs)
+            ax.plot(*film.points.T, label=name, **kwargs)
         for name, hole in self.holes.items():
-            points = np.concatenate([hole.points, hole.points[:1]], axis=0)
-            ax.plot(*points.T, label=name, **kwargs)
+            ax.plot(*hole.points.T, label=name, **kwargs)
         for name, region in self.abstract_regions.items():
-            points = np.concatenate([region.points, region.points[:1]], axis=0)
-            ax.plot(*points.T, label=name, **kwargs)
+            ax.plot(*region.points.T, label=name, **kwargs)
         ax.set_aspect("equal")
         ax.grid(grid)
         if legend:

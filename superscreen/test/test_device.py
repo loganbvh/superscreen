@@ -88,6 +88,10 @@ def device_with_mesh():
     device.make_mesh(min_triangles=2500)
 
     print(device)
+    assert all(polygon.counter_clockwise for polygon in films + holes)
+    assert sc.Polygon(
+        "cw_circle", layer="layer0", points=sc.geometry.circle(2)[::-1]
+    ).clockwise
     assert device == device
     assert all(film == film for film in films)
     assert all(layer == layer for layer in layers)
