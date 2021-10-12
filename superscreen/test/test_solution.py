@@ -319,6 +319,17 @@ def test_fluxoid_simply_connected(
             ::-1
         ]
 
+    if layers is None:
+        with pytest.raises(ValueError):
+            _ = solution1.polygon_fluxoid(
+                polygon_points=coords,
+                layers=layers,
+                flux_units=flux_units,
+                with_units=with_units,
+                exclude_holes=True,
+            )
+        return
+
     if center == (-4, 0):
         # The polygon goes outside of the film -> raise ValueError
         context = pytest.raises(ValueError)
