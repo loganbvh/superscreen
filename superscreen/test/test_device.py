@@ -76,7 +76,11 @@ def device_with_mesh():
 
     films = [
         sc.Polygon("disk", layer="layer0", points=sc.geometry.circle(5)),
-        sc.Polygon("ring", layer="layer1", points=sc.geometry.circle(4)),
+        sc.Polygon(
+            "ring",
+            layer="layer1",
+            points=sc.geometry.close_curve(sc.geometry.circle(4))
+        ),
     ]
 
     holes = [

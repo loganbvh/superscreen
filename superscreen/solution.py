@@ -136,7 +136,7 @@ class Solution(object):
         *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        method: str = "cubic",
+        method: str = "linear",
         with_units: bool = False,
         **kwargs,
     ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
@@ -208,7 +208,7 @@ class Solution(object):
         *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        method: str = "cubic",
+        method: str = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
@@ -260,7 +260,7 @@ class Solution(object):
         *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        method: str = "cubic",
+        method: str = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
@@ -389,10 +389,10 @@ class Solution(object):
         *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-        interp_method: str = "cubic",
+        interp_method: str = "linear",
         flux_units: Optional[str] = "Phi_0",
         with_units: bool = True,
-        exclude_holes: bool = True,
+        exclude_holes: bool = False,
     ) -> Dict[str, Fluxoid]:
         """Computes the :class:`Fluxoid` (flux + supercurrent) for
         a given polygonal region.
@@ -422,8 +422,8 @@ class Solution(object):
             interp_method: Interpolation method to use.
             flux_units: The desired units for the current density. Defaults to ``Phi_0``.
             with_units: Whether to return values as pint.Quantities with units attached.
-            exclude_holes: Whether to raise an exception if the polygon intersects a
-                hole (fluxoid quantization is not enforced for multiply-connected films).
+            exclude_holes: Whether to raise an exception if the polygon intersects or
+                contains a hole.
 
         Returns:
             A dict of ``{layer_name: fluxoid}`` for each specified layer, where

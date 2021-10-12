@@ -163,3 +163,19 @@ def square(
         center=center,
         angle=angle,
     )
+
+
+def close_curve(points: np.ndarray) -> np.ndarray:
+    """Close a curve (making the start point equal to the end point),
+    if it is not already closed.
+
+    Args:
+        points: Shape ``(m, n)`` array of ``m`` coordinates in ``n`` dimensions.
+
+    Returns:
+        ``points`` with the first point appended to the end if the start point
+        was not already equal to the end point. 
+    """
+    if not np.array_equal(points[0], points[-1]):
+        points = np.concatenate([points, points[:1]], axis=0)
+    return points
