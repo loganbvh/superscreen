@@ -15,6 +15,7 @@ import optimesh
 
 from . import brandt
 from . import fem
+from .geometry import close_curve
 from .parameter import Parameter
 
 
@@ -132,8 +133,7 @@ class Polygon(object):
         self.layer = layer
         self.points = np.asarray(points)
         # Ensure that it is a closed polygon.
-        if not np.array_equal(self.points[0], self.points[-1]):
-            self.points = np.concatenate([self.points, self.points[:1]], axis=0)
+        self.points = close_curve(self.points)
 
         if self.points.ndim != 2 or self.points.shape[-1] != 2:
             raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")

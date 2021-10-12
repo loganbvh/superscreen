@@ -326,6 +326,7 @@ def test_fluxoid_simply_connected(
                 layers=layers,
                 flux_units=flux_units,
                 with_units=with_units,
+                exclude_holes=True,
             )
         return
 
