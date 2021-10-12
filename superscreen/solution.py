@@ -447,7 +447,7 @@ class Solution(object):
                 "The provided polygon vertices are oriented clockwise. Reversing them "
                 "to counter-clockwise before calculating the fluxoid."
             )
-            polygon.points = polygon_points[::-1]
+            polygon.points = polygon.points[::-1]
         assert polygon.counter_clockwise
         points = polygon.points
         err_msg = "The polygon must lie completely within a superconducting film."
@@ -494,7 +494,7 @@ class Solution(object):
                 device.abstract_regions_list = old_regions
 
             # Compute the supercurrent part of the fluxoid:
-            # \oint_{poly} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
+            # \oint_{\\partial poly} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
             J_poly = J_polys[layer][:-1]
             Lambda = device.layers[layer].Lambda
             if not callable(Lambda):
