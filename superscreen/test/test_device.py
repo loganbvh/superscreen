@@ -79,7 +79,7 @@ def device_with_mesh():
         sc.Polygon(
             "ring",
             layer="layer1",
-            points=sc.geometry.close_curve(sc.geometry.circle(4))
+            points=sc.geometry.close_curve(sc.geometry.circle(4)),
         ),
     ]
 

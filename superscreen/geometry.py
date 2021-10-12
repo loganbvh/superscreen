@@ -174,7 +174,7 @@ def close_curve(points: np.ndarray) -> np.ndarray:
 
     Returns:
         ``points`` with the first point appended to the end if the start point
-        was not already equal to the end point. 
+        was not already equal to the end point.
     """
     if not np.array_equal(points[0], points[-1]):
         points = np.concatenate([points, points[:1]], axis=0)
