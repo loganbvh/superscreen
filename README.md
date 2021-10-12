@@ -1,5 +1,7 @@
 # SuperScreen
 
+![SuperScreen Logo](docs/images/logo_currents_small.png)
+
 SuperScreen is a package for simulating the magnetic response of multiplanar thin film
 superconducting devices. SuperScreen solves the coupled Maxwell's and London equations
 on a triangular mesh using a matrix inversion method described in the following references:

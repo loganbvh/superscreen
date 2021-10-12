@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 class Fluxoid(NamedTuple):
-    """The fluxoid for a closed region :math:`S` is defined as:
+    """The fluxoid for a closed region :math:`S` with boundary :math:`\\partial S`
+    is defined as:
 
     .. math::
 
@@ -34,7 +35,7 @@ class Fluxoid(NamedTuple):
             \\int_S \\mu_0 H_z(\\vec{r})\\,\\mathrm{d}^2r
         }_{\\text{flux part}}
         + \\underbrace{
-            \\oint_{\\Omega S}
+            \\oint_{\\partial S}
             \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
         }_{\\text{supercurrent part}}
 
@@ -396,7 +397,8 @@ class Solution(object):
         """Computes the :class:`Fluxoid` (flux + supercurrent) for
         a given polygonal region.
 
-        The fluxoid for a closed region :math:`S` is defined as:
+        The fluxoid for a closed region :math:`S` with boundary :math:`\\partial S`
+        is defined as:
 
         .. math::
 
@@ -404,7 +406,7 @@ class Solution(object):
                 \\int_S \\mu_0 H_z(\\vec{r})\\,\\mathrm{d}^2r
             }_{\\text{flux part}}
             + \\underbrace{
-                \\oint_{\\Omega S}
+                \\oint_{\\partial S}
                 \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
             }_{\\text{supercurrent part}}
 
