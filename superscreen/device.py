@@ -264,6 +264,7 @@ class Device(object):
         self.points = None
         self.triangles = None
 
+        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self.q = None
@@ -548,6 +549,7 @@ class Device(object):
         self.points = points
         self.triangles = triangles
 
+        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self._Q_cache = {}
@@ -586,20 +588,28 @@ class Device(object):
                 "to generate the mesh."
             )
 
+        logger.info("Calculating mass matrix.")
+        self.mass_matrix = fem.mass_matrix(points, triangles, sparse=sparse)
+
         logger.info("Calculating weight matrix.")
         self.weights = fem.calculate_weights(
             points, triangles, weight_method, normalize=True, sparse=sparse
         )
         logger.info("Calculating Laplace operator.")
         self.Del2 = fem.laplace_operator(
-            points, triangles, weight_method, sparse=sparse
+            points,
+            triangles,
+            masses=self.mass_matrix,
+            weight_method=weight_method,
+            sparse=sparse,
         )
         logger.info("Calculating kernel matrix.")
         self.q = brandt.q_matrix(points)
         # Each layer has its own edge vector C, so each layer's kernel matrix Q
         # will have different diagonals.
         self.C_vectors = {}
-        x, y = points.T
+        x = points[:, 0]
+        y = points[:, 1]
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
             self.C_vectors[layer_name] = sum(
@@ -673,7 +683,8 @@ class Device(object):
             raise RuntimeError(
                 "Mesh does not exist. Run device.make_mesh() to generate the mesh."
             )
-        x, y = self.points.T
+        x = self.points[:, 0]
+        y = self.points[:, 1]
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
         if edges:
