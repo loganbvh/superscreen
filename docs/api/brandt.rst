@@ -36,6 +36,9 @@ Solution
 .. autoclass:: superscreen.solution.Fluxoid
     :show-inheritance:
 
+.. autoclass:: superscreen.solution.Vortex
+    :show-inheritance:
+
 Supporting Functions
 --------------------
 

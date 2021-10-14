@@ -50,6 +50,7 @@ def solution1(device):
     solutions = sc.solve(
         device=device,
         applied_field=applied_field,
+        vortices=[sc.Vortex(x=0, y=0, layer="layer0")],
         circulating_currents=None,
         field_units="mT",
         iterations=1,
