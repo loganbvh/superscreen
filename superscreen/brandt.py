@@ -350,6 +350,7 @@ def brandt_layer(
         for name, film in films.items():
             if film.contains_points(vortex.x, vortex.y):
                 film_to_vortices[name].append(vortex)
+                # A given vortex can only lie in a single film.
                 continue
 
     # Now solve for the stream function inside the superconducting films
@@ -540,8 +541,11 @@ def solve(
         if vortex.layer not in device.layers:
             raise ValueError(f"Vortex located in unknown layer: {vortex}.")
         films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
+        holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
         if not any(film.contains_points(vortex.x, vortex.y) for film in films_in_layer):
             raise ValueError(f"Vortex {vortex} is not located in a film.")
+        if any(hole.contains_points(vortex.x, vortex.y) for hole in holes_in_layer):
+            raise ValueError(f"Vortex {vortex} is located in a hole.")
         vortices_by_layer[vortex.layer].append(vortex)
 
     # Compute the stream functions and fields for each layer
@@ -634,7 +638,7 @@ def solve(
                         and other_layer.name == layer_names[1]
                     ):
                         logger.info(
-                            f"Caching {nkernels} layer-to-layer kernels "
+                            f"Caching {nkernels} layer-to-layer kernel(s) "
                             f"({total_bytes / 1024 ** 2:.0f} MB total) "
                             f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
                         )

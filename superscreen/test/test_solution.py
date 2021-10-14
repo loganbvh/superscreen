@@ -313,6 +313,7 @@ def test_fluxoid_simply_connected(
     polygon_shape,
 ):
 
+    ureg = solution1.device.ureg
     if polygon_shape == "circle":
         coords = sc.geometry.circle(1.5, points=501, center=center)
     else:
@@ -344,6 +345,8 @@ def test_fluxoid_simply_connected(
             flux_units=flux_units,
             with_units=with_units,
         )
+    if flux_units is None:
+        flux_units = f"{solution1.field_units} * {solution1.device.length_units} ** 2"
 
     if center == (-4, 0):
         return
@@ -358,9 +361,23 @@ def test_fluxoid_simply_connected(
         if with_units:
             flux_part = flux_part.m
             total_fluxoid = total_fluxoid.m
-        # Total fluxoid should vanish for a simply connected region,
-        # so we assert that it's small relative to the flux part.
-        assert (abs(total_fluxoid) / abs(flux_part)) < 2e-2
+        # For a simply connected region, the total fluxoid should be equal to
+        # Phi0 times the number of vortices in the region.
+        total_vortex_flux = 0
+        for vortex in solution1.vortices:
+            if vortex.layer == name:
+                if sc.fem.in_polygon(vortex.x, vortex.y, *coords.T):
+                    total_vortex_flux += (
+                        (vortex.nPhi0 * ureg("Phi_0")).to(flux_units).magnitude
+                    )
+        if total_vortex_flux:
+            # There are vortices in the region.
+            assert (
+                abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)
+            ) < 2.5e-2
+        else:
+            # No vortices - fluxoid should be zero.
+            assert abs(total_fluxoid) / abs(flux_part) < 2e-2
 
 
 @pytest.mark.parametrize("with_units", [False, True])
