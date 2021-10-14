@@ -230,7 +230,8 @@ def cross_section(
         paths.append(np.concatenate([[0], path], axis=0))
     # Calculate cross sections.
     cross_sections = []
-    z_interp = interpolator(dataset_coords, dataset_values)
+    mask = np.isfinite(dataset_values)
+    z_interp = interpolator(dataset_coords[mask], dataset_values[mask])
     for c in cross_section_coords:
         cross_sections.append(z_interp(c[:, 0], c[:, 1]))
 
@@ -272,7 +273,8 @@ def plot_streams_layer(
         fig = ax.figure
     device = solution.device
     length_units = device.ureg(device.length_units).units
-    x, y = device.points.T
+    x = device.points[:, 0]
+    y = device.points[:, 1]
     triangles = device.triangles
     units = units or solution.current_units
     if isinstance(units, str):
