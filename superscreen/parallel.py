@@ -17,7 +17,7 @@ from . import brandt
 from .io import NullContextManager
 from .device import Device
 from .parameter import Parameter
-from .solution import Solution
+from .solution import Solution, Vortex
 
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ def create_models(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     product: bool = False,
@@ -46,6 +47,7 @@ def create_models(
             of such dicts. If circulating_current is a float, then it is assumed to
             be in units of current_units. If circulating_current is a string, then
             it is converted to a pint.Quantity.
+        vortices: A list (or list of lists) of ``Vortex`` objects.
         layer_updater: A callable with signature
             ``layer_updater(layer: Layer, **kwargs) -> Layer`` that updates
             parameter(s) of each layer in a device.
@@ -57,7 +59,7 @@ def create_models(
             similar to zip().
 
     Returns:
-        A list of "models", (device, applied_field, circulating_currents).
+        A list of "models", (device, applied_field, circulating_currents, vortices).
     """
 
     if not isinstance(applied_fields, (list, tuple)):
@@ -70,9 +72,16 @@ def create_models(
 
     layer_update_kwargs = layer_update_kwargs or []
     circulating_currents = circulating_currents or {}
+    vortices = vortices or [[]]
 
     if not isinstance(circulating_currents, (list, tuple)):
         circulating_currents = [circulating_currents]
+
+    if isinstance(vortices, Vortex):
+        vortices = [vortices]
+    for i, item in enumerate(vortices):
+        if not isinstance(item, list):
+            vortices[i] = [vortices[i]]
 
     if layer_updater and layer_update_kwargs:
         devices = []
@@ -86,19 +95,31 @@ def create_models(
         devices = [device.copy(with_arrays=False)]
 
     if product:
-        models = list(itertools.product(devices, applied_fields, circulating_currents))
+        models = list(
+            itertools.product(devices, applied_fields, circulating_currents, vortices)
+        )
     else:
-        max_len = max(len(devices), len(applied_fields), len(circulating_currents))
-        for lst in [devices, applied_fields, circulating_currents]:
+        max_len = max(
+            len(devices),
+            len(applied_fields),
+            len(circulating_currents),
+            len(vortices),
+        )
+        for lst in [devices, applied_fields, circulating_currents, vortices]:
             if len(lst) == 1 and max_len > 1:
                 item = lst[0]
                 lst.extend([item] * (max_len - 1))
-        if not (len(devices) == len(applied_fields) == len(circulating_currents)):
+        if not (
+            len(devices)
+            == len(applied_fields)
+            == len(circulating_currents)
+            == len(vortices)
+        ):
             raise ValueError(
-                "Devices, applied_fields, and circulating_current must be lists "
-                "of the same length."
+                "Devices, applied_fields, circulating_currents, and vortices "
+                "must be lists of the same length."
             )
-        models = list(zip(devices, applied_fields, circulating_currents))
+        models = list(zip(devices, applied_fields, circulating_currents, vortices))
 
     return models
 
@@ -149,6 +170,7 @@ def solve_many_serial(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
@@ -171,6 +193,7 @@ def solve_many_serial(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         layer_updater=layer_updater,
         layer_update_kwargs=layer_update_kwargs,
         product=product,
@@ -191,13 +214,15 @@ def solve_many_serial(
         save_context = NullContextManager(directory)
 
     with save_context as savedir:
-        for i, (device, applied_field, circulating_currents) in enumerate(models):
+        for i, model in enumerate(models):
+            device, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             device.set_arrays(arrays)
             _ = brandt.solve(
                 device=device,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
+                vortices=vortices,
                 field_units=field_units,
                 current_units=current_units,
                 iterations=iterations,
@@ -238,8 +263,10 @@ def solve_many_serial(
 # Concurrency using multiprocessing
 #######################################################################################
 
-# See: http://thousandfold.net/cz/2014/05/01/sharing-numpy-arrays-between-processes-using-multiprocessing-and-ctypes/
-# See: https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
+# See: http://thousandfold.net/cz/2014/05/01/
+# sharing-numpy-arrays-between-processes-using-multiprocessing-and-ctypes/
+# See: https://stackoverflow.com/questions/37705974/
+# why-are-multiprocessing-sharedctypes-assignments-so-slow
 
 
 def shared_array_to_numpy(
@@ -324,6 +351,7 @@ def solve_many_mp(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
@@ -343,6 +371,7 @@ def solve_many_mp(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         layer_updater=layer_updater,
         layer_update_kwargs=layer_update_kwargs,
         product=product,
@@ -371,7 +400,8 @@ def solve_many_mp(
 
     with save_context as savedir:
         kwargs = []
-        for i, (device, applied_field, circulating_currents) in enumerate(models):
+        for i, model in enumerate(models):
+            device, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             kwargs.append(
                 dict(
@@ -381,6 +411,7 @@ def solve_many_mp(
                     device=device,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
+                    vortices=vortices,
                     field_units=field_units,
                     current_units=current_units,
                     iterations=iterations,
@@ -466,6 +497,7 @@ def solve_many_ray(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
@@ -486,6 +518,7 @@ def solve_many_ray(
         device,
         applied_fields,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         layer_updater=layer_updater,
         layer_update_kwargs=layer_update_kwargs,
         product=product,
@@ -535,7 +568,8 @@ def solve_many_ray(
 
     result_ids = []
     with save_context as savedir:
-        for i, (device_copy, applied_field, circulating_currents) in enumerate(models):
+        for i, model in enumerate(models):
+            device_copy, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             result_ids.append(
                 solve_single_ray.remote(
@@ -543,6 +577,7 @@ def solve_many_ray(
                     device=device_copy,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
+                    vortices=vortices,
                     field_units=field_units,
                     current_units=current_units,
                     iterations=iterations,

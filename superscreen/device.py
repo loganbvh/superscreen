@@ -219,6 +219,7 @@ class Device(object):
     ARRAY_NAMES = (
         "points",
         "triangles",
+        "mass_matrix",
         "weights",
         "Del2",
         "q",
@@ -394,8 +395,8 @@ class Device(object):
         """
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("weights", "Del2"):
-            valid_types[name] = (valid_types[name], sp.csr_matrix)
+        for name in ("weights", "Del2", "mass_matrix"):
+            valid_types[name] = (valid_types[name], sp.spmatrix)
         _ = valid_types.pop("C_vectors")
         C_vectors = arrays["C_vectors"]
         layer_names = set(self.layers)
@@ -640,7 +641,7 @@ class Device(object):
             matplotlib axis
         """
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
+            _, ax = plt.subplots(figsize=figsize)
         for name, film in self.films.items():
             ax.plot(*film.points.T, label=name, **kwargs)
         for name, hole in self.holes.items():
@@ -686,7 +687,7 @@ class Device(object):
         x = self.points[:, 0]
         y = self.points[:, 1]
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
+            _, ax = plt.subplots(figsize=figsize)
         if edges:
             ax.triplot(x, y, self.triangles, **kwargs)
         if vertices:

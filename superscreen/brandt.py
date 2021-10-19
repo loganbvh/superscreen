@@ -744,6 +744,7 @@ def solve_many(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
@@ -770,6 +771,7 @@ def solve_many(
             of such dicts. If circulating_current is a float, then it is assumed to
             be in units of current_units. If circulating_current is a string, then
             it is converted to a pint.Quantity.
+        vortices: A list (list of lists) of ``Vortex`` objects.
         layer_updater: A callable with signature
             ``layer_updater(layer: Layer, **kwargs) -> Layer`` that updates
             parameter(s) of each layer in a device.
@@ -827,6 +829,7 @@ def solve_many(
         device=device,
         applied_fields=applied_fields,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         layer_updater=layer_updater,
         layer_update_kwargs=layer_update_kwargs,
         field_units=field_units,

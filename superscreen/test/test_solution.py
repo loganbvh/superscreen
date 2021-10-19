@@ -374,17 +374,23 @@ def test_fluxoid_simply_connected(
             # There are vortices in the region.
             assert (
                 abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)
-            ) < 2.5e-2
+            ) < 5e-2
         else:
             # No vortices - fluxoid should be zero.
             assert abs(total_fluxoid) / abs(flux_part) < 2e-2
 
 
-@pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("units", ["uA / um", None])
-@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
-@pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
-@pytest.mark.parametrize("positions", [[0, 0], np.array([[1, 0], [0, 1]]), None])
+@pytest.mark.parametrize(
+    "units, with_units", [("uA / um", False), (None, True)]
+)
+@pytest.mark.parametrize(
+    "layers, method, positions", 
+    [
+        ("layer0", "nearest", [0, 0]),
+        (None, "linear", np.array([[1, 0], [0, 1]])),
+        (["layer0"], "cubic", None),
+    ]
+)
 def test_interp_current_density(
     solution1, positions, method, layers, units, with_units
 ):
