@@ -50,6 +50,7 @@ def solution1(device):
     solutions = sc.solve(
         device=device,
         applied_field=applied_field,
+        vortices=[sc.Vortex(x=0, y=0, layer="layer0")],
         circulating_currents=None,
         field_units="mT",
         iterations=1,
@@ -312,6 +313,7 @@ def test_fluxoid_simply_connected(
     polygon_shape,
 ):
 
+    ureg = solution1.device.ureg
     if polygon_shape == "circle":
         coords = sc.geometry.circle(1.5, points=501, center=center)
     else:
@@ -343,6 +345,8 @@ def test_fluxoid_simply_connected(
             flux_units=flux_units,
             with_units=with_units,
         )
+    if flux_units is None:
+        flux_units = f"{solution1.field_units} * {solution1.device.length_units} ** 2"
 
     if center == (-4, 0):
         return
@@ -357,16 +361,34 @@ def test_fluxoid_simply_connected(
         if with_units:
             flux_part = flux_part.m
             total_fluxoid = total_fluxoid.m
-        # Total fluxoid should vanish for a simply connected region,
-        # so we assert that it's small relative to the flux part.
-        assert (abs(total_fluxoid) / abs(flux_part)) < 2e-2
+        # For a simply connected region, the total fluxoid should be equal to
+        # Phi0 times the number of vortices in the region.
+        total_vortex_flux = 0
+        for vortex in solution1.vortices:
+            if vortex.layer == name:
+                if sc.fem.in_polygon(vortex.x, vortex.y, *coords.T):
+                    total_vortex_flux += (
+                        (vortex.nPhi0 * ureg("Phi_0")).to(flux_units).magnitude
+                    )
+        if total_vortex_flux:
+            # There are vortices in the region.
+            assert (
+                abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)
+            ) < 5e-2
+        else:
+            # No vortices - fluxoid should be zero.
+            assert abs(total_fluxoid) / abs(flux_part) < 2e-2
 
 
-@pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("units", ["uA / um", None])
-@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
-@pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
-@pytest.mark.parametrize("positions", [[0, 0], np.array([[1, 0], [0, 1]]), None])
+@pytest.mark.parametrize("units, with_units", [("uA / um", False), (None, True)])
+@pytest.mark.parametrize(
+    "layers, method, positions",
+    [
+        ("layer0", "nearest", [0, 0]),
+        (None, "linear", np.array([[1, 0], [0, 1]])),
+        (["layer0"], "cubic", None),
+    ],
+)
 def test_interp_current_density(
     solution1, positions, method, layers, units, with_units
 ):

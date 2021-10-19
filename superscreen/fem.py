@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import scipy.linalg as la
@@ -298,6 +298,7 @@ def mass_matrix(
 def laplace_operator(
     points: np.ndarray,
     triangles: np.ndarray,
+    masses: Optional[Union[np.ndarray, sp.spmatrix]] = None,
     weight_method: str = "half_cotangent",
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_matrix]:
@@ -310,6 +311,7 @@ def laplace_operator(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangle indices.
+        masses: Pre-computed mass matrix.
         weight_method: Method for calculating the weights. One of: "uniform",
             "inv_euclidean", or "half_cotangent".
         sparse: Whether to return a sparse matrix or numpy ndarray.
@@ -322,18 +324,23 @@ def laplace_operator(
     weights = calculate_weights(
         points, triangles, weight_method, normalize=False, sparse=sparse
     )
-    M = mass_matrix(points, triangles, sparse=sparse)
+    if masses is None:
+        masses = mass_matrix(points, triangles, sparse=sparse)
+    elif not sp.issparse(masses):
+        masses = sp.csc_matrix(masses)
     if sparse:
-        if not sp.isspmatrix_csc(M):
-            M = M.tocsc()
+        if not sp.isspmatrix_csc(masses):
+            masses = masses.tocsc()
         if not sp.isspmatrix_csr(weights):
             weights = sp.csr_matrix(weights)
         L = weights - sp.diags(np.asarray(weights.sum(axis=1)).squeeze(), format="csr")
         # * is matrix multiplication for sparse matrices
-        Del2 = (sp.linalg.inv(M) * L).tocsr()
+        Del2 = (sp.linalg.inv(masses) * L).tocsr()
     else:
+        if sp.issparse(masses):
+            masses = masses.toarray()
         if sp.issparse(weights):
             weights = weights.toarray()
         L = weights - np.diag(weights.sum(axis=1))
-        Del2 = la.inv(M) @ L
+        Del2 = la.inv(masses) @ L
     return Del2

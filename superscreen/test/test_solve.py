@@ -90,3 +90,30 @@ def test_current_value(device, return_solutions, save, tmp_path):
         assert np.isclose(np.sum(+jx[:N, N]) * dy, 1000)
     else:
         assert solutions is None
+
+
+def test_invalid_vortex_args(device):
+
+    with pytest.raises(TypeError):
+        _ = sc.solve(device=device, vortices=[0, 1, 2])
+
+    # Vortex in unknown layer
+    with pytest.raises(ValueError):
+        _ = sc.solve(
+            device=device,
+            vortices=[sc.Vortex(x=3.5, y=0, layer="invalid")],
+        )
+
+    # Vortex in hole
+    with pytest.raises(ValueError):
+        _ = sc.solve(
+            device=device,
+            vortices=[sc.Vortex(x=0, y=0, layer="layer1")],
+        )
+
+    # Vortex outside film
+    with pytest.raises(ValueError):
+        _ = sc.solve(
+            device=device,
+            vortices=[sc.Vortex(x=4.5, y=0, layer="layer1")],
+        )

@@ -2,19 +2,28 @@ import os
 import logging
 import tempfile
 import itertools
-from typing import Union, Callable, Optional, Dict, Tuple, List, Any, TYPE_CHECKING
+from collections import defaultdict
+from typing import (
+    Union,
+    Callable,
+    Optional,
+    Tuple,
+    List,
+    Dict,
+    Any,
+    TYPE_CHECKING,
+)
 
 import pint
 import psutil
 import numpy as np
-import scipy.linalg as la
 import scipy.sparse as sp
 from scipy.spatial import distance
 
 from .fem import areas, centroids
 from .io import NullContextManager
 from .parameter import Constant, Parameter
-from .solution import Solution
+from .solution import Solution, Vortex
 from .sources import ConstantField
 
 if TYPE_CHECKING:
@@ -71,7 +80,8 @@ def C_vector(points: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarra
     Returns:
         Shape (n, ) array, Ci
     """
-    x, y = points.T
+    x = points[:, 0]
+    y = points[:, 1]
     if mask is None:
         mask = np.ones_like(x, dtype=bool)
     x = x - x[mask].mean()
@@ -216,10 +226,12 @@ def brandt_layer(
     device: "Device",
     layer: str,
     applied_field: Union[Callable, np.ndarray],
+    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
+    vortices: Optional[List[Vortex]] = None,
+    mass_matrix: Optional[Union[np.ndarray, sp.spmatrix]] = None,
     weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
     Del2: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
     Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
-    circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -230,14 +242,16 @@ def brandt_layer(
         layer: Name of the layer to analyze.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y coordinates, or a vector of applied fields.
-        weights: The Device's weight matrix.
-        Del2: The Device's Laplacian operator.
-        Lambda: A Parameter, array, or scalar defining the layer's effective penetration
-            depth, Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
+        vortices: A list of Vortex objects located in films in this layer.
+        mass_matrix: The Device's mass matrix.
+        weights: The Device's weight matrix.
+        Del2: The Device's Laplacian operator.
+        Lambda: A Parameter, array, or scalar defining the layer's effective penetration
+            depth, Lambda(x, y).
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
@@ -248,6 +262,15 @@ def brandt_layer(
     logger = logging.getLogger(__name__)
 
     circulating_currents = circulating_currents or {}
+    vortices = vortices or []
+    # Vortex flux in magnetization-like units,
+    # i.e. H * area as opposed to B * area = mu_0 * H * area.
+    # ([current] / [length]) * [length]^2 = [current] * [length]
+    vortex_flux = (
+        device.ureg("Phi_0 / mu_0")
+        .to(f"{current_units} * {device.length_units}")
+        .magnitude
+    )
 
     if device.weights is None:
         device.make_mesh(compute_matrices=True)
@@ -256,14 +279,20 @@ def brandt_layer(
         weights = device.weights
     if Del2 is None:
         Del2 = device.Del2
-    # We need to do slicing, etc., so its easiest to just use numpy arrays
+    # We need to do slicing, etc., so it's easiest to just use numpy arrays
     if sp.issparse(weights):
         weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
+    if mass_matrix is None:
+        mass_matrix = device.mass_matrix
+        # Don't convert the mass_matrix to a dense array
+        # because we don't need to slice it (just access single elements).
+
     Q = device.Q(layer, weights=weights)
     points = device.points
-    x, y = points.T
+    x = points[:, 0]
+    y = points[:, 1]
     if Lambda is None:
         Lambda = device.layers[layer].Lambda
 
@@ -316,6 +345,14 @@ def brandt_layer(
             Q[:, ix] * weights[:, ix] - Lambda[:, np.newaxis] * Del2[:, ix]
         ).sum(axis=1)
 
+    film_to_vortices = defaultdict(list)
+    for vortex in vortices:
+        for name, film in films.items():
+            if film.contains_points(vortex.x, vortex.y):
+                film_to_vortices[name].append(vortex)
+                # A given vortex can only lie in a single film.
+                continue
+
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
         # We want all points that are in a film and not in a hole.
@@ -324,25 +361,48 @@ def brandt_layer(
         ix2d = np.ix_(ix1d, ix1d)
 
         # Form the linear system for the film:
-        # -(Q * w - Lambda * Del2) @ gf = A @ gf = h
+        # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = -(Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d])
+        A = Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d]
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        lu, piv = la.lu_factor(A)
-        gf = la.lu_solve((lu, piv), h)
+        # In some simple benchmarking on an Intel Mac with numpy=1.20.3 and scipy=1.6.3
+        # I have found numpy.linalg.inv to be a bit faster than scipy.linalg.inv,
+        # but I may want to revisit this in the future.
+        # See also: https://docs.scipy.org/doc/scipy/reference/tutorial/
+        # linalg.html#scipy-linalg-vs-numpy-linalg
+        K = np.linalg.inv(A)
+        gf = -K @ h
         g[ix1d] = gf
         if check_inversion:
             # Validate solution
-            errors = (A @ gf) - h
+            errors = (-A @ gf) - h
             if not np.allclose(errors, 0):
                 logger.warning(
                     f"Unable to solve for stream function in {layer} ({name}), "
                     f"maximum error {np.abs(errors).max():.3e}."
                 )
-    # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = (Q * weights) @ g
-    total_field = Hz_applied + screening_field
 
+        for vortex in film_to_vortices[name]:
+            # Index of the mesh vertex that is closest to the vortex position:
+            # in the film-specific subarray...
+            j_film = np.argmin(
+                np.sum(np.square(points[ix1d] - [[vortex.x, vortex.y]]), axis=1)
+            )
+            # and in the full device mesh.
+            j_device = np.argmin(
+                np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
+            )
+            # Eq. 28 in [Brandt]
+            g[ix1d] += (
+                vortex_flux
+                * vortex.nPhi0
+                * K[:, j_film]
+                / mass_matrix[j_device, j_device]
+            )
+    # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
+    # Equivalent to screening_field = (Q * weights) @ g
+    screening_field = np.einsum("ij,j -> i", Q * weights, g)
+    total_field = Hz_applied + screening_field
     return g, total_field, screening_field
 
 
@@ -351,6 +411,7 @@ def solve(
     device: "Device",
     applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
+    vortices: Optional[List[Vortex]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
     check_inversion: bool = True,
@@ -375,7 +436,6 @@ def solve(
 
     3. Repeat step 2 (iterations - 1) times.
 
-
     Args:
         device: The Device to simulate.
         applied_field: A callable that computes the applied magnetic field
@@ -384,6 +444,7 @@ def solve(
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
+        vortices: A list of Vortex objects located in the Device.
         field_units: Units of the applied field. Can either be magnetic field H
             or magnetic flux density B = mu0 * H.
         current_units: Units to use for current quantities. The applied field will be
@@ -400,7 +461,6 @@ def solve(
             by the operating system.
         log_level: Logging level to use, if any.
         _solver: Name of the solver method used.
-
 
     Returns:
         If ``return_solutions`` is True, returns a list of Solutions of
@@ -419,6 +479,7 @@ def solve(
     triangles = device.triangles
     weights = device.weights
     Del2 = device.Del2
+    mass_matrix = device.mass_matrix
     # We need to do slicing, etc., so its easiest to just use numpy arrays
     if sp.issparse(weights):
         weights = weights.toarray()
@@ -432,6 +493,7 @@ def solve(
     screening_fields = {}
 
     applied_field = applied_field or ConstantField(0)
+    vortices = vortices or []
 
     field_conversion = field_conversion_factor(
         field_units,
@@ -472,6 +534,20 @@ def solve(
             Lambda = Constant(Lambda)
         layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1])
 
+    vortices_by_layer = defaultdict(list)
+    for vortex in vortices:
+        if not isinstance(vortex, Vortex):
+            raise TypeError(f"Expected a Vortex, but got {type(vortex)}.")
+        if vortex.layer not in device.layers:
+            raise ValueError(f"Vortex located in unknown layer: {vortex}.")
+        films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
+        holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
+        if not any(film.contains_points(vortex.x, vortex.y) for film in films_in_layer):
+            raise ValueError(f"Vortex {vortex} is not located in a film.")
+        if any(hole.contains_points(vortex.x, vortex.y) for hole in holes_in_layer):
+            raise ValueError(f"Vortex {vortex} is located in a hole.")
+        vortices_by_layer[vortex.layer].append(vortex)
+
     # Compute the stream functions and fields for each layer
     # given only the applied field.
     for name, layer in device.layers.items():
@@ -481,10 +557,12 @@ def solve(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
+            circulating_currents=circulating_currents,
+            vortices=vortices_by_layer[name],
             weights=weights,
             Del2=Del2,
+            mass_matrix=mass_matrix,
             Lambda=layer_Lambdas[name],
-            circulating_currents=circulating_currents,
             current_units=current_units,
             check_inversion=check_inversion,
         )
@@ -506,6 +584,7 @@ def solve(
         field_units=field_units,
         current_units=current_units,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         solver=_solver,
     )
     if directory is not None:
@@ -559,7 +638,7 @@ def solve(
                         and other_layer.name == layer_names[1]
                     ):
                         logger.info(
-                            f"Caching {nkernels} layer-to-layer kernels "
+                            f"Caching {nkernels} layer-to-layer kernel(s) "
                             f"({total_bytes / 1024 ** 2:.0f} MB total) "
                             f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
                         )
@@ -616,8 +695,10 @@ def solve(
                         applied_field=new_layer_fields[name],
                         weights=weights,
                         Del2=Del2,
+                        mass_matrix=mass_matrix,
                         Lambda=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
+                        vortices=vortices_by_layer[name],
                         current_units=current_units,
                         check_inversion=check_inversion,
                     )
@@ -639,6 +720,7 @@ def solve(
                     field_units=field_units,
                     current_units=current_units,
                     circulating_currents=circulating_currents,
+                    vortices=vortices,
                     solver=_solver,
                 )
                 if directory is not None:
@@ -662,6 +744,7 @@ def solve_many(
             List[Dict[str, Union[float, str, pint.Quantity]]],
         ]
     ] = None,
+    vortices: Optional[Union[List[Vortex], List[List[Vortex]]]] = None,
     layer_updater: Optional[Callable] = None,
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
@@ -688,6 +771,7 @@ def solve_many(
             of such dicts. If circulating_current is a float, then it is assumed to
             be in units of current_units. If circulating_current is a string, then
             it is converted to a pint.Quantity.
+        vortices: A list (list of lists) of ``Vortex`` objects.
         layer_updater: A callable with signature
             ``layer_updater(layer: Layer, **kwargs) -> Layer`` that updates
             parameter(s) of each layer in a device.
@@ -745,6 +829,7 @@ def solve_many(
         device=device,
         applied_fields=applied_fields,
         circulating_currents=circulating_currents,
+        vortices=vortices,
         layer_updater=layer_updater,
         layer_update_kwargs=layer_update_kwargs,
         field_units=field_units,

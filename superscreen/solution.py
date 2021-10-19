@@ -25,6 +25,17 @@ MonkeyPatch.patch_fromisoformat()
 logger = logging.getLogger(__name__)
 
 
+class Vortex(NamedTuple):
+    """A vortex located at position ``(x, y)`` in ``layer`` containing
+    a total flux ``nPhi0`` in units of the flux quantum ``Phi_0``.
+    """
+
+    x: float
+    y: float
+    layer: str
+    nPhi0: float = 1
+
+
 class Fluxoid(NamedTuple):
     """The fluxoid for a closed region :math:`S` with boundary :math:`\\partial S`
     is defined as:
@@ -38,10 +49,6 @@ class Fluxoid(NamedTuple):
             \\oint_{\\partial S}
             \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
         }_{\\text{supercurrent part}}
-
-    Args:
-        flux_part: The flux portion of the fluxoid.
-        supercurrent_part: The supercurrent portion of the fluxoid.
     """
 
     flux_part: Union[float, pint.Quantity]
@@ -60,6 +67,7 @@ class Solution(object):
         field_units: Units of the applied field
         current_units: Units used for current quantities.
         circulating_currents: A dict of ``{hole_name: circulating_current}``
+        vortices: A list of ``Vortex`` objects located in the ``Device``.
         solver: The solver method that generated the solution.
     """
 
@@ -75,6 +83,7 @@ class Solution(object):
         circulating_currents: Optional[
             Dict[str, Union[float, str, pint.Quantity]]
         ] = None,
+        vortices: Optional[List[Vortex]] = None,
         solver: str = "superscreen.solve",
     ):
         self.device = device
@@ -83,6 +92,7 @@ class Solution(object):
         self.applied_field = applied_field
         self._screening_fields = None
         self.circulating_currents = circulating_currents or {}
+        self.vortices = vortices or []
         # Make field_units and current_units "read-only" attributes.
         # The should never be changed after instantiation.
         self._field_units = field_units
@@ -179,7 +189,8 @@ class Solution(object):
             )
 
         points = self.device.points
-        x, y = points.T
+        x = points[:, 0]
+        y = points[:, 1]
         xgrid, ygrid = np.meshgrid(
             np.linspace(x.min(), x.max(), grid_shape[1]),
             np.linspace(y.min(), y.max(), grid_shape[0]),
@@ -704,6 +715,7 @@ class Solution(object):
             "arrays": array_paths,
             "applied_field": applied_field_path,
             "circulating_currents": circ_currents,
+            "vortices": self.vortices,
             "field_units": self.field_units,
             "current_units": self.current_units,
             "solver": self.solver,
@@ -749,12 +761,15 @@ class Solution(object):
 
         time_created = datetime.fromisoformat(info.pop("time_created"))
         version_info = info.pop("version_info", None)
+        vortices = info.pop("vortices", [])
+        vortices = [Vortex(*v) for v in vortices]
 
         solution = cls(
             device=device,
             streams=streams,
             fields=fields,
             applied_field=applied_field,
+            vortices=vortices,
             **info,
         )
         # Set "read-only" attributes
@@ -789,6 +804,7 @@ class Solution(object):
             and self.current_units == other.current_units
             and self.circulating_currents == other.circulating_currents
             and self.applied_field == other.applied_field
+            and self.vortices == other.vortices
         ):
             return False
         if require_same_timestamp and (self.time_created != other.time_created):
