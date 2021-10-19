@@ -380,16 +380,14 @@ def test_fluxoid_simply_connected(
             assert abs(total_fluxoid) / abs(flux_part) < 2e-2
 
 
+@pytest.mark.parametrize("units, with_units", [("uA / um", False), (None, True)])
 @pytest.mark.parametrize(
-    "units, with_units", [("uA / um", False), (None, True)]
-)
-@pytest.mark.parametrize(
-    "layers, method, positions", 
+    "layers, method, positions",
     [
         ("layer0", "nearest", [0, 0]),
         (None, "linear", np.array([[1, 0], [0, 1]])),
         (["layer0"], "cubic", None),
-    ]
+    ],
 )
 def test_interp_current_density(
     solution1, positions, method, layers, units, with_units

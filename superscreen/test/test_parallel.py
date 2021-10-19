@@ -46,8 +46,10 @@ def device():
 def test_ray_initialized(ray_initialized):
     assert ray_initialized
 
+
 @pytest.mark.parametrize(
-    "vortices, return_solutions, save, use_shared_memory", [
+    "vortices, return_solutions, save, use_shared_memory",
+    [
         (None, False, True, False),
         (sc.Vortex(x=0, y=0, layer="layer0"), True, False, True),
         ([sc.Vortex(x=0, y=0, layer="layer0")], False, True, False),
@@ -62,8 +64,8 @@ def test_ray_initialized(ray_initialized):
             True,
             False,
             True,
-        )
-    ]
+        ),
+    ],
 )
 @pytest.mark.parametrize("keep_only_final_solution", [False, True])
 def test_solve_many(

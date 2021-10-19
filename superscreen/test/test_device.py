@@ -150,15 +150,8 @@ def test_plot_mesh(device, device_with_mesh, edges, vertices):
 
 
 @pytest.mark.parametrize(
-    ", ".join(
-        ["min_triangles", "optimesh_steps", "sparse"]
-    ),
-    [
-        (None, None, False),
-        (None, 20, True),
-        (2500, None, False),
-        (2500, 20, False)
-    ]
+    ", ".join(["min_triangles", "optimesh_steps", "sparse"]),
+    [(None, None, False), (None, 20, True), (2500, None, False), (2500, 20, False)],
 )
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
