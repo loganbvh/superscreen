@@ -419,7 +419,6 @@ def plot_fields(
         layers = [layers]
 
     fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
-    used_axes = []
     xgrid, ygrid, fields = solution.grid_data(
         dataset=dataset,
         grid_shape=grid_shape,
@@ -566,8 +565,7 @@ def plot_currents(
     if isinstance(layers, str):
         layers = [layers]
     fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
-    used_axes = []
-    xgrid, ygrid, current_densities = solution.current_density(
+    xgrid, ygrid, current_densities = solution.grid_current_density(
         grid_shape=grid_shape,
         method=grid_method,
         layers=layers,

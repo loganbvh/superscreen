@@ -1,6 +1,8 @@
 import os
+import shutil
 import json
 import datetime
+import tempfile
 from typing import Union, List, Dict, Iterator
 
 import numpy as np
@@ -61,17 +63,57 @@ def json_numpy_obj_hook(d: Dict) -> Dict:
     return d
 
 
+def zip_solution(solution: Solution, directory: str) -> str:
+    """Save a Solution to a zip archive in the given directory.
+
+    Args:
+        Solution: The Solution to save.
+        directory: The directory in which to save the Solution.
+
+    Returns:
+        The absolute path to the created zip file.
+    """
+    path = os.path.abspath(directory)
+    try:
+        solution.to_file(path)
+        zip_name = shutil.make_archive(path, "zip", root_dir=path)
+    finally:
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+    return zip_name
+
+
+def unzip_solution(path: str) -> Solution:
+    """Load a solution from a zip file.
+
+    Args:
+        path: The path to the zip file.
+
+    Returns:
+        The loaded Solution.
+    """
+    if not path.endswith(".zip"):
+        path += ".zip"
+    with tempfile.TemporaryDirectory() as extract_dir:
+        shutil.unpack_archive(path, extract_dir=extract_dir)
+        return Solution.from_file(extract_dir)
+
+
 def save_solutions(
     solutions: List[Solution],
     base_directory: str,
     save_mesh: bool = True,
     return_paths: bool = False,
+    to_zip: bool = False,
 ) -> Union[None, List[str]]:
     """Saves a list of Solutions to disk.
 
     Args:
         base_directory: The name of the directory in which to save the solutions
             (must either be empty or not yet exist).
+        save_mesh: Whether to save the full mesh.
+        return_paths: Whether to return a list of resulting paths.
+        to_zip: Whether to save Solutions as zip archives.
 
     Returns:
         If ``return_paths`` is True, returns a list of paths where each solution
@@ -84,7 +126,10 @@ def save_solutions(
     paths = []
     for i, solution in enumerate(solutions):
         path = os.path.join(base_directory, str(i))
-        solution.to_file(path, save_mesh=save_mesh)
+        if to_zip:
+            _ = zip_solution(solution, path)
+        else:
+            solution.to_file(path, save_mesh=save_mesh)
         paths.append(os.path.abspath(path))
 
     if return_paths:
@@ -100,8 +145,9 @@ def iload_solutions(base_directory: str) -> Iterator[Solution]:
     Yields:
         Solution instances loaded from ``base_directory``
     """
-    for subdir in sorted(os.listdir(base_directory), key=int):
-        yield Solution.from_file(os.path.join(base_directory, subdir))
+    paths = sorted(os.listdir(base_directory), key=lambda s: int(s.split(".")[0]))
+    for path in paths:
+        yield Solution.from_file(os.path.join(base_directory, path))
 
 
 def load_solutions(base_directory: str) -> List[Solution]:

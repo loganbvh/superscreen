@@ -52,11 +52,17 @@ def solutions(device):
     return solutions
 
 
+@pytest.mark.parametrize("to_zip", [False, True])
 @pytest.mark.parametrize("return_paths", [False, True])
-def test_save_and_load_solutions(solutions, return_paths):
+def test_save_and_load_solutions(solutions, return_paths, to_zip):
 
     with tempfile.TemporaryDirectory() as directory:
-        paths = sc.save_solutions(solutions, directory, return_paths=return_paths)
+        paths = sc.save_solutions(
+            solutions,
+            directory,
+            return_paths=return_paths,
+            to_zip=to_zip,
+        )
         if return_paths:
             assert isinstance(paths, list)
             assert all(isinstance(path, str) for path in paths)

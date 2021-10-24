@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import zipfile
 from datetime import datetime
 from typing import Optional, Union, Callable, Dict, Tuple, List, Any, NamedTuple
 
@@ -214,7 +215,7 @@ class Solution(object):
             }
         return xgrid, ygrid, zgrids
 
-    def current_density(
+    def grid_current_density(
         self,
         *,
         layers: Optional[Union[str, List[str]]] = None,
@@ -309,7 +310,7 @@ class Solution(object):
         if units is None:
             units = f"{self.current_units} / {self.device.length_units}"
         positions = np.atleast_2d(positions)
-        xgrid, ygrid, Jgrids = self.current_density(
+        xgrid, ygrid, Jgrids = self.grid_current_density(
             layers=layers,
             grid_shape=grid_shape,
             method=method,
@@ -345,7 +346,7 @@ class Solution(object):
             with_units: Whether to a dict of pint.Quantities with units attached.
 
         Returns:
-            dict of ``{polygon_name: polygon_flux}``
+            A dict of ``{polygon_name: polygon_flux}``
         """
         from .brandt import convert_field
 
@@ -669,6 +670,7 @@ class Solution(object):
         directory: str,
         save_mesh: bool = True,
         compressed: bool = True,
+        to_zip: bool = False,
     ) -> None:
         """Saves a Solution to disk.
 
@@ -677,7 +679,14 @@ class Solution(object):
                 (must either be empty or not yet exist).
             save_mesh: Whether to save the device mesh.
             compressed: Whether to use numpy.savez_compressed rather than numpy.savez.
+            to_zip: Whether to save the Solution to a zip file.
         """
+        if to_zip:
+            from .io import zip_solution
+
+            zip_solution(self, directory)
+            return
+
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
         os.makedirs(directory, exist_ok=True)
@@ -738,6 +747,14 @@ class Solution(object):
         Returns:
             The loaded Solution instance
         """
+        if directory.endswith(".zip") or zipfile.is_zipfile(directory):
+            from .io import unzip_solution
+
+            solution = unzip_solution(directory)
+            if compute_matrices:
+                solution.device.compute_matrices()
+            return solution
+
         with open(os.path.join(directory, "metadata.json"), "r") as f:
             info = json.load(f)
 

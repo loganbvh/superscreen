@@ -73,7 +73,7 @@ def test_current_value(device, return_solutions, save, tmp_path):
         solution = solutions[0]
         grid_shape = 500
 
-        xgrid, ygrid, J = solution.current_density(
+        xgrid, ygrid, J = solution.grid_current_density(
             grid_shape=grid_shape, units="uA / um", with_units=False
         )
         jx, jy = J["layer1"]
