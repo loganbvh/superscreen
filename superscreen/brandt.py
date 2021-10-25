@@ -127,7 +127,7 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     q = q.copy()
     np.fill_diagonal(q, 0)
     Q = -q
-    np.fill_diagonal(Q, (C + np.einsum("ij,ij -> i", q, weights)) / np.diag(weights))
+    np.fill_diagonal(Q, (C + np.einsum("ij,j -> i", q, weights)) / weights)
     return Q
 
 
@@ -228,7 +228,6 @@ def brandt_layer(
     applied_field: Union[Callable, np.ndarray],
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
-    mass_matrix: Optional[Union[np.ndarray, sp.spmatrix]] = None,
     weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
     Del2: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
     Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
@@ -247,7 +246,6 @@ def brandt_layer(
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
         vortices: A list of Vortex objects located in films in this layer.
-        mass_matrix: The Device's mass matrix.
         weights: The Device's weight matrix.
         Del2: The Device's Laplacian operator.
         Lambda: A Parameter, array, or scalar defining the layer's effective penetration
@@ -262,6 +260,9 @@ def brandt_layer(
     logger = logging.getLogger(__name__)
 
     circulating_currents = circulating_currents or {}
+    for name in circulating_currents:
+        if name not in device.holes:
+            raise ValueError(f"Circulating current specified for unknown hole: {name}.")
     vortices = vortices or []
     # Vortex flux in magnetization-like units,
     # i.e. H * area as opposed to B * area = mu_0 * H * area.
@@ -284,10 +285,6 @@ def brandt_layer(
         weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
-    if mass_matrix is None:
-        mass_matrix = device.mass_matrix
-        # Don't convert the mass_matrix to a dense array
-        # because we don't need to slice it (just access single elements).
 
     Q = device.Q(layer, weights=weights)
     points = device.points
@@ -341,10 +338,9 @@ def brandt_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
-        Ha_eff += -current * (
-            Q[:, ix] * weights[:, ix] - Lambda[:, np.newaxis] * Del2[:, ix]
-        ).sum(axis=1)
-
+        Ha_eff += -current * np.sum(
+            Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix], axis=1
+        )
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
@@ -363,7 +359,7 @@ def brandt_layer(
         # Form the linear system for the film:
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = Q[ix2d] * weights[ix2d] - Lambda[ix1d] * Del2[ix2d]
+        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d]
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         # In some simple benchmarking on an Intel Mac with numpy=1.20.3 and scipy=1.6.3
         # I have found numpy.linalg.inv to be a bit faster than scipy.linalg.inv,
@@ -393,15 +389,10 @@ def brandt_layer(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
             # Eq. 28 in [Brandt]
-            g[ix1d] += (
-                vortex_flux
-                * vortex.nPhi0
-                * K[:, j_film]
-                / mass_matrix[j_device, j_device]
-            )
+            g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    # Equivalent to screening_field = (Q * weights) @ g
-    screening_field = np.einsum("ij,j -> i", Q * weights, g)
+    # Equivalent to screening_field = np.einsum("ij,j -> i", Q, weights * g)
+    screening_field = Q @ (weights * g)
     total_field = Hz_applied + screening_field
     return g, total_field, screening_field
 
@@ -479,7 +470,6 @@ def solve(
     triangles = device.triangles
     weights = device.weights
     Del2 = device.Del2
-    mass_matrix = device.mass_matrix
     # We need to do slicing, etc., so its easiest to just use numpy arrays
     if sp.issparse(weights):
         weights = weights.toarray()
@@ -561,7 +551,6 @@ def solve(
             vortices=vortices_by_layer[name],
             weights=weights,
             Del2=Del2,
-            mass_matrix=mass_matrix,
             Lambda=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
@@ -695,7 +684,6 @@ def solve(
                         applied_field=new_layer_fields[name],
                         weights=weights,
                         Del2=Del2,
-                        mass_matrix=mass_matrix,
                         Lambda=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
                         vortices=vortices_by_layer[name],

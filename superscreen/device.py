@@ -219,7 +219,6 @@ class Device(object):
     ARRAY_NAMES = (
         "points",
         "triangles",
-        "mass_matrix",
         "weights",
         "Del2",
         "q",
@@ -257,6 +256,13 @@ class Device(object):
             self.abstract_regions = abstract_regions
         else:
             self.abstract_regions_list = list(abstract_regions)
+
+        if len(self.polygons) < (
+            len(self.holes_list)
+            + len(self.films_list)
+            + len(self.abstract_regions_list)
+        ):
+            raise ValueError("All Polygons in a Device must have a unique name.")
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
@@ -265,7 +271,6 @@ class Device(object):
         self.points = None
         self.triangles = None
 
-        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self.q = None
@@ -340,13 +345,14 @@ class Device(object):
         self.abstract_regions_list = list(regions_dict.values())
 
     @property
+    def polygons(self) -> Dict[str, Polygon]:
+        """A dict of ``{name: polygon}`` for all Polygons in the device."""
+        return {**self.films, **self.holes, **self.abstract_regions}
+
+    @property
     def poly_points(self) -> np.ndarray:
-        """Shape (n, 2) array of (x, y) coordinates of all polygons in the Device."""
-        points = np.concatenate(
-            [film.points for film in self.films_list]
-            + [hole.points for hole in self.holes_list]
-            + [region.points for region in self.abstract_regions_list]
-        )
+        """Shape (n, 2) array of (x, y) coordinates of all Polygons in the Device."""
+        points = np.concatenate([poly.points for poly in self.polygons.values()])
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are duplicate points,
         # meshpy.triangle will segfault.
@@ -395,7 +401,7 @@ class Device(object):
         """
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("weights", "Del2", "mass_matrix"):
+        for name in ("Del2",):
             valid_types[name] = (valid_types[name], sp.spmatrix)
         _ = valid_types.pop("C_vectors")
         C_vectors = arrays["C_vectors"]
@@ -464,7 +470,6 @@ class Device(object):
     def make_mesh(
         self,
         compute_matrices: bool = True,
-        sparse: bool = True,
         weight_method: str = "half_cotangent",
         min_triangles: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
@@ -478,7 +483,6 @@ class Device(object):
         Args:
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
-            sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
             min_triangles: Minimum number of triangles in the mesh. If None, then
@@ -550,12 +554,11 @@ class Device(object):
         self.points = points
         self.triangles = triangles
 
-        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self._Q_cache = {}
         if compute_matrices:
-            self.compute_matrices(sparse=sparse, weight_method=weight_method)
+            self.compute_matrices(weight_method=weight_method)
 
     def Q(
         self, layer: str, weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None
@@ -569,13 +572,10 @@ class Device(object):
             self._Q_cache[layer] = Q
         return Q
 
-    def compute_matrices(
-        self, sparse: bool = True, weight_method: str = "half_cotangent"
-    ) -> None:
+    def compute_matrices(self, weight_method: str = "half_cotangent") -> None:
         """Calculcates mesh weights, Laplace oeprator, and kernel functions.
 
         Args:
-            sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
         """
@@ -589,20 +589,16 @@ class Device(object):
                 "to generate the mesh."
             )
 
-        logger.info("Calculating mass matrix.")
-        self.mass_matrix = fem.mass_matrix(points, triangles, sparse=sparse)
-
         logger.info("Calculating weight matrix.")
-        self.weights = fem.calculate_weights(
-            points, triangles, weight_method, normalize=True, sparse=sparse
-        )
+        self.weights = fem.mass_matrix(points, triangles, sparse=False)
+
         logger.info("Calculating Laplace operator.")
         self.Del2 = fem.laplace_operator(
             points,
             triangles,
-            masses=self.mass_matrix,
+            masses=self.weights,
             weight_method=weight_method,
-            sparse=sparse,
+            sparse=True,
         )
         logger.info("Calculating kernel matrix.")
         self.q = brandt.q_matrix(points)
@@ -618,6 +614,41 @@ class Device(object):
                 for film in films
             )
         self._Q_cache = {}
+
+    # def mutual_inductance_matrix(
+    #     self,
+    #     hole_polygon_mapping: Dict[str, str],
+    #     iterations: int = 1,
+    #     units: str = "pH",
+    #     with_units: bool = True,
+    # ) -> np.ndarray:
+    #     """Calculcate the mutual inductant matrix :math:`\\mathbf{M}` for the Device.
+
+    #     :math:`\\mathbf{M}` is defined such that element :math:`M_{ij}`
+    #     """
+    #     from .brandt import solve
+    #     hole_names = list(hole_polygon_mapping.keys())
+    #     polygon_names = list(hole_polygon_mapping.values())
+    #     if not set(hole_names).issubset(set(self.holes)):
+    #         raise ValueError("Specified holes must all exist in the Device.")
+    #     if not set(polygon_names).issubset(set(self.polygons)):
+    #         raise ValueError("Specified polygons must all exists in the Device.")
+    #     mutual_inductance = []
+    #     I_circ = self.ureg("1 mA")
+    #     for hole_name in hole_names:
+    #         mutual_inductance.append([])
+    #         solution = solve(
+    #             device=self,
+    #             circulating_currents={hole_name: str(I_circ)},
+    #             iterations=iterations,
+    #         )[-1]
+    #         flux_dict = solution.polygon_flux(polygons=polygon_names, with_units=True)
+    #         for name, flux in flux_dict.items():
+    #             mutual_inductance[-1].append((flux / I_circ).to(units).magnitude)
+    #     mutual_inductance = np.array(mutual_inductance)
+    #     if with_units:
+    #         mutual_inductance = mutual_inductance * self.ureg(units)
+    #     return mutual_inductance
 
     def plot_polygons(
         self,

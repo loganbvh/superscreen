@@ -104,55 +104,6 @@ def adjacency_matrix(
     return adj.toarray()
 
 
-def calculate_weights(
-    points: np.ndarray,
-    triangles: np.ndarray,
-    method: str,
-    normalize: bool = True,
-    sparse: bool = True,
-) -> Union[np.ndarray, sp.csr_matrix]:
-    """Returns the weight matrix, calculated using the specified method.
-
-    Args:
-        points: Shape (n, 2) array of x, y coordinates of vertices.
-        triangles: Shape (m, 3) array of triangle indices.
-        method: Method for calculating the weights. One of: "uniform",
-            "inv_euclidean", or "half_cotangent".
-        normalize: Whether to normalize each row/column in the weight matrix.
-        sparse: Whether to return a sparse matrix or numpy ndarray.
-
-    Returns:
-        Shape (n, n) matrix of vertex weights
-    """
-    method = method.lower()
-    if method == "uniform":
-        # Uniform weights are just the adjacency matrix.
-        weights = adjacency_matrix(triangles, sparse=sparse).astype(float)
-    elif method == "inv_euclidean":
-        weights = weights_inv_euclidean(points, triangles, sparse=sparse)
-    elif method == "half_cotangent":
-        weights = weights_half_cotangent(points, triangles, sparse=sparse)
-    else:
-        raise ValueError(
-            f"Unknown method ({method}). "
-            f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
-        )
-    # normalize row-by-row
-    if sp.issparse(weights):
-        if normalize:
-            # weights / weights.sum(axis=1) returns np.matrix,
-            # so convert back to lil.
-            weights = sp.lil_matrix(weights / weights.sum(axis=1))
-            weights.setdiag(1.0)
-        weights = weights.tocsr()
-    else:
-        weights = np.asarray(weights)
-        if normalize:
-            weights = weights / weights.sum(axis=1)[:, np.newaxis]
-            np.fill_diagonal(weights, 1.0)
-    return weights
-
-
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
 ) -> Union[np.ndarray, sp.lil_matrix]:
@@ -256,6 +207,40 @@ def weights_half_cotangent(
     return weights
 
 
+def calculate_weights(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    method: str,
+    sparse: bool = True,
+) -> Union[np.ndarray, sp.csr_matrix]:
+    """Returns the weight matrix, calculated using the specified method.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices.
+        triangles: Shape (m, 3) array of triangle indices.
+        method: Method for calculating the weights. One of: "uniform",
+            "inv_euclidean", or "half_cotangent".
+        sparse: Whether to return a sparse matrix or numpy ndarray.
+
+    Returns:
+        Shape (n, n) matrix of vertex weights
+    """
+    method = method.lower()
+    if method == "uniform":
+        # Uniform weights are just the adjacency matrix.
+        weights = adjacency_matrix(triangles, sparse=sparse).astype(float)
+    elif method == "inv_euclidean":
+        weights = weights_inv_euclidean(points, triangles, sparse=sparse)
+    elif method == "half_cotangent":
+        weights = weights_half_cotangent(points, triangles, sparse=sparse)
+    else:
+        raise ValueError(
+            f"Unknown method ({method}). "
+            f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
+        )
+    return weights
+
+
 def mass_matrix(
     points: np.ndarray,
     triangles: np.ndarray,
@@ -269,7 +254,7 @@ def mass_matrix(
         sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
-        Shape (n, n) mass matrix
+        Shape (n, n) sparse mass matrix or shape (n,) vector of diagonals.
     """
     # Adapted from spharaphy.TriMesh:
     # https://spharapy.readthedocs.io/en/latest/modules/trimesh.html
@@ -290,9 +275,8 @@ def mass_matrix(
     if sparse:
         # Use csc_matrix because we will eventually invert the mass matrix,
         # and csc is efficient for inversion.
-        mass = mass.tocsc()
-
-    return mass
+        return mass.tocsc()
+    return mass.diagonal()
 
 
 def laplace_operator(
@@ -311,7 +295,8 @@ def laplace_operator(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices.
         triangles: Shape (m, 3) array of triangle indices.
-        masses: Pre-computed mass matrix.
+        masses: Pre-computed mass matrix: shape (n, n) sparse diagonal matrix
+            or shape (n,) array of diagonals.
         weight_method: Method for calculating the weights. One of: "uniform",
             "inv_euclidean", or "half_cotangent".
         sparse: Whether to return a sparse matrix or numpy ndarray.
@@ -321,26 +306,17 @@ def laplace_operator(
     """
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
-    weights = calculate_weights(
-        points, triangles, weight_method, normalize=False, sparse=sparse
-    )
     if masses is None:
-        masses = mass_matrix(points, triangles, sparse=sparse)
-    elif not sp.issparse(masses):
-        masses = sp.csc_matrix(masses)
-    if sparse:
-        if not sp.isspmatrix_csc(masses):
-            masses = masses.tocsc()
-        if not sp.isspmatrix_csr(weights):
-            weights = sp.csr_matrix(weights)
-        L = weights - sp.diags(np.asarray(weights.sum(axis=1)).squeeze(), format="csr")
-        # * is matrix multiplication for sparse matrices
-        Del2 = (sp.linalg.inv(masses) * L).tocsr()
-    else:
-        if sp.issparse(masses):
-            masses = masses.toarray()
-        if sp.issparse(weights):
-            weights = weights.toarray()
-        L = weights - np.diag(weights.sum(axis=1))
-        Del2 = la.inv(masses) @ L
+        masses = mass_matrix(points, triangles, sparse=True)
+    if isinstance(masses, np.ndarray):
+        masses = sp.diags(masses, format="csc")
+    L = calculate_weights(points, triangles, weight_method, sparse=True)
+    L.setdiag(0)
+    w_sum = np.atleast_2d(L.sum(axis=1))
+    L.setdiag(-w_sum)
+    L = L.tocsr()
+    # * is matrix multiplication for sparse matrices
+    Del2 = (sp.linalg.inv(masses) * L).tocsr()
+    if not sparse:
+        Del2 = Del2.toarray()
     return Del2
