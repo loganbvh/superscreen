@@ -49,8 +49,6 @@ def ellipse(
     Returns:
         A shape ``(points, 2)`` array of (x, y) coordinates
     """
-    if a < b:
-        raise ValueError("Expected a >= b for an ellipse.")
     x0, y0 = center
     theta = np.linspace(0, 2 * np.pi, points, endpoint=False)
     xs = a * np.cos(theta)
