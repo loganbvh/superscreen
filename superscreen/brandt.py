@@ -115,13 +115,13 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     Args:
         q: Shape (n, n) matrix qij
         C: Shape (n, ) vector Ci
-        weights: Shape (n, n) weight matrix
+        weights: Shape (n, ) weight vector
 
     Returns:
         Shape (n, n) array, Qij
     """
     if sp.issparse(weights):
-        weights = weights.toarray()
+        weights = weights.diagonal()
     # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
     # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
     q = q.copy()
@@ -246,7 +246,7 @@ def brandt_layer(
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
         vortices: A list of Vortex objects located in films in this layer.
-        weights: The Device's weight matrix.
+        weights: The Device's weight vector.
         Del2: The Device's Laplacian operator.
         Lambda: A Parameter, array, or scalar defining the layer's effective penetration
             depth, Lambda(x, y).
@@ -280,9 +280,6 @@ def brandt_layer(
         weights = device.weights
     if Del2 is None:
         Del2 = device.Del2
-    # We need to do slicing, etc., so it's easiest to just use numpy arrays
-    if sp.issparse(weights):
-        weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
 
@@ -470,9 +467,6 @@ def solve(
     triangles = device.triangles
     weights = device.weights
     Del2 = device.Del2
-    # We need to do slicing, etc., so its easiest to just use numpy arrays
-    if sp.issparse(weights):
-        weights = weights.toarray()
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
 
