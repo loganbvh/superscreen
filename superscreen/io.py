@@ -74,12 +74,12 @@ def zip_solution(solution: Solution, directory: str) -> str:
         The absolute path to the created zip file.
     """
     path = os.path.abspath(directory)
+    solution.to_file(path)
     try:
-        solution.to_file(path)
         zip_name = shutil.make_archive(path, "zip", root_dir=path)
     finally:
         if os.path.isdir(path):
-            shutil.rmtree(path)
+            shutil.rmtree(path, ignore_errors=True)
     return zip_name
 
 
