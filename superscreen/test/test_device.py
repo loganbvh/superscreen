@@ -19,15 +19,14 @@ def device():
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
     ]
 
-    with pytest.raises(ValueError):
-        sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(2, 3))
-
     films = [
         sc.Polygon("disk", layer="layer0", points=sc.geometry.circle(5)),
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    assert films[0].contains_points(0, 0)
+    assert films[0].contains_points([0, 0])
+    assert np.isclose(films[0].area, np.pi * 5 ** 2, rtol=1e-3)
+    assert np.isclose(films[1].area, np.pi * 3 * 2, rtol=1e-3)
 
     abstract_regions = [
         sc.Polygon(
@@ -150,13 +149,13 @@ def test_plot_mesh(device, device_with_mesh, edges, vertices):
 
 
 @pytest.mark.parametrize(
-    ", ".join(["min_triangles", "optimesh_steps", "sparse"]),
-    [(None, None, False), (None, 20, True), (2500, None, False), (2500, 20, False)],
+    ", ".join(["min_triangles", "optimesh_steps"]),
+    [(None, None), (None, 20), (2500, None), (2500, 20)],
 )
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
 )
-def test_make_mesh(device, min_triangles, optimesh_steps, sparse, weight_method):
+def test_make_mesh(device, min_triangles, optimesh_steps, weight_method):
     if weight_method == "invalid":
         context = pytest.raises(ValueError)
     else:
@@ -166,7 +165,6 @@ def test_make_mesh(device, min_triangles, optimesh_steps, sparse, weight_method)
         device.make_mesh(
             min_triangles=min_triangles,
             optimesh_steps=optimesh_steps,
-            sparse=sparse,
             weight_method=weight_method,
         )
 
@@ -178,11 +176,8 @@ def test_make_mesh(device, min_triangles, optimesh_steps, sparse, weight_method)
     if min_triangles:
         assert device.triangles.shape[0] >= min_triangles
 
-    if sparse:
-        assert sp.issparse(device.weights)
-    else:
-        assert isinstance(device.weights, np.ndarray)
-    assert device.weights.shape == (device.points.shape[0],) * 2
+    assert isinstance(device.weights, np.ndarray)
+    assert device.weights.shape == (device.points.shape[0],)
 
 
 @pytest.mark.parametrize("save_mesh", [False, True])

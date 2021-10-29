@@ -1,5 +1,8 @@
-from datetime import datetime
+import os
+import shutil
 import tempfile
+from datetime import datetime
+from contextlib import contextmanager
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,6 +10,16 @@ import pint
 import pytest
 
 import superscreen as sc
+
+
+@contextmanager
+def make_tempdir(**kwargs):
+    tmp = tempfile.mkdtemp(**kwargs)
+    try:
+        yield tmp
+    finally:
+        if os.path.isdir(tmp):
+            shutil.rmtree(tmp)
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +145,7 @@ def test_grid_data(solution1, dataset, with_units):
 @pytest.mark.parametrize("with_units", [False, True])
 def test_current_density(solution1, units, with_units):
 
-    xgrid, ygrid, current_density = solution1.current_density(
+    xgrid, ygrid, current_density = solution1.grid_current_density(
         grid_shape=(20, 20),
         units=units,
         with_units=with_units,
@@ -276,27 +289,39 @@ def test_field_at_positions(
                 assert item.shape == positions.shape[:1]
 
 
+@pytest.mark.parametrize("to_zip", [False, True])
 @pytest.mark.parametrize("save_mesh", [False, True])
 @pytest.mark.parametrize("compressed", [False, True])
-def test_save_solution(solution1, solution2, save_mesh, compressed):
+def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
 
-    with tempfile.TemporaryDirectory() as directory:
-        solution1.to_file(directory, save_mesh=save_mesh, compressed=compressed)
-        loaded_solution1 = sc.Solution.from_file(directory)
+    with make_tempdir() as directory:
+        solution1.to_file(
+            directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
+        )
+        loaded_solution1 = sc.Solution.from_file(directory + (".zip" if to_zip else ""))
     assert solution1 == loaded_solution1
 
-    with tempfile.TemporaryDirectory() as other_directory:
-        solution2.to_file(other_directory, save_mesh=save_mesh, compressed=compressed)
-        loaded_solution2 = sc.Solution.from_file(other_directory)
+    with make_tempdir() as other_directory:
+        solution2.to_file(
+            other_directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
+        )
+        loaded_solution2 = sc.Solution.from_file(
+            other_directory + (".zip" if to_zip else "")
+        )
     assert solution2 == loaded_solution2
 
     loaded_solution2._time_created = datetime.now()
     assert solution2 != loaded_solution2
 
-    with tempfile.TemporaryDirectory() as directory:
-        solution1.to_file(directory, save_mesh=save_mesh, compressed=compressed)
-        with pytest.raises(IOError):
-            solution1.to_file(directory, save_mesh=save_mesh, compressed=compressed)
+    with make_tempdir() as directory:
+        solution1.to_file(
+            directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
+        )
+        if not to_zip:
+            with pytest.raises(IOError):
+                solution1.to_file(
+                    directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
+                )
 
 
 @pytest.mark.parametrize("polygon_shape", ["circle", "rectangle"])
@@ -366,7 +391,7 @@ def test_fluxoid_simply_connected(
         total_vortex_flux = 0
         for vortex in solution1.vortices:
             if vortex.layer == name:
-                if sc.fem.in_polygon(vortex.x, vortex.y, *coords.T):
+                if sc.fem.in_polygon(coords, [vortex.x, vortex.y]):
                     total_vortex_flux += (
                         (vortex.nPhi0 * ureg("Phi_0")).to(flux_units).magnitude
                     )

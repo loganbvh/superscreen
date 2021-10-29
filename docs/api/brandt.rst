@@ -33,6 +33,10 @@ Solution
 
 .. autofunction:: superscreen.io.iload_solutions
 
+.. autofunction:: superscreen.io.zip_solution
+
+.. autofunction:: superscreen.io.unzip_solution
+
 .. autoclass:: superscreen.solution.Fluxoid
     :show-inheritance:
 

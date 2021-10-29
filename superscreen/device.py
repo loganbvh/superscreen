@@ -8,6 +8,7 @@ import dill
 import numpy as np
 from pint import UnitRegistry
 import matplotlib.pyplot as plt
+from matplotlib import path
 import scipy.sparse as sp
 from scipy.spatial import ConvexHull
 from meshpy import triangle
@@ -95,7 +96,7 @@ class Layer(object):
         if isinstance(london, (int, float)):
             london = f"{london:.3f}"
         return (
-            f'Layer("{self.name}", Lambda={Lambda}, '
+            f'{self.__class__.__name__}("{self.name}", Lambda={Lambda}, '
             f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
         )
 
@@ -126,37 +127,59 @@ class Polygon(object):
         layer: Name of the layer in which the polygon is located.
         points: An array of shape (n, 2) specifying the x, y coordinates of
             the polyon's vertices.
+        mesh: Whether to include this polygon when computing a mesh.
+
     """
 
-    def __init__(self, name: str, *, layer: str, points: np.ndarray):
+    def __init__(self, name: str, *, layer: str, points: np.ndarray, mesh: bool = True):
         self.name = name
         self.layer = layer
         self.points = np.asarray(points)
         # Ensure that it is a closed polygon.
         self.points = close_curve(self.points)
+        self.mesh = mesh
 
         if self.points.ndim != 2 or self.points.shape[-1] != 2:
             raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
 
     @property
+    def area(self) -> float:
+        """The area of the polygon."""
+        # https://en.wikipedia.org/wiki/Shoelace_formula
+        # https://stackoverflow.com/a/30408825/11655306
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        return 0.5 * np.abs(np.dot(y, np.roll(x, 1)) - np.dot(x, np.roll(y, 1)))
+
+    @property
+    def extents(self) -> Tuple[float, float]:
+        """Returns the total x, y extent of the polygon, (Dx, Dy)."""
+        return tuple(np.ptp(self.points, axis=0))
+
+    @property
     def clockwise(self) -> bool:
-        """Returns True if the polygon vertices are oriented clockwise."""
-        # https://stackoverflow.com/a/1165943
-        # https://www.element84.com/blog/
-        # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
+        """True if the polygon vertices are oriented clockwise."""
+        # # https://stackoverflow.com/a/1165943
+        # # https://www.element84.com/blog/
+        # # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
         x = self.points[:, 0]
         y = self.points[:, 1]
         return np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1])) > 0
 
     @property
     def counter_clockwise(self) -> bool:
-        """Returns True if the polygon vertices are oriented counter-clockwise."""
+        """True if the polygon vertices are oriented counter-clockwise."""
         return not self.clockwise
+
+    @property
+    def path(self) -> path.Path:
+        """A matplotlib.path.Path representing the polygon boundary."""
+        return path.Path(self.points, closed=True)
 
     def contains_points(
         self,
-        xq: Union[float, np.ndarray],
-        yq: Union[float, np.ndarray],
+        points: np.ndarray,
+        radius: float = 0,
         index: bool = False,
     ) -> Union[bool, np.ndarray]:
         """Determines whether points xq, yq lie within the polygon.
@@ -174,14 +197,26 @@ class Polygon(object):
             of the same shape as xq and yq indicating whether each point
             lies within the polygon.
         """
-        bool_array = fem.in_polygon(xq, yq, self.points[:, 0], self.points[:, 1])
+        bool_array = self.path.contains_points(np.atleast_2d(points), radius=radius)
         if index:
             return np.where(bool_array)[0]
         return bool_array
 
+    def on_boundary(
+        self, points: np.ndarray, radius: float = 1e-3, index: bool = False
+    ):
+        points = np.atleast_2d(points)
+        p = self.path
+        outer = p.contains_points(points, radius=radius)
+        inner = p.contains_points(points, radius=-radius)
+        boundary = np.logical_and(outer, ~inner)
+        if index:
+            return np.where(boundary)[0]
+        return boundary
+
     def __repr__(self) -> str:
         return (
-            f'Polygon("{self.name}", layer="{self.layer}", '
+            f'{self.__class__.__name__}("{self.name}", layer="{self.layer}", '
             f"points=ndarray[shape={self.points.shape}])"
         )
 
@@ -219,7 +254,6 @@ class Device(object):
     ARRAY_NAMES = (
         "points",
         "triangles",
-        "mass_matrix",
         "weights",
         "Del2",
         "q",
@@ -257,6 +291,13 @@ class Device(object):
             self.abstract_regions = abstract_regions
         else:
             self.abstract_regions_list = list(abstract_regions)
+
+        if len(self.polygons) < (
+            len(self.holes_list)
+            + len(self.films_list)
+            + len(self.abstract_regions_list)
+        ):
+            raise ValueError("All Polygons in a Device must have a unique name.")
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
@@ -265,7 +306,6 @@ class Device(object):
         self.points = None
         self.triangles = None
 
-        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self.q = None
@@ -340,12 +380,15 @@ class Device(object):
         self.abstract_regions_list = list(regions_dict.values())
 
     @property
+    def polygons(self) -> Dict[str, Polygon]:
+        """A dict of ``{name: polygon}`` for all Polygons in the device."""
+        return {**self.films, **self.holes, **self.abstract_regions}
+
+    @property
     def poly_points(self) -> np.ndarray:
-        """Shape (n, 2) array of (x, y) coordinates of all polygons in the Device."""
+        """Shape (n, 2) array of (x, y) coordinates of all Polygons in the Device."""
         points = np.concatenate(
-            [film.points for film in self.films_list]
-            + [hole.points for hole in self.holes_list]
-            + [region.points for region in self.abstract_regions_list]
+            [poly.points for poly in self.polygons.values() if poly.mesh]
         )
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are duplicate points,
@@ -395,7 +438,7 @@ class Device(object):
         """
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("weights", "Del2", "mass_matrix"):
+        for name in ("Del2",):
             valid_types[name] = (valid_types[name], sp.spmatrix)
         _ = valid_types.pop("C_vectors")
         C_vectors = arrays["C_vectors"]
@@ -464,7 +507,6 @@ class Device(object):
     def make_mesh(
         self,
         compute_matrices: bool = True,
-        sparse: bool = True,
         weight_method: str = "half_cotangent",
         min_triangles: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
@@ -478,7 +520,6 @@ class Device(object):
         Args:
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
-            sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
             min_triangles: Minimum number of triangles in the mesh. If None, then
@@ -550,12 +591,11 @@ class Device(object):
         self.points = points
         self.triangles = triangles
 
-        self.mass_matrix = None
         self.weights = None
         self.Del2 = None
         self._Q_cache = {}
         if compute_matrices:
-            self.compute_matrices(sparse=sparse, weight_method=weight_method)
+            self.compute_matrices(weight_method=weight_method)
 
     def Q(
         self, layer: str, weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None
@@ -569,13 +609,10 @@ class Device(object):
             self._Q_cache[layer] = Q
         return Q
 
-    def compute_matrices(
-        self, sparse: bool = True, weight_method: str = "half_cotangent"
-    ) -> None:
+    def compute_matrices(self, weight_method: str = "half_cotangent") -> None:
         """Calculcates mesh weights, Laplace oeprator, and kernel functions.
 
         Args:
-            sparse: Whether to use sparse matrices for weights and Laplacian.
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
         """
@@ -589,35 +626,95 @@ class Device(object):
                 "to generate the mesh."
             )
 
-        logger.info("Calculating mass matrix.")
-        self.mass_matrix = fem.mass_matrix(points, triangles, sparse=sparse)
-
         logger.info("Calculating weight matrix.")
-        self.weights = fem.calculate_weights(
-            points, triangles, weight_method, normalize=True, sparse=sparse
-        )
+        self.weights = fem.mass_matrix(points, triangles, sparse=False)
+
         logger.info("Calculating Laplace operator.")
         self.Del2 = fem.laplace_operator(
             points,
             triangles,
-            masses=self.mass_matrix,
+            masses=self.weights,
             weight_method=weight_method,
-            sparse=sparse,
+            sparse=True,
         )
         logger.info("Calculating kernel matrix.")
         self.q = brandt.q_matrix(points)
         # Each layer has its own edge vector C, so each layer's kernel matrix Q
         # will have different diagonals.
         self.C_vectors = {}
-        x = points[:, 0]
-        y = points[:, 1]
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
             self.C_vectors[layer_name] = sum(
-                brandt.C_vector(points, mask=film.contains_points(x, y))
+                brandt.C_vector(points, mask=film.contains_points(points))
                 for film in films
             )
         self._Q_cache = {}
+
+    def mutual_inductance_matrix(
+        self,
+        hole_polygon_mapping: Dict[str, np.ndarray],
+        iterations: int = 1,
+        units: str = "pH",
+        with_units: bool = True,
+    ) -> List[np.ndarray]:
+        """Calculates the mutual inductance matrix :math:`\\mathbf{M}` for the Device.
+
+        :math:`\\mathbf{M}` is defined such that element :math:`M_{ij}` is the mutual
+        inductance :math:`\\Phi^f_{S_i} / I_j` between hole :math:`j` and polygon
+        :math:`S_{i}`, which encloses hole :math:`i`. :math:`\\Phi^f_{S_i}` is the
+        fluxoid for polygon :math:`S_i` and :math:`I_j` is the current circulating
+        around hole :math:`j`.
+
+        hole_polygon_mapping: A dict of ``{hole_name: polygon_coordinates}`` specifying
+            a mapping between holes in the device and polygons enclosing those holes,
+            for which the fluxoid will be calculated. The length of this dict,
+            ``n_holes``, will determine the dimension of the square mutual inductance
+            matrix :math:`M`.
+        iterations: The number of iterations used to solve the device. This value is
+            ignored if there is only a single layer in the device.
+        units: The units in which to report the mutual inductance.
+        with_units: Whether to return the mutual inductance as a pint.Quantity with
+            units attached, or a bare np.ndarray.
+
+        Returns:
+            A list of mutual inductance matrices, each with shape ``(n_holes, n_holes)``.
+            The length of the list is ``1`` if the device has a single layer, or
+            ``iterations + 1`` if the device has multiple layers.
+        """
+        from .brandt import solve
+
+        holes = self.holes
+        n_holes = len(hole_polygon_mapping)
+        for hole_name, polygon in hole_polygon_mapping.items():
+            if hole_name not in holes:
+                raise ValueError(f"Hole '{hole_name}' does not exist in the device.")
+            if not fem.in_polygon(polygon, holes[hole_name].points).all():
+                raise ValueError(
+                    f"Hole '{hole_name}' is not completely contained "
+                    f"within the given polygon."
+                )
+        # The magnitude of this current is not important
+        I_circ = self.ureg("1 mA")
+        n_iter = 1 if len(self.layers) == 1 else iterations + 1
+        mutual_inductance = np.full((n_iter, n_holes, n_holes), np.nan)
+        for j, hole_name in enumerate(hole_polygon_mapping):
+            solutions = solve(
+                device=self,
+                circulating_currents={hole_name: str(I_circ)},
+                iterations=iterations,
+            )
+            for n, solution in enumerate(solutions):
+                for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
+                    fluxoid = solution.polygon_fluxoid(polygon)[holes[name].layer]
+                    mutual_inductance[n, i, j] = (
+                        (sum(fluxoid) / I_circ).to(units).magnitude
+                    )
+        if with_units:
+            mutual_inductance = mutual_inductance * self.ureg(units)
+        # Return a list to make it clear that we are returning n_iter distinct
+        # matrices. You can convert back to an ndarray using
+        # np.stack([m for m in mutual_inductance], axis=0).
+        return [m for m in mutual_inductance]
 
     def plot_polygons(
         self,
@@ -887,7 +984,7 @@ class Device(object):
             f'length_units="{self.length_units}"',
         ]
 
-        return "Device(" + nt + (", " + nt).join(args) + ",\n)"
+        return f"{self.__class__.__name__}(" + nt + (", " + nt).join(args) + ",\n)"
 
     def __eq__(self, other) -> bool:
         if other is self:

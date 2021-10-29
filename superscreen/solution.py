@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import zipfile
 from datetime import datetime
 from typing import Optional, Union, Callable, Dict, Tuple, List, Any, NamedTuple
 
@@ -214,7 +215,7 @@ class Solution(object):
             }
         return xgrid, ygrid, zgrids
 
-    def current_density(
+    def grid_current_density(
         self,
         *,
         layers: Optional[Union[str, List[str]]] = None,
@@ -309,7 +310,7 @@ class Solution(object):
         if units is None:
             units = f"{self.current_units} / {self.device.length_units}"
         positions = np.atleast_2d(positions)
-        xgrid, ygrid, Jgrids = self.current_density(
+        xgrid, ygrid, Jgrids = self.grid_current_density(
             layers=layers,
             grid_shape=grid_shape,
             method=method,
@@ -345,7 +346,7 @@ class Solution(object):
             with_units: Whether to a dict of pint.Quantities with units attached.
 
         Returns:
-            dict of ``{polygon_name: polygon_flux}``
+            A dict of ``{polygon_name: polygon_flux}``
         """
         from .brandt import convert_field
 
@@ -372,7 +373,7 @@ class Solution(object):
         triangles = self.device.triangles
 
         tri_areas = areas(points, triangles) * ureg(f"{self.device.length_units}") ** 2
-        xt, yt = centroids(points, triangles).T
+        tri_points = centroids(points, triangles)
         fluxes = {}
         for name in polygons:
             if name in films:
@@ -381,7 +382,7 @@ class Solution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.abstract_regions[name]
-            ix = poly.contains_points(xt, yt, index=True)
+            ix = poly.contains_points(tri_points, index=True)
             field = self.fields[poly.layer][triangles].mean(axis=1)
             field = field[ix] * ureg(self.field_units)
             area = tri_areas[ix]
@@ -462,19 +463,16 @@ class Solution(object):
         assert polygon.counter_clockwise
         points = polygon.points
         err_msg = "The polygon must lie completely within a superconducting film."
-        if not any(
-            film.contains_points(points[:, 0], points[:, 1]).all()
-            for film in device.films_list
-        ):
+        if not any(film.contains_points(points).all() for film in device.films_list):
             raise ValueError(err_msg)
         if exclude_holes:
             err_msg = err_msg[:-1] + " and cannot intersect any holes."
             for hole in device.holes_list:
                 if hole.layer not in layers:
                     continue
-                if hole.contains_points(points[:, 0], points[:, 1]).any():
+                if hole.contains_points(points).any():
                     raise ValueError(err_msg)
-                if polygon.contains_points(hole.points[:, 0], hole.points[:, 1]).any():
+                if polygon.contains_points(hole.points).any():
                     raise ValueError(err_msg)
 
         # Evaluate the supercurrent density at the polygon coordinates.
@@ -669,6 +667,7 @@ class Solution(object):
         directory: str,
         save_mesh: bool = True,
         compressed: bool = True,
+        to_zip: bool = False,
     ) -> None:
         """Saves a Solution to disk.
 
@@ -677,7 +676,14 @@ class Solution(object):
                 (must either be empty or not yet exist).
             save_mesh: Whether to save the device mesh.
             compressed: Whether to use numpy.savez_compressed rather than numpy.savez.
+            to_zip: Whether to save the Solution to a zip file.
         """
+        if to_zip:
+            from .io import zip_solution
+
+            zip_solution(self, directory)
+            return
+
         if os.path.isdir(directory) and len(os.listdir(directory)):
             raise IOError(f"Directory '{directory}' already exists and is not empty.")
         os.makedirs(directory, exist_ok=True)
@@ -738,6 +744,14 @@ class Solution(object):
         Returns:
             The loaded Solution instance
         """
+        if directory.endswith(".zip") or zipfile.is_zipfile(directory):
+            from .io import unzip_solution
+
+            solution = unzip_solution(directory)
+            if compute_matrices:
+                solution.device.compute_matrices()
+            return solution
+
         with open(os.path.join(directory, "metadata.json"), "r") as f:
             info = json.load(f)
 

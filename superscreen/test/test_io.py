@@ -52,11 +52,17 @@ def solutions(device):
     return solutions
 
 
+@pytest.mark.parametrize("to_zip", [False, True])
 @pytest.mark.parametrize("return_paths", [False, True])
-def test_save_and_load_solutions(solutions, return_paths):
+def test_save_and_load_solutions(solutions, return_paths, to_zip):
 
     with tempfile.TemporaryDirectory() as directory:
-        paths = sc.save_solutions(solutions, directory, return_paths=return_paths)
+        paths = sc.save_solutions(
+            solutions,
+            directory,
+            return_paths=return_paths,
+            to_zip=to_zip,
+        )
         if return_paths:
             assert isinstance(paths, list)
             assert all(isinstance(path, str) for path in paths)
@@ -64,12 +70,12 @@ def test_save_and_load_solutions(solutions, return_paths):
             assert paths is None
         loaded_solutions = sc.load_solutions(directory)
         assert isinstance(loaded_solutions, list)
-        assert all(orig == loaded for orig, loaded in zip(solutions, loaded_solutions))
+        assert loaded_solutions == solutions
 
         assert inspect.isgeneratorfunction(sc.iload_solutions)
         loaded_solutions = sc.iload_solutions(directory)
         assert inspect.isgenerator(loaded_solutions)
-        assert all(orig == loaded for orig, loaded in zip(solutions, loaded_solutions))
+        assert list(loaded_solutions) == solutions
 
 
 def test_json_serialization():

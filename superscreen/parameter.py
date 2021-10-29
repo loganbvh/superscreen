@@ -134,7 +134,7 @@ class Parameter(object):
 
     def __repr__(self) -> str:
         func_repr = function_repr(self.func, argspec=self._get_argspec())
-        return f"Parameter<{func_repr}>"
+        return f"{self.__class__.__name__}<{func_repr}>"
 
     def __add__(self, other) -> "CompositeParameter":
         """self + other"""
@@ -299,7 +299,7 @@ class CompositeParameter(Parameter):
         )
 
     def __repr__(self) -> str:
-        return f"CompositeParameter<{self._bare_repr()}>"
+        return f"{self.__class__.__name__}<{self._bare_repr()}>"
 
     def __getstate__(self):
         state = self.__dict__.copy()
