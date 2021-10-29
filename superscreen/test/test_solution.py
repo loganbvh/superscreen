@@ -281,14 +281,14 @@ def test_field_at_positions(
 @pytest.mark.parametrize("compressed", [False, True])
 def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
 
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+    with tempfile.TemporaryDirectory() as directory:
         solution1.to_file(
             directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
         )
         loaded_solution1 = sc.Solution.from_file(directory + (".zip" if to_zip else ""))
     assert solution1 == loaded_solution1
 
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as other_directory:
+    with tempfile.TemporaryDirectory() as other_directory:
         solution2.to_file(
             other_directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
         )
@@ -300,7 +300,7 @@ def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
     loaded_solution2._time_created = datetime.now()
     assert solution2 != loaded_solution2
 
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+    with tempfile.TemporaryDirectory() as directory:
         solution1.to_file(
             directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
         )

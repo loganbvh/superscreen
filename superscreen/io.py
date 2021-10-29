@@ -1,4 +1,5 @@
 import os
+import pathlib
 import shutil
 import json
 import datetime
@@ -63,7 +64,7 @@ def json_numpy_obj_hook(d: Dict) -> Dict:
     return d
 
 
-def zip_solution(solution: Solution, directory: str) -> str:
+def zip_solution(solution: Solution, directory: os.PathLike) -> str:
     """Save a Solution to a zip archive in the given directory.
 
     Args:
@@ -73,17 +74,18 @@ def zip_solution(solution: Solution, directory: str) -> str:
     Returns:
         The absolute path to the created zip file.
     """
-    path = os.path.abspath(directory)
+    path = pathlib.Path(directory).resolve()
     solution.to_file(path)
     try:
         zip_name = shutil.make_archive(path, "zip", root_dir=path)
     finally:
-        if os.path.isdir(path):
+        is_tempdir = pathlib.Path(tempfile.gettempdir()) in path.parents
+        if path.is_dir and not is_tempdir:
             shutil.rmtree(path)
     return zip_name
 
 
-def unzip_solution(path: str) -> Solution:
+def unzip_solution(path: os.PathLike) -> Solution:
     """Load a solution from a zip file.
 
     Args:
@@ -101,11 +103,11 @@ def unzip_solution(path: str) -> Solution:
 
 def save_solutions(
     solutions: List[Solution],
-    base_directory: str,
+    base_directory: os.PathLike,
     save_mesh: bool = True,
     return_paths: bool = False,
     to_zip: bool = False,
-) -> Union[None, List[str]]:
+) -> Union[None, List[os.PathLike]]:
     """Saves a list of Solutions to disk.
 
     Args:
@@ -136,7 +138,7 @@ def save_solutions(
         return paths
 
 
-def iload_solutions(base_directory: str) -> Iterator[Solution]:
+def iload_solutions(base_directory: os.PathLike) -> Iterator[Solution]:
     """An iterator that loads a sequence of Solutions from disk.
 
     Args:
@@ -150,7 +152,7 @@ def iload_solutions(base_directory: str) -> Iterator[Solution]:
         yield Solution.from_file(os.path.join(base_directory, path))
 
 
-def load_solutions(base_directory: str) -> List[Solution]:
+def load_solutions(base_directory: os.PathLike) -> List[Solution]:
     """Loads a sequence of Solutions from disk.
 
     Args:
