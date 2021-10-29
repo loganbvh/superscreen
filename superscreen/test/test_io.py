@@ -56,7 +56,7 @@ def solutions(device):
 @pytest.mark.parametrize("return_paths", [False, True])
 def test_save_and_load_solutions(solutions, return_paths, to_zip):
 
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
         paths = sc.save_solutions(
             solutions,
             directory,

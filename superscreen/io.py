@@ -79,7 +79,7 @@ def zip_solution(solution: Solution, directory: str) -> str:
         zip_name = shutil.make_archive(path, "zip", root_dir=path)
     finally:
         if os.path.isdir(path):
-            shutil.rmtree(path, ignore_errors=True)
+            shutil.rmtree(path)
     return zip_name
 
 
