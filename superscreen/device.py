@@ -95,7 +95,7 @@ class Layer(object):
         if isinstance(london, (int, float)):
             london = f"{london:.3f}"
         return (
-            f'Layer("{self.name}", Lambda={Lambda}, '
+            f'{self.__class__.__name__}("{self.name}", Lambda={Lambda}, '
             f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
         )
 
@@ -184,7 +184,7 @@ class Polygon(object):
 
     def __repr__(self) -> str:
         return (
-            f'Polygon("{self.name}", layer="{self.layer}", '
+            f'{self.__class__.__name__}("{self.name}", layer="{self.layer}", '
             f"points=ndarray[shape={self.points.shape}])"
         )
 
@@ -956,7 +956,7 @@ class Device(object):
             f'length_units="{self.length_units}"',
         ]
 
-        return "Device(" + nt + (", " + nt).join(args) + ",\n)"
+        return f"{self.__class__.__name__}(" + nt + (", " + nt).join(args) + ",\n)"
 
     def __eq__(self, other) -> bool:
         if other is self:
