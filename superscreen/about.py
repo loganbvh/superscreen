@@ -39,7 +39,7 @@ def _blas_info() -> str:
     return blas
 
 
-def version_dict() -> Dict[str, Union[str, str]]:
+def version_dict() -> Dict[str, str]:
     """Returns a dictionary containing the versions of important dependencies."""
     cpu_count = [psutil.cpu_count(logical=b) for b in (False, True)]
     return {
