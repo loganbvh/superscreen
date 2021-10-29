@@ -128,7 +128,7 @@ class Polygon(object):
         points: An array of shape (n, 2) specifying the x, y coordinates of
             the polyon's vertices.
         mesh: Whether to include this polygon when computing a mesh.
-        
+
     """
 
     def __init__(self, name: str, *, layer: str, points: np.ndarray, mesh: bool = True):
@@ -688,9 +688,7 @@ class Device(object):
         for hole_name, polygon in hole_polygon_mapping.items():
             if hole_name not in holes:
                 raise ValueError(f"Hole '{hole_name}' does not exist in the device.")
-            xh, yh = holes[hole_name].points.T
-            xp, yp = polygon.T
-            if not fem.in_polygon(xh, yh, xp, yp).all():
+            if not fem.in_polygon(polygon, holes[hole_name].points).all():
                 raise ValueError(
                     f"Hole '{hole_name}' is not completely contained "
                     f"within the given polygon."

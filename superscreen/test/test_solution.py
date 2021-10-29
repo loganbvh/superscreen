@@ -378,7 +378,7 @@ def test_fluxoid_simply_connected(
         total_vortex_flux = 0
         for vortex in solution1.vortices:
             if vortex.layer == name:
-                if sc.fem.in_polygon(vortex.x, vortex.y, *coords.T):
+                if sc.fem.in_polygon(coords, [vortex.x, vortex.y]):
                     total_vortex_flux += (
                         (vortex.nPhi0 * ureg("Phi_0")).to(flux_units).magnitude
                     )

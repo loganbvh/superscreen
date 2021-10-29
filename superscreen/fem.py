@@ -7,30 +7,25 @@ from matplotlib.path import Path
 
 
 def in_polygon(
-    xq: Union[float, np.ndarray],
-    yq: Union[float, np.ndarray],
-    xp: Union[float, np.ndarray],
-    yp: Union[float, np.ndarray],
+    poly_points: np.ndarray,
+    query_points: np.ndarray,
+    radius: float = 0,
 ) -> Union[bool, np.ndarray]:
-    """Returns a boolean array of the same shape as ``xq`` and ``yq`` indicating
-    whether each point ``xq[i], yq[i]`` lies within the polygon defined by
-    ``xp`` and ``yp``. If ``xq`` and ``yq`` are scalars,
-    then a single boolean is returned.
+    """Returns a boolean array indicating which points in ``query_points``
+    lie inside the polygon defined by ``poly_points``.
 
     Args:
-        xq: x-coordinates of "query" points
-        yq: y-coordinates of "query" points
-        xp: x-coordinates of polygon
-        yp: y-coordinates of polygon
+        poly_points: Shape ``(m, 2)`` array of polygon vertex coordinates.
+        query_points: Shape ``(n, 2)`` array of "query points".
+
+    Returns:
+        A shape ``(n, )`` boolean array indicating which ``query_points``
+        lie inside the polygon. If only a single query point is given, then
+        a single boolean value is returned.
     """
-    xq = np.asarray(xq)
-    yq = np.asarray(yq)
-    xp = np.asarray(xp)
-    yp = np.asarray(yp)
-    shape = xq.shape
-    q = np.stack([xq.ravel(), yq.ravel()], axis=1)
-    p = Path(np.stack([xp.ravel(), yp.ravel()], axis=1), closed=True)
-    bool_array = p.contains_points(q).reshape(shape).squeeze()
+    query_points, poly_points = np.atleast_2d(query_points, poly_points)
+    path = Path(poly_points)
+    bool_array = path.contains_points(query_points, radius=radius).squeeze()
     if len(bool_array.shape) == 0:
         bool_array = bool_array.item()
     return bool_array

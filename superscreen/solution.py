@@ -463,10 +463,7 @@ class Solution(object):
         assert polygon.counter_clockwise
         points = polygon.points
         err_msg = "The polygon must lie completely within a superconducting film."
-        if not any(
-            film.contains_points(points).all()
-            for film in device.films_list
-        ):
+        if not any(film.contains_points(points).all() for film in device.films_list):
             raise ValueError(err_msg)
         if exclude_holes:
             err_msg = err_msg[:-1] + " and cannot intersect any holes."

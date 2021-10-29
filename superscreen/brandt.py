@@ -285,8 +285,6 @@ def brandt_layer(
 
     Q = device.Q(layer, weights=weights)
     points = device.points
-    x = points[:, 0]
-    y = points[:, 1]
     if Lambda is None:
         Lambda = device.layers[layer].Lambda
 
@@ -307,7 +305,7 @@ def brandt_layer(
 
     # Identify holes in the superconductor
     hole_indices = {}
-    in_hole = np.zeros(x.shape[0], dtype=bool)
+    in_hole = np.zeros(points.shape[0], dtype=bool)
     for name, hole in holes.items():
         ix = hole.contains_points(points)
         hole_indices[name] = np.where(ix)[0]
@@ -318,7 +316,7 @@ def brandt_layer(
     # 2. Effective field associated with I_circ_hole
     # See Section II(a) in [Brandt], Eqs. 18-19 in [Kirtley1],
     # and Eqs 17-18 in [Kirtley2].
-    g = np.zeros_like(x)
+    g = np.zeros_like(Hz_applied)
     Ha_eff = np.zeros_like(Hz_applied)
     for name in holes:
         current = circulating_currents.get(name, None)
@@ -526,7 +524,9 @@ def solve(
             raise ValueError(f"Vortex located in unknown layer: {vortex}.")
         films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
         holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
-        if not any(film.contains_points([vortex.x, vortex.y]) for film in films_in_layer):
+        if not any(
+            film.contains_points([vortex.x, vortex.y]) for film in films_in_layer
+        ):
             raise ValueError(f"Vortex {vortex} is not located in a film.")
         if any(hole.contains_points([vortex.x, vortex.y]) for hole in holes_in_layer):
             raise ValueError(f"Vortex {vortex} is located in a hole.")
