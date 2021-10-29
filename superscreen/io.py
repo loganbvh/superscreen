@@ -1,5 +1,4 @@
 import os
-import pathlib
 import shutil
 import json
 import datetime
@@ -74,13 +73,12 @@ def zip_solution(solution: Solution, directory: os.PathLike) -> str:
     Returns:
         The absolute path to the created zip file.
     """
-    path = pathlib.Path(directory).resolve()
+    path = os.path.abspath(directory)
     solution.to_file(path)
     try:
         zip_name = shutil.make_archive(path, "zip", root_dir=path)
     finally:
-        is_tempdir = pathlib.Path(tempfile.gettempdir()).resolve() in path.parents
-        if path.is_dir and not is_tempdir:
+        if os.path.isdir(path):
             shutil.rmtree(path)
     return zip_name
 
