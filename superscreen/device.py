@@ -179,23 +179,23 @@ class Polygon(object):
     def contains_points(
         self,
         points: np.ndarray,
-        radius: float = 0,
         index: bool = False,
+        radius: float = 0,
     ) -> Union[bool, np.ndarray]:
-        """Determines whether points xq, yq lie within the polygon.
+        """Determines whether ``points`` lie within the polygon.
 
         Args:
-            xq: x coordinate(s) of query point(s).
-            yq: y coordinate(s) of query point(s).
-            index: If True, then return the indices of the points in [xq, yq]
-                that lie within the polygon. Otherwise, return a boolean array
-                of the same shape as xq and yq.
+            points: Shape ``(n, 2)`` array of x, y coordinates.
+            index: If True, then return the indices of the points in ``points``
+                that lie within the polygon. Otherwise, returns a shape ``(n, )``
+                boolean array.
+            radius: An additional margin on ``self.path``.
+                See :meth:`matplotlib.path.Path.contains_points`.
 
         Returns:
-            If index is True, returns the indices of the points in [xq, yq]
-            that lie within the polygon. Otherwise, returns a boolean array
-            of the same shape as xq and yq indicating whether each point
-            lies within the polygon.
+            If index is True, returns the indices of the points in ``points``
+            that lie within the polygon. Otherwise, returns a shape ``(n, )``
+            boolean array indicating whether each point lies within the polygon.
         """
         bool_array = self.path.contains_points(np.atleast_2d(points), radius=radius)
         if index:
@@ -665,21 +665,22 @@ class Device(object):
         fluxoid for polygon :math:`S_i` and :math:`I_j` is the current circulating
         around hole :math:`j`.
 
-        hole_polygon_mapping: A dict of ``{hole_name: polygon_coordinates}`` specifying
-            a mapping between holes in the device and polygons enclosing those holes,
-            for which the fluxoid will be calculated. The length of this dict,
-            ``n_holes``, will determine the dimension of the square mutual inductance
-            matrix :math:`M`.
-        iterations: The number of iterations used to solve the device. This value is
-            ignored if there is only a single layer in the device.
-        units: The units in which to report the mutual inductance.
-        with_units: Whether to return the mutual inductance as a pint.Quantity with
-            units attached, or a bare np.ndarray.
+        Args:
+            hole_polygon_mapping: A dict of ``{hole_name: polygon_coordinates}``
+                specifying a mapping between holes in the device and polygons
+                enclosing those holes, for which the fluxoid will be calculated.
+                The length of this dict, ``n_holes``, will determine the dimension
+                of the square mutual inductance matrix :math:`M`.
+            iterations: The number of iterations used to solve the device. This value
+                is ignored if there is only a single layer in the device.
+            units: The units in which to report the mutual inductance.
+            with_units: Whether to return the mutual inductance as a pint.Quantity
+                with units attached, or a bare np.ndarray.
 
         Returns:
-            A list of mutual inductance matrices, each with shape ``(n_holes, n_holes)``.
-            The length of the list is ``1`` if the device has a single layer, or
-            ``iterations + 1`` if the device has multiple layers.
+            A list of mutual inductance matrices, each with shape
+            ``(n_holes, n_holes)``. The length of the list is ``1`` if the device has
+            a single layer, or ``iterations + 1`` if the device has multiple layers.
         """
         from .brandt import solve
 

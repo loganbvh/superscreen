@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import inspect
-from typing import Optional, Union, Dict
+from typing import Optional, Dict
 
 import ray
 import psutil

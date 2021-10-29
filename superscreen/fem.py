@@ -17,6 +17,7 @@ def in_polygon(
     Args:
         poly_points: Shape ``(m, 2)`` array of polygon vertex coordinates.
         query_points: Shape ``(n, 2)`` array of "query points".
+        radius: See :meth:`matplotlib.path.Path.contains_points`.
 
     Returns:
         A shape ``(n, )`` boolean array indicating which ``query_points``
