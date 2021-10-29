@@ -8,6 +8,7 @@ import dill
 import numpy as np
 from pint import UnitRegistry
 import matplotlib.pyplot as plt
+from matplotlib import path
 import scipy.sparse as sp
 from scipy.spatial import ConvexHull
 from meshpy import triangle
@@ -142,24 +143,43 @@ class Polygon(object):
             raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
 
     @property
+    def area(self) -> float:
+        """The area of the polygon."""
+        # https://en.wikipedia.org/wiki/Shoelace_formula
+        # https://stackoverflow.com/a/30408825/11655306
+        x = self.points[:, 0]
+        y = self.points[:, 1]
+        return 0.5 * np.abs(np.dot(y, np.roll(x, 1)) - np.dot(x, np.roll(y, 1)))
+
+    @property
+    def extents(self) -> Tuple[float, float]:
+        """Returns the total x, y extent of the polygon, (Dx, Dy)."""
+        return tuple(np.ptp(self.points, axis=0))
+
+    @property
     def clockwise(self) -> bool:
-        """Returns True if the polygon vertices are oriented clockwise."""
-        # https://stackoverflow.com/a/1165943
-        # https://www.element84.com/blog/
-        # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
+        """True if the polygon vertices are oriented clockwise."""
+        # # https://stackoverflow.com/a/1165943
+        # # https://www.element84.com/blog/
+        # # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
         x = self.points[:, 0]
         y = self.points[:, 1]
         return np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1])) > 0
 
     @property
     def counter_clockwise(self) -> bool:
-        """Returns True if the polygon vertices are oriented counter-clockwise."""
+        """True if the polygon vertices are oriented counter-clockwise."""
         return not self.clockwise
+
+    @property
+    def path(self) -> path.Path:
+        """A matplotlib.path.Path representing the polygon boundary."""
+        return path.Path(self.points, closed=True)
 
     def contains_points(
         self,
-        xq: Union[float, np.ndarray],
-        yq: Union[float, np.ndarray],
+        points: np.ndarray,
+        radius: float = 0,
         index: bool = False,
     ) -> Union[bool, np.ndarray]:
         """Determines whether points xq, yq lie within the polygon.
@@ -177,10 +197,22 @@ class Polygon(object):
             of the same shape as xq and yq indicating whether each point
             lies within the polygon.
         """
-        bool_array = fem.in_polygon(xq, yq, self.points[:, 0], self.points[:, 1])
+        bool_array = self.path.contains_points(np.atleast_2d(points), radius=radius)
         if index:
             return np.where(bool_array)[0]
         return bool_array
+
+    def on_boundary(
+        self, points: np.ndarray, radius: float = 1e-3, index: bool = False
+    ):
+        points = np.atleast_2d(points)
+        p = self.path
+        outer = p.contains_points(points, radius=radius)
+        inner = p.contains_points(points, radius=-radius)
+        boundary = np.logical_and(outer, ~inner)
+        if index:
+            return np.where(boundary)[0]
+        return boundary
 
     def __repr__(self) -> str:
         return (
@@ -610,12 +642,10 @@ class Device(object):
         # Each layer has its own edge vector C, so each layer's kernel matrix Q
         # will have different diagonals.
         self.C_vectors = {}
-        x = points[:, 0]
-        y = points[:, 1]
         for layer_name in self.layers:
             films = [film for film in self.films_list if film.layer == layer_name]
             self.C_vectors[layer_name] = sum(
-                brandt.C_vector(points, mask=film.contains_points(x, y))
+                brandt.C_vector(points, mask=film.contains_points(points))
                 for film in films
             )
         self._Q_cache = {}

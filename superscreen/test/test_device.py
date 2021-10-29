@@ -27,7 +27,7 @@ def device():
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    assert films[0].contains_points(0, 0)
+    assert films[0].contains_points([0, 0])
 
     abstract_regions = [
         sc.Polygon(

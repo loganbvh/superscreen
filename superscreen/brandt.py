@@ -309,7 +309,7 @@ def brandt_layer(
     hole_indices = {}
     in_hole = np.zeros(x.shape[0], dtype=bool)
     for name, hole in holes.items():
-        ix = hole.contains_points(x, y)
+        ix = hole.contains_points(points)
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
 
@@ -341,7 +341,7 @@ def brandt_layer(
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
-            if film.contains_points(vortex.x, vortex.y):
+            if film.contains_points([vortex.x, vortex.y]):
                 film_to_vortices[name].append(vortex)
                 # A given vortex can only lie in a single film.
                 continue
@@ -349,7 +349,7 @@ def brandt_layer(
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
         # We want all points that are in a film and not in a hole.
-        ix1d = np.logical_and(film.contains_points(x, y), np.logical_not(in_hole))
+        ix1d = np.logical_and(film.contains_points(points), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
 
@@ -526,9 +526,9 @@ def solve(
             raise ValueError(f"Vortex located in unknown layer: {vortex}.")
         films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
         holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
-        if not any(film.contains_points(vortex.x, vortex.y) for film in films_in_layer):
+        if not any(film.contains_points([vortex.x, vortex.y]) for film in films_in_layer):
             raise ValueError(f"Vortex {vortex} is not located in a film.")
-        if any(hole.contains_points(vortex.x, vortex.y) for hole in holes_in_layer):
+        if any(hole.contains_points([vortex.x, vortex.y]) for hole in holes_in_layer):
             raise ValueError(f"Vortex {vortex} is located in a hole.")
         vortices_by_layer[vortex.layer].append(vortex)
 

@@ -373,7 +373,7 @@ class Solution(object):
         triangles = self.device.triangles
 
         tri_areas = areas(points, triangles) * ureg(f"{self.device.length_units}") ** 2
-        xt, yt = centroids(points, triangles).T
+        tri_points = centroids(points, triangles)
         fluxes = {}
         for name in polygons:
             if name in films:
@@ -382,7 +382,7 @@ class Solution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.abstract_regions[name]
-            ix = poly.contains_points(xt, yt, index=True)
+            ix = poly.contains_points(tri_points, index=True)
             field = self.fields[poly.layer][triangles].mean(axis=1)
             field = field[ix] * ureg(self.field_units)
             area = tri_areas[ix]
@@ -464,7 +464,7 @@ class Solution(object):
         points = polygon.points
         err_msg = "The polygon must lie completely within a superconducting film."
         if not any(
-            film.contains_points(points[:, 0], points[:, 1]).all()
+            film.contains_points(points).all()
             for film in device.films_list
         ):
             raise ValueError(err_msg)
@@ -473,9 +473,9 @@ class Solution(object):
             for hole in device.holes_list:
                 if hole.layer not in layers:
                     continue
-                if hole.contains_points(points[:, 0], points[:, 1]).any():
+                if hole.contains_points(points).any():
                     raise ValueError(err_msg)
-                if polygon.contains_points(hole.points[:, 0], hole.points[:, 1]).any():
+                if polygon.contains_points(hole.points).any():
                     raise ValueError(err_msg)
 
         # Evaluate the supercurrent density at the polygon coordinates.
