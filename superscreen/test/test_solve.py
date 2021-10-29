@@ -1,9 +1,12 @@
 import os
 
-import numpy as np
+import pint
 import pytest
+import numpy as np
+
 
 import superscreen as sc
+import superscreen.geometry as geo
 
 
 @pytest.fixture(scope="module")
@@ -117,3 +120,80 @@ def test_invalid_vortex_args(device):
             device=device,
             vortices=[sc.Vortex(x=4.5, y=0, layer="layer1")],
         )
+
+
+@pytest.fixture
+def two_rings():
+    length_units = "um"
+    inner_radius = 2.5
+    outer_radius = 5
+
+    layers = [
+        sc.Layer("layer0", Lambda=1, z0=0),
+        sc.Layer("layer1", Lambda=1, z0=1),
+    ]
+
+    films = [
+        sc.Polygon(
+            "square_ring",
+            layer="layer0",
+            points=geo.square(1.5 * outer_radius, points_per_side=50),
+        ),
+        sc.Polygon(
+            "round_ring", layer="layer1", points=geo.circle(outer_radius, points=200)
+        ),
+    ]
+
+    holes = [
+        sc.Polygon(
+            "square_hole",
+            layer="layer0",
+            points=geo.square(1 * inner_radius, points_per_side=50),
+        ),
+        sc.Polygon(
+            "round_hole", layer="layer1", points=geo.circle(inner_radius, points=100)
+        ),
+    ]
+
+    abstract_regions = [
+        sc.Polygon(
+            "bbox",
+            layer="layer0",
+            points=geo.square(1.25 * 2 * outer_radius, points_per_side=10),
+        )
+    ]
+
+    device = sc.Device(
+        "two_rings",
+        layers=layers,
+        films=films,
+        holes=holes,
+        abstract_regions=abstract_regions,
+        length_units=length_units,
+    )
+    device.make_mesh(min_triangles=10_000, optimesh_steps=40)
+    return device
+
+
+def test_mutual_inductance_matrix(two_rings):
+    hole_polygon_mapping = {
+        "square_hole": geo.square(6, points_per_side=101),
+        "round_hole": geo.circle(4, points=401),
+    }
+    iterations = 3
+
+    with pytest.raises(ValueError):
+        _ = two_rings.mutual_inductance_matrix({"invalid": None}, iterations=iterations)
+
+    with pytest.raises(ValueError):
+        _ = two_rings.mutual_inductance_matrix(
+            {"round_hole": geo.circle(1)}, iterations=iterations
+        )
+
+    M = two_rings.mutual_inductance_matrix(hole_polygon_mapping, iterations=iterations)
+    assert isinstance(M, list)
+    assert len(M) == iterations + 1
+    assert all(isinstance(m, pint.Quantity) for m in M)
+
+    M = M[-1]
+    assert np.abs((M[0, 1] - M[1, 0]) / min(M[0, 1], M[1, 0])) < 1e-3

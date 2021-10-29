@@ -19,15 +19,14 @@ def device():
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
     ]
 
-    with pytest.raises(ValueError):
-        sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(2, 3))
-
     films = [
         sc.Polygon("disk", layer="layer0", points=sc.geometry.circle(5)),
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
     assert films[0].contains_points([0, 0])
+    assert np.isclose(films[0].area, np.pi * 5 ** 2, rtol=1e-3)
+    assert np.isclose(films[1].area, np.pi * 3 * 2, rtol=1e-3)
 
     abstract_regions = [
         sc.Polygon(

@@ -5,6 +5,7 @@ import inspect
 from typing import Optional, Union, Dict
 
 import ray
+import psutil
 import numpy
 import scipy
 import IPython
@@ -40,6 +41,7 @@ def _blas_info() -> str:
 
 def version_dict() -> Dict[str, Union[str, str]]:
     """Returns a dictionary containing the versions of important dependencies."""
+    cpu_count = [psutil.cpu_count(logical=b) for b in (False, True)]
     return {
         "SuperScreen": superscreen.__version__,
         "Numpy": numpy.__version__,
@@ -49,7 +51,7 @@ def version_dict() -> Dict[str, Union[str, str]]:
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",
-        "Number of CPUs": str(os.cpu_count()),
+        "Number of CPUs": f"Physical: {cpu_count[0]}, Logical: {cpu_count[1]}",
         "BLAS Info": _blas_info(),
     }
 

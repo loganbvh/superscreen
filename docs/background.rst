@@ -152,7 +152,7 @@ such a circulating current is given by :eq:`eq7` if we set
     :label: eq8
 
     H_{z,\,\mathrm{eff},\,k}(\vec{r}) = -\int_{\mathrm{hole}\,k}[
-        Q_z(\vec{r},\vec{r}')-\Lambda(\vec{r}')\nabla^2
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2
     ] I_{\mathrm{circ},\,k} \,\mathrm{d}^2r'.
 
 In this case, we modify the left-hand side of :eq:`eq7` as follows:
@@ -223,6 +223,7 @@ rows in :math:`\mathbf{B}`). Column vectors are treated as matrices with
 :math:`\ell` rows and :math:`1` column. On the other hand, we denote element-wise
 multiplication with a dot: :math:`(\mathbf{A}\cdot\mathbf{B})_{ij}=A_{ij}B_{ij}` for two matrices
 and :math:`(\mathbf{A}\cdot\mathbf{v})_{ij}=A_{ij}v_{i}` for a matrix and a column vector.
+:math:`\mathbf{A}^T` denotes the transpose of matrix :math:`\mathbf{A}`.
 
 The matrix version of :eq:`eq4` is:
 
@@ -231,16 +232,20 @@ The matrix version of :eq:`eq4` is:
 
     \underbrace{\mathbf{h}_z}_\text{total field}
     = \underbrace{\mathbf{h}_{z,\,\mathrm{applied}}}_\text{applied field}
-    + \underbrace{(\mathbf{Q}\cdot\mathbf{w})\mathbf{g}}_\text{screening field}.
+    + \underbrace{(\mathbf{Q}\cdot\mathbf{w}^T)\mathbf{g}}_\text{screening field}.
 
-The kernel matrix :math:`\mathbf{Q}` and weight matrix :math:`\mathbf{w}` together play the role of the
-kernel function :math:`Q_z(\vec{r},\vec{r}')` for all points lying in the plane of the film.
-They are both :math:`n\times n` matrices and are determined by the geometry of the films.
+The :math:`n\times n` kernel matrix :math:`\mathbf{Q}` represents the kernel function :math:`Q_z(\vec{r},\vec{r}')`
+for all points lying in the plane of the film, and the :math:`n\times 1` weight vector :math:`\mathbf{w}`,
+which assigns an effective area to each vertex in the mesh, represents the differential element
+:math:`\mathrm{d}^2r'`. Both :math:`\mathbf{Q}` and :math:`\mathbf{w}` are solely determined by the
+geometry of the mesh, so they only need to be computed once for a given device.
 :math:`\mathbf{h}_z`, :math:`\mathbf{h}_{z,\,\mathrm{applied}}`, and :math:`\mathbf{g}` are all
 :math:`n\times 1` vectors, with each row representing the value of the quantity at the
-corresponding vertex in the mesh. There are several different methods for constructing the
-weight matrix :math:`\mathbf{w}`, which are discussed :ref:`below <weight-matrix>`. The kernel
-matrix :math:`\mathbf{Q}` is defined in terms of a matrix with
+corresponding vertex in the mesh. The vector :math:`\mathbf{w}` is equal to the diagonal of
+the "lumped mass matrix" :math:`\mathbf{M}`:
+:math:`w_i=M_{ii} = \frac{1}{3}\sum_{t\in\mathcal{N}(i)}\mathrm{area}(t)`,
+where :math:`\mathcal{N}(i)` is the set of triangles :math:`t` adjacent to vertex :math:`i`.
+The kernel matrix :math:`\mathbf{Q}` is defined in terms of a matrix with
 :math:`(\mathbf{q})_{ij} = \left(4\pi|\vec{r}_i-\vec{r}_j|^3\right)^{-1}`
 (which is :math:`\lim_{\Delta z\to 0}Q_z(\vec{r},\vec{r}')` cf. :eq:`eq5`),
 and a vector :math:`\mathbf{C}`:
@@ -268,7 +273,7 @@ is:
 .. math::
     :label: eq13
 
-    -(\mathbf{Q}\cdot\mathbf{w}-\mathbf{\Lambda}\cdot\mathbf{\nabla}^2)\mathbf{g}
+    -(\mathbf{Q}\cdot\mathbf{w}^T-\mathbf{\nabla}^2\cdot\mathbf{\Lambda}^T)\mathbf{g}
     = \mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}
 
 (where we exclude points in the mesh lying outside of the superconducting film, but keep points
@@ -288,7 +293,7 @@ gives us the stream function for the full mesh:
     :label: eq14
 
     \mathbf{g} = \begin{cases}
-        \left(-[\mathbf{Q}\cdot\mathbf{w}-\mathbf{\Lambda}\cdot\mathbf{\nabla}^2]\right)^{-1}
+        \left(-[\mathbf{Q}\cdot\mathbf{w}^T-\mathbf{\nabla}^2\cdot\mathbf{\Lambda}^T]\right)^{-1}
         \left(\mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}\right)
             & \text{inside the film}\\
         I_{\mathrm{circ},\,k}
@@ -326,7 +331,8 @@ ways to construct the mass matrix, but here we use a "lumped" mass matrix, which
 with elements :math:`(\mathbf{M})_{ii} = \sum_{t\in\mathcal{N}(i)}\frac{1}{3}\mathrm{area}(t)`,
 where :math:`\mathcal{N}(i)` is the set of triangles :math:`t` adjacent to vertex :math:`i`.
 (See :ref:`image below <img-weights>`, where :math:`(\mathbf{M})_{ii} = A_i`.
-Image reference: [Vaillant-Laplacian-2013]_.)
+Image reference: [Vaillant-Laplacian-2013]_.) The vector :math:`\mathbf{w}` discussed
+above is simply the diagonal of the mass matrix :math:`\mathbf{M}`.
 
 .. _img-weights:
 
@@ -339,20 +345,7 @@ Image reference: [Vaillant-Laplacian-2013]_.)
 Weight matrix
 *************
 
-Each element :math:`w_{ij}` of the symmetric weight matrix :math:`\mathbf{w}` assigns a weight
-to the edge connecting vertex :math:`i` and vertex :math:`j` in the mesh.
-We use a normalized version of the weight matrix, where the sum of all off-diagonal
-elements in each row (or column) is :math:`1`, and each diagonal element is :math:`1`.
-Thus we can write :math:`\mathbf{w}` in terms of an unnormalized weight matrix :math:`\mathbf{W}`:
-
-.. math::
-
-    w_{ij} = \begin{cases}
-        1&\text{if }i = j\\
-        W_{ij} / \sum_{i\neq j} W_{ij}&\text{otherwise}
-    \end{cases}
-
-There are several different methods for constructing the unnormalized weight matrix
+There are several different methods for constructing the weight matrix
 :math:`\mathbf{W}`:
 
 1. Uniform weighting: In this case, :math:`\mathbf{W}` is simply the
