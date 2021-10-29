@@ -79,7 +79,7 @@ def zip_solution(solution: Solution, directory: os.PathLike) -> str:
     try:
         zip_name = shutil.make_archive(path, "zip", root_dir=path)
     finally:
-        is_tempdir = pathlib.Path(tempfile.gettempdir()) in path.parents
+        is_tempdir = pathlib.Path(tempfile.gettempdir()).resolve() in path.parents
         if path.is_dir and not is_tempdir:
             shutil.rmtree(path)
     return zip_name
