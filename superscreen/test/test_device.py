@@ -212,20 +212,9 @@ def test_copy_arrays(device_with_mesh, dense):
     copied_arrays = device_with_mesh.get_arrays(copy_arrays=True, dense=dense)
 
     for key, val in arrays.items():
-        if key == "C_vectors":
-            for name, arr in val.items():
-                assert arr is not copied_arrays[key][name]
-                if sp.issparse(arr):
-                    assert not dense
-                    assert np.array_equal(
-                        arr.toarray(), copied_arrays[key][name].toarray()
-                    )
-                else:
-                    assert np.array_equal(arr, copied_arrays[key][name])
+        assert val is not copied_arrays[key]
+        if sp.issparse(val):
+            assert not dense
+            assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
         else:
-            assert val is not copied_arrays[key]
-            if sp.issparse(val):
-                assert not dense
-                assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
-            else:
-                assert np.array_equal(val, copied_arrays[key])
+            assert np.array_equal(val, copied_arrays[key])

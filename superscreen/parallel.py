@@ -292,16 +292,10 @@ def share_arrays(
     arrays: Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]
 ) -> Dict[str, Tuple[mp.RawArray, Tuple[int, ...]]]:
     """Convert all arrays in the device to shared RawArrays."""
-    C_vectors = {
-        name: (numpy_to_shared_array(array), array.shape)
-        for name, array in arrays["C_vectors"].items()
-    }
     shared_arrays = {
         name: (numpy_to_shared_array(array), array.shape)
         for name, array in arrays.items()
-        if name != "C_vectors"
     }
-    shared_arrays["C_vectors"] = C_vectors
     return shared_arrays
 
 
@@ -319,14 +313,9 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     if use_shared_memory:
         # init_arrays is the dict of arrays stored in shared memory
         numpy_arrays = {}
-        numpy_arrays["C_vectors"] = {}
         for name, data in init_arrays.items():
-            if name == "C_vectors":
-                for layer, (vec, shape) in data.items():
-                    numpy_arrays["C_vectors"][layer] = shared_array_to_numpy(vec, shape)
-            else:
-                shared_array, shape = data
-                numpy_arrays[name] = shared_array_to_numpy(shared_array, shape)
+            shared_array, shape = data
+            numpy_arrays[name] = shared_array_to_numpy(shared_array, shape)
     else:
         numpy_arrays = init_arrays
 

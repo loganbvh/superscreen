@@ -283,7 +283,7 @@ def brandt_layer(
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
 
-    Q = device.Q(layer, weights=weights)
+    Q = device.Q
     points = device.points
     if Lambda is None:
         Lambda = device.layers[layer].Lambda
@@ -375,11 +375,11 @@ def brandt_layer(
 
         for vortex in film_to_vortices[name]:
             # Index of the mesh vertex that is closest to the vortex position:
-            # in the film-specific subarray...
+            # in the film-specific subarray
             j_film = np.argmin(
                 np.sum(np.square(points[ix1d] - [[vortex.x, vortex.y]]), axis=1)
             )
-            # and in the full device mesh.
+            # ... and in the full device mesh.
             j_device = np.argmin(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
