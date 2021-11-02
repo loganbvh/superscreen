@@ -175,25 +175,48 @@ def two_rings():
     return device
 
 
-def test_mutual_inductance_matrix(two_rings):
+@pytest.mark.parametrize("all_iterations", [False, True])
+def test_mutual_inductance_matrix(two_rings, all_iterations):
     hole_polygon_mapping = {
         "square_hole": geo.square(6, points_per_side=101),
-        "round_hole": geo.circle(4, points=401),
+        "round_hole": geo.circle(4, points=301),
     }
     iterations = 3
 
     with pytest.raises(ValueError):
-        _ = two_rings.mutual_inductance_matrix({"invalid": None}, iterations=iterations)
+        _ = two_rings.mutual_inductance_matrix(
+            hole_polygon_mapping={"invalid": None},
+            iterations=iterations,
+            all_iterations=all_iterations,
+        )
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
-            {"round_hole": geo.circle(1)}, iterations=iterations
+            hole_polygon_mapping={"round_hole": geo.circle(1)},
+            iterations=iterations,
+            all_iterations=all_iterations,
         )
 
-    M = two_rings.mutual_inductance_matrix(hole_polygon_mapping, iterations=iterations)
-    assert isinstance(M, list)
-    assert len(M) == iterations + 1
-    assert all(isinstance(m, pint.Quantity) for m in M)
-
-    M = M[-1]
-    assert np.abs((M[0, 1] - M[1, 0]) / min(M[0, 1], M[1, 0])) < 1e-3
+    M = two_rings.mutual_inductance_matrix(
+        hole_polygon_mapping=hole_polygon_mapping,
+        iterations=iterations,
+        all_iterations=all_iterations,
+    )
+    M2 = two_rings.mutual_inductance_matrix(
+        iterations=iterations,
+        all_iterations=all_iterations,
+    )
+    if all_iterations:
+        assert isinstance(M, list)
+        assert len(M) == iterations + 1
+        assert all(isinstance(m, pint.Quantity) for m in M)
+        assert all(isinstance(m.magnitude, np.ndarray) for m in M)
+        M = M[-1]
+        M2 = M2[-1]
+    else:
+        assert isinstance(M, pint.Quantity)
+        assert isinstance(M.magnitude, np.ndarray)
+    assert np.allclose(M, M2, rtol=1e-2)
+    # Check that M is symmetric
+    # assert np.abs((M[0, 1] - M[1, 0]) / min(M[0, 1], M[1, 0])) < 1e-3
+    assert np.isclose(M[0, 1], M[1, 0], rtol=1e-3)

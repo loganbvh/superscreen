@@ -326,7 +326,7 @@ def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
 
 @pytest.mark.parametrize("polygon_shape", ["circle", "rectangle"])
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
-@pytest.mark.parametrize("layers", ["layer0", ["layer0"], None])
+@pytest.mark.parametrize("layers", ["layer0", ["layer0"]])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("flux_units", ["Phi_0", None])
 def test_fluxoid_simply_connected(
@@ -345,17 +345,6 @@ def test_fluxoid_simply_connected(
         coords = sc.geometry.rectangle(3, 2, x_points=100, y_points=100, center=center)[
             ::-1
         ]
-
-    if layers is None:
-        with pytest.raises(ValueError):
-            _ = solution1.polygon_fluxoid(
-                polygon_points=coords,
-                layers=layers,
-                flux_units=flux_units,
-                with_units=with_units,
-                exclude_holes=True,
-            )
-        return
 
     if center == (-4, 0):
         # The polygon goes outside of the film -> raise ValueError
