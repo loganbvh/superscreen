@@ -10,7 +10,7 @@ from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 
-from .brandt import convert_field
+from .solve import convert_field
 from .solution import Solution
 
 
@@ -444,7 +444,7 @@ def plot_fields(
                 units,
                 old_units=old_units,
                 ureg=device.ureg,
-                magnitude=True,
+                with_units=False,
             )
         clabel = clabel + f" [${units:~L}$]"
     clim_dict = setup_color_limits(

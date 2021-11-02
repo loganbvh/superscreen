@@ -13,7 +13,7 @@ import ray
 import pint
 import numpy as np
 
-from . import brandt
+from . import solve
 from .io import NullContextManager
 from .device import Device
 from .parameter import Parameter
@@ -218,7 +218,7 @@ def solve_many_serial(
             device, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             device.set_arrays(arrays)
-            _ = brandt.solve(
+            _ = solve.solve(
                 device=device,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
@@ -322,7 +322,7 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     device.set_arrays(numpy_arrays)
     kwargs["device"] = device
 
-    _ = brandt.solve(**kwargs)
+    _ = solve.solve(**kwargs)
 
     if keep_only_final_solution:
         _cleanup(kwargs["directory"], kwargs["iterations"])
@@ -468,7 +468,7 @@ def solve_single_ray(
     if log_level is not None:
         logging.basicConfig(level=log_level)
 
-    _ = brandt.solve(**kwargs)
+    _ = solve.solve(**kwargs)
 
     if keep_only_final_solution:
         _cleanup(kwargs["directory"], kwargs["iterations"])
