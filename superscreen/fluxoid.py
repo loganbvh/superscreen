@@ -156,7 +156,7 @@ def find_fluxoid_solution(
             hole_polygon_fluxoid_mapping[name] = (polygon, fluxoid_n)
 
     if len(hole_polygon_fluxoid_mapping) < 1:
-        raise ValueError(f"find_fluxoid_solution requires one or more holes.")
+        raise ValueError("find_fluxoid_solution requires one or more holes.")
     if len(hole_polygon_fluxoid_mapping) == 1:
         for hole_name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
             return find_single_fluxoid_solution(

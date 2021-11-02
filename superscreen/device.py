@@ -438,7 +438,6 @@ class Device(object):
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
         for name in ("Del2",):
             valid_types[name] = (valid_types[name], sp.spmatrix)
-        layer_names = set(self.layers)
         for name, array in arrays.items():
             if name not in self.ARRAY_NAMES:
                 raise ValueError(f"Unexpected array name: {name}.")
