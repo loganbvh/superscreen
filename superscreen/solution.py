@@ -15,7 +15,7 @@ from scipy.spatial import distance
 
 from .about import version_dict
 from .device import Device, Polygon
-from .fem import areas, centroids
+from .fem import areas, centroids, in_polygon
 from .parameter import Constant
 
 from backports.datetime_fromisoformat import MonkeyPatch
@@ -129,16 +129,25 @@ class Solution(object):
 
     @property
     def screening_fields(self) -> Dict[str, np.ndarray]:
-        """A dict of ``{layer_name: screening_field}``."""
-        points = self.device.points
-        layers = self.device.layers
+        """A dict of ``{layer_name: screening_field}`` in units
+        of ``self.field_units``.
+        """
+        from .solve import field_conversion_factor
+
+        field_conversion = field_conversion_factor(
+            self.field_units,
+            self.current_units,
+            length_units=self.device.length_units,
+            ureg=self.device.ureg,
+        )
         if self._screening_fields is None:
             self._screening_fields = {}
-            for layer, total_field in self.fields.items():
-                Hz_applied = self.applied_field(
-                    points[:, 0], points[:, 1], layers[layer].z0
-                )
-                self._screening_fields[layer] = total_field - Hz_applied
+            for layer, g in self.streams.items():
+                Q = self.device.Q
+                weights = self.device.weights
+                screening_field = Q @ (weights * g)
+                screening_field = screening_field / field_conversion.magnitude
+                self.screening_fields[layer] = screening_field
         return self._screening_fields
 
     def grid_data(
@@ -348,7 +357,7 @@ class Solution(object):
         Returns:
             A dict of ``{polygon_name: polygon_flux}``
         """
-        from .brandt import convert_field
+        from .solve import convert_field
 
         films = list(self.device.films)
         holes = list(self.device.holes)
@@ -388,7 +397,7 @@ class Solution(object):
             area = tri_areas[ix]
             # Convert field to B = mu0 * H
             field = convert_field(field, "mT", ureg=ureg)
-            flux = np.sum(field * area).to(new_units)
+            flux = np.einsum("i,i -> ", field, area).to(new_units)
             if with_units:
                 fluxes[name] = flux
             else:
@@ -398,13 +407,11 @@ class Solution(object):
     def polygon_fluxoid(
         self,
         polygon_points: np.ndarray,
-        *,
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         interp_method: str = "linear",
         flux_units: Optional[str] = "Phi_0",
         with_units: bool = True,
-        exclude_holes: bool = False,
     ) -> Dict[str, Fluxoid]:
         """Computes the :class:`Fluxoid` (flux + supercurrent) for
         a given polygonal region.
@@ -434,8 +441,6 @@ class Solution(object):
             interp_method: Interpolation method to use.
             flux_units: The desired units for the current density. Defaults to ``Phi_0``.
             with_units: Whether to return values as pint.Quantities with units attached.
-            exclude_holes: Whether to raise an exception if the polygon intersects or
-                contains a hole.
 
         Returns:
             A dict of ``{layer_name: fluxoid}`` for each specified layer, where
@@ -462,18 +467,10 @@ class Solution(object):
             polygon.points = polygon.points[::-1]
         assert polygon.counter_clockwise
         points = polygon.points
-        err_msg = "The polygon must lie completely within a superconducting film."
         if not any(film.contains_points(points).all() for film in device.films_list):
-            raise ValueError(err_msg)
-        if exclude_holes:
-            err_msg = err_msg[:-1] + " and cannot intersect any holes."
-            for hole in device.holes_list:
-                if hole.layer not in layers:
-                    continue
-                if hole.contains_points(points).any():
-                    raise ValueError(err_msg)
-                if polygon.contains_points(hole.points).any():
-                    raise ValueError(err_msg)
+            raise ValueError(
+                "The polygon must lie completely within a superconducting film."
+            )
 
         # Evaluate the supercurrent density at the polygon coordinates.
         J_units = f"{self.current_units} / {device.length_units}"
@@ -521,6 +518,51 @@ class Solution(object):
             fluxoids[layer] = Fluxoid(flux_part, supercurrent_part)
         return fluxoids
 
+    def hole_fluxoid(
+        self,
+        hole_name: str,
+        points: Optional[np.ndarray] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        interp_method: str = "linear",
+        flux_units: Optional[str] = "Phi_0",
+        with_units: bool = True,
+    ) -> Fluxoid:
+        """Calculcates the fluxoid for a polygon enclosing the specified hole.
+
+        Args:
+            hole_name: The name of the hole for which to calculate the fluxoid.
+            points: The vertices of the polygon enclosing the hole. If None is given,
+                a polygon is generated using
+                :func:`supercreen.fluxoid.make_fluxoid_polygons`.
+            grid_shape: Shape of the desired rectangular grid to use for interpolation.
+                If a single integer N is given, then the grid will be square,
+                shape = (N, N).
+            interp_method: Interpolation method to use.
+            flux_units: The desired units for the current density. Defaults to ``Phi_0``.
+            with_units: Whether to return values as pint.Quantities with units attached.
+
+        Returns:
+            The hole's Fluxoid.
+        """
+        if points is None:
+            from .fluxoid import make_fluxoid_polygons
+
+            points = make_fluxoid_polygons(self.device, holes=hole_name)[hole_name]
+        hole = self.device.holes[hole_name]
+        if not in_polygon(points, hole.points).all():
+            raise ValueError(
+                f"Hole {hole_name} is not completely enclosed by the given polygon."
+            )
+        fluxoids = self.polygon_fluxoid(
+            points,
+            hole.layer,
+            grid_shape=grid_shape,
+            interp_method=interp_method,
+            flux_units=flux_units,
+            with_units=with_units,
+        )
+        return fluxoids[hole.layer]
+
     def field_at_position(
         self,
         positions: np.ndarray,
@@ -557,7 +599,7 @@ class Solution(object):
             array(s) will contain pint.Quantities. ``field_from_layer`` will have
             shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
         """
-        from .brandt import convert_field
+        from .solve import convert_field
 
         device = self.device
         ureg = device.ureg
@@ -603,7 +645,7 @@ class Solution(object):
             units,
             old_units=self.field_units,
             ureg=ureg,
-            magnitude=(not with_units),
+            with_units=with_units,
         )
 
         fields = {}
@@ -613,8 +655,16 @@ class Solution(object):
             if np.all(dz == 0):
                 # Interpolate field in the plane of an existing layer
                 tri = Triangulation(points[:, 0], points[:, 1], triangles=triangles)
-                Hz_interp = LinearTriInterpolator(tri, self.fields[name])
+                Hz_interp = LinearTriInterpolator(tri, self.screening_fields[name])
                 Hz = np.asarray(Hz_interp(positions[:, 0], positions[:, 1]))
+                # Convert to {self.current_units} / {device.length_units}
+                Hz = convert_field(
+                    Hz,
+                    f"{self.current_units} / {device.length_units}",
+                    old_units=self.field_units,
+                    ureg=ureg,
+                    with_units=False,
+                )
             else:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -654,7 +704,7 @@ class Solution(object):
                 units,
                 old_units=f"{self.current_units} / {device.length_units}",
                 ureg=ureg,
-                magnitude=(not with_units),
+                with_units=with_units,
             )
         if return_sum:
             fields = sum(fields.values()) + H_applied.squeeze()
