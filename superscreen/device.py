@@ -2,7 +2,8 @@ import os
 import json
 import logging
 from copy import deepcopy
-from typing import Optional, Union, List, Tuple, Dict
+from collections import defaultdict
+from typing import Optional, Union, List, Tuple, Dict, Any
 
 import dill
 import numpy as np
@@ -14,7 +15,7 @@ from scipy.spatial import ConvexHull
 from meshpy import triangle
 import optimesh
 
-from . import brandt
+from . import solve
 from . import fem
 from .geometry import close_curve
 from .parameter import Parameter
@@ -256,8 +257,7 @@ class Device(object):
         "triangles",
         "weights",
         "Del2",
-        "q",
-        "C_vectors",
+        "Q",
     )
 
     def __init__(
@@ -308,9 +308,7 @@ class Device(object):
 
         self.weights = None
         self.Del2 = None
-        self.q = None
-        self.C_vectors = None
-        self._Q_cache = {}
+        self.Q = None
 
     @property
     def length_units(self):
@@ -440,20 +438,8 @@ class Device(object):
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
         for name in ("Del2",):
             valid_types[name] = (valid_types[name], sp.spmatrix)
-        _ = valid_types.pop("C_vectors")
-        C_vectors = arrays["C_vectors"]
         layer_names = set(self.layers)
-        for name, array in C_vectors.items():
-            if name not in layer_names:
-                raise ValueError(f"Unexpected C_vector name: {name}.")
-            if not isinstance(array, np.ndarray):
-                raise TypeError(
-                    f"Expected type {np.ndarray} for C vector '{name}', "
-                    f"but got {type(array)}."
-                )
         for name, array in arrays.items():
-            if name == "C_vectors":
-                continue
             if name not in self.ARRAY_NAMES:
                 raise ValueError(f"Unexpected array name: {name}.")
             if not isinstance(array, valid_types[name]):
@@ -464,7 +450,6 @@ class Device(object):
         # Finally actually set the attributes
         for name, array in arrays.items():
             setattr(self, name, array)
-        self.C_vectors = C_vectors
 
     def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> "Device":
         """Copy this Device to create a new one.
@@ -593,21 +578,9 @@ class Device(object):
 
         self.weights = None
         self.Del2 = None
-        self._Q_cache = {}
+        self.Q = None
         if compute_matrices:
             self.compute_matrices(weight_method=weight_method)
-
-    def Q(
-        self, layer: str, weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None
-    ) -> np.ndarray:
-        """Computes the kernel matrix Q for a given layer of the device."""
-        Q = self._Q_cache.get(layer, None)
-        if weights is None:
-            weights = self.weights
-        if Q is None:
-            Q = brandt.Q_matrix(self.q, self.C_vectors[layer], weights)
-            self._Q_cache[layer] = Q
-        return Q
 
     def compute_matrices(self, weight_method: str = "half_cotangent") -> None:
         """Calculcates mesh weights, Laplace oeprator, and kernel functions.
@@ -638,25 +611,18 @@ class Device(object):
             sparse=True,
         )
         logger.info("Calculating kernel matrix.")
-        self.q = brandt.q_matrix(points)
-        # Each layer has its own edge vector C, so each layer's kernel matrix Q
-        # will have different diagonals.
-        self.C_vectors = {}
-        for layer_name in self.layers:
-            films = [film for film in self.films_list if film.layer == layer_name]
-            self.C_vectors[layer_name] = sum(
-                brandt.C_vector(points, mask=film.contains_points(points))
-                for film in films
-            )
-        self._Q_cache = {}
+        q = solve.q_matrix(points)
+        C = solve.C_vector(points)
+        self.Q = solve.Q_matrix(q, C, self.weights)
 
     def mutual_inductance_matrix(
         self,
-        hole_polygon_mapping: Dict[str, np.ndarray],
+        hole_polygon_mapping: Optional[Dict[str, np.ndarray]] = None,
         iterations: int = 1,
         units: str = "pH",
         with_units: bool = True,
-    ) -> List[np.ndarray]:
+        all_iterations: bool = False,
+    ) -> Union[np.ndarray, List[np.ndarray]]:
         """Calculates the mutual inductance matrix :math:`\\mathbf{M}` for the Device.
 
         :math:`\\mathbf{M}` is defined such that element :math:`M_{ij}` is the mutual
@@ -676,15 +642,24 @@ class Device(object):
             units: The units in which to report the mutual inductance.
             with_units: Whether to return the mutual inductance as a pint.Quantity
                 with units attached, or a bare np.ndarray.
+            all_iterations: Whether to return mutual inductance matrices for all
+                ``iterations + 1`` solutions, or just the final solution.
 
         Returns:
-            A list of mutual inductance matrices, each with shape
-            ``(n_holes, n_holes)``. The length of the list is ``1`` if the device has
-            a single layer, or ``iterations + 1`` if the device has multiple layers.
+            If all_iterations is False, returns a shape ``(n_holes, n_holes)`` mutual
+            inductance matrix from the final iteration. Otherwise, returns a list of
+            mutual inductance matrices, each with shape ``(n_holes, n_holes)``. The
+            length of the list is ``1`` if the device has a single layer, or
+            ``iterations + 1`` if the device has multiple layers.
         """
-        from .brandt import solve
+        from .solve import solve
 
         holes = self.holes
+        if hole_polygon_mapping is None:
+            from .fluxoid import make_fluxoid_polygons
+
+            hole_polygon_mapping = make_fluxoid_polygons(self)
+
         n_holes = len(hole_polygon_mapping)
         for hole_name, polygon in hole_polygon_mapping.items():
             if hole_name not in holes:
@@ -696,17 +671,23 @@ class Device(object):
                 )
         # The magnitude of this current is not important
         I_circ = self.ureg("1 mA")
-        n_iter = 1 if len(self.layers) == 1 else iterations + 1
+        if all_iterations:
+            n_iter = 1 if len(self.layers) == 1 else iterations + 1
+            solution_slice = slice(None)
+        else:
+            n_iter = 1
+            solution_slice = slice(-1, None)
         mutual_inductance = np.full((n_iter, n_holes, n_holes), np.nan)
         for j, hole_name in enumerate(hole_polygon_mapping):
             solutions = solve(
                 device=self,
                 circulating_currents={hole_name: str(I_circ)},
                 iterations=iterations,
-            )
+            )[solution_slice]
             for n, solution in enumerate(solutions):
                 for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
-                    fluxoid = solution.polygon_fluxoid(polygon)[holes[name].layer]
+                    layer = holes[name].layer
+                    fluxoid = solution.polygon_fluxoid(polygon, layer)[layer]
                     mutual_inductance[n, i, j] = (
                         (sum(fluxoid) / I_circ).to(units).magnitude
                     )
@@ -715,16 +696,22 @@ class Device(object):
         # Return a list to make it clear that we are returning n_iter distinct
         # matrices. You can convert back to an ndarray using
         # np.stack([m for m in mutual_inductance], axis=0).
-        return [m for m in mutual_inductance]
+        result = [m for m in mutual_inductance]
+        if not all_iterations:
+            assert len(result) == 1
+            result = result[0]
+        return result
 
     def plot_polygons(
         self,
         ax: Optional[plt.Axes] = None,
-        grid: bool = False,
+        subplots: bool = False,
         legend: bool = True,
         figsize: Optional[Tuple[float, float]] = None,
+        plot_mesh: bool = False,
+        mesh_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
-    ) -> plt.Axes:
+    ) -> Tuple[plt.Figure, plt.Axes]:
         """Plot all of the device's polygons.
 
         Keyword arguments are passed to ax.plot().
@@ -738,64 +725,59 @@ class Device(object):
         Returns:
             matplotlib axis
         """
-        if ax is None:
-            _, ax = plt.subplots(figsize=figsize)
-        for name, film in self.films.items():
-            ax.plot(*film.points.T, label=name, **kwargs)
-        for name, hole in self.holes.items():
-            ax.plot(*hole.points.T, label=name, **kwargs)
-        for name, region in self.abstract_regions.items():
-            ax.plot(*region.points.T, label=name, **kwargs)
-        ax.set_aspect("equal")
-        ax.grid(grid)
-        if legend:
-            ax.legend(bbox_to_anchor=(1.04, 1), borderaxespad=0)
-        units = self.ureg(self.length_units).units
-        ax.set_xlabel(f"$x$ $[{units:~L}]$")
-        ax.set_ylabel(f"$y$ $[{units:~L}]$")
-        return ax
-
-    def plot_mesh(
-        self,
-        ax: Optional[plt.Axes] = None,
-        edges: bool = True,
-        vertices: bool = False,
-        grid: bool = True,
-        figsize: Optional[Tuple[float, float]] = None,
-        **kwargs,
-    ) -> plt.Axes:
-        """Plots the device's mesh.
-
-        Keyword arguments are passed to ax.triplot() and ignored if edges is False.
-
-        Args:
-            ax: matplotlib axis on which to plot. If None, a new figure is created.
-            edges: Whether to plot the triangle edges.
-            vertices: Whether to plot the triangle vertices.
-            grid: Whether to add grid lines.
-            figsize: matplotlib figsize, only used if ax is None.
-
-        Returns:
-            matplotlib axis
-        """
-        if self.triangles is None:
-            raise RuntimeError(
-                "Mesh does not exist. Run device.make_mesh() to generate the mesh."
+        if len(self.layers_list) > 1 and subplots and ax is not None:
+            raise ValueError(
+                "Axes may not be provided if subplots is True and the device has "
+                "multiple layers."
             )
-        x = self.points[:, 0]
-        y = self.points[:, 1]
         if ax is None:
-            _, ax = plt.subplots(figsize=figsize)
-        if edges:
-            ax.triplot(x, y, self.triangles, **kwargs)
-        if vertices:
-            ax.plot(x, y, "k.")
-        ax.set_aspect("equal")
-        ax.grid(grid)
-        units = self.ureg(self.length_units).units
-        ax.set_xlabel(f"$x$ $[{units:~L}]$")
-        ax.set_ylabel(f"$y$ $[{units:~L}]$")
-        return ax
+            if subplots:
+                from .visualization import auto_grid
+
+                fig, axes = auto_grid(
+                    len(self.layers_list),
+                    max_cols=2,
+                    figsize=figsize,
+                    constrained_layout=True,
+                )
+            else:
+                fig, axes = plt.subplots(figsize=figsize, constrained_layout=True)
+                axes = np.array([axes for _ in self.layers_list])
+        else:
+            subplots = False
+            fig = ax.get_figure()
+            axes = np.array([ax for _ in self.layers_list])
+        polygons_by_layer = defaultdict(list)
+        for polygon in self.polygons.values():
+            polygons_by_layer[polygon.layer].append(polygon)
+        if plot_mesh:
+            if self.triangles is None:
+                raise RuntimeError(
+                    "Mesh does not exist. Run device.make_mesh() to generate the mesh."
+                )
+            x = self.points[:, 0]
+            y = self.points[:, 1]
+            tri = self.triangles
+            mesh_kwargs = mesh_kwargs or {}
+            if subplots:
+                for ax in axes.flat:
+                    ax.triplot(x, y, tri, **mesh_kwargs)
+            else:
+                axes[0].triplot(x, y, tri, **mesh_kwargs)
+        for ax, (layer, polygons) in zip(axes.flat, polygons_by_layer.items()):
+            for polygon in polygons:
+                ax.plot(*polygon.points.T, label=polygon.name, **kwargs)
+            if subplots:
+                ax.set_title(layer)
+            if legend:
+                ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            units = self.ureg(self.length_units).units
+            ax.set_xlabel(f"$x$ $[{units:~L}]$")
+            ax.set_ylabel(f"$y$ $[{units:~L}]$")
+            ax.set_aspect("equal")
+        if not subplots:
+            axes = axes[0]
+        return fig, axes
 
     def to_file(
         self, directory: str, save_mesh: bool = True, compressed: bool = True
