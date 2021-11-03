@@ -176,12 +176,11 @@ def test_invalid_vortex_args(device):
 
 
 @pytest.mark.parametrize("all_iterations", [False, True])
-def test_mutual_inductance_matrix(two_rings, all_iterations):
+def test_mutual_inductance_matrix(two_rings, all_iterations, iterations=3):
     hole_polygon_mapping = {
         "square_hole": geo.square(6, points_per_side=101),
         "round_hole": geo.circle(4, points=301),
     }
-    iterations = 3
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
@@ -216,9 +215,9 @@ def test_mutual_inductance_matrix(two_rings, all_iterations):
     else:
         assert isinstance(M, pint.Quantity)
         assert isinstance(M.magnitude, np.ndarray)
-    assert np.allclose(M, M2, rtol=5e-3)
+    assert np.allclose(M, M2, rtol=1e-2)
     # Check that M is symmetric
-    assert np.isclose(M[0, 1], M[1, 0], rtol=5e-3)
+    assert np.isclose(M[0, 1], M[1, 0], rtol=1e-2)
 
 
 def test_fluxoid_single(device):
