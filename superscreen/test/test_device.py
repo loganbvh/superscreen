@@ -11,7 +11,7 @@ import superscreen as sc
 from superscreen.visualization import non_gui_backend
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def device():
 
     layers = [
@@ -124,28 +124,25 @@ def device_with_mesh():
     return device
 
 
+@pytest.mark.parametrize("subplots", [False, True])
 @pytest.mark.parametrize("legend", [False, True])
-def test_plot_polygons(device, device_with_mesh, legend):
+def test_plot_polygons(device, device_with_mesh, legend, subplots, plot_mesh=True):
     with non_gui_backend():
-        ax = device.plot_polygons(legend=legend)
-        assert isinstance(ax, plt.Axes)
-        plt.close(ax.figure)
+        fig, axes = device.plot_polygons(legend=legend, subplots=subplots)
+        if subplots:
+            assert isinstance(axes, np.ndarray)
+            assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
+        plt.close(fig)
 
-        ax = device_with_mesh.plot_polygons(legend=legend)
-        assert isinstance(ax, plt.Axes)
-        plt.close(ax.figure)
-
-
-@pytest.mark.parametrize("edges", [False, True])
-@pytest.mark.parametrize("vertices", [False, True])
-def test_plot_mesh(device, device_with_mesh, edges, vertices):
-    with non_gui_backend():
         with pytest.raises(RuntimeError):
-            ax = device.plot_mesh(edges=edges, vertices=vertices)
+            _ = device.plot_polygons(
+                legend=legend, subplots=subplots, plot_mesh=plot_mesh
+            )
 
-        ax = device_with_mesh.plot_mesh(edges=edges, vertices=vertices)
-        assert isinstance(ax, plt.Axes)
-        plt.close(ax.figure)
+        fig, axes = device_with_mesh.plot_polygons(
+            legend=legend, subplots=subplots, plot_mesh=plot_mesh
+        )
+        plt.close(fig)
 
 
 @pytest.mark.parametrize(
@@ -212,20 +209,9 @@ def test_copy_arrays(device_with_mesh, dense):
     copied_arrays = device_with_mesh.get_arrays(copy_arrays=True, dense=dense)
 
     for key, val in arrays.items():
-        if key == "C_vectors":
-            for name, arr in val.items():
-                assert arr is not copied_arrays[key][name]
-                if sp.issparse(arr):
-                    assert not dense
-                    assert np.array_equal(
-                        arr.toarray(), copied_arrays[key][name].toarray()
-                    )
-                else:
-                    assert np.array_equal(arr, copied_arrays[key][name])
+        assert val is not copied_arrays[key]
+        if sp.issparse(val):
+            assert not dense
+            assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
         else:
-            assert val is not copied_arrays[key]
-            if sp.issparse(val):
-                assert not dense
-                assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
-            else:
-                assert np.array_equal(val, copied_arrays[key])
+            assert np.array_equal(val, copied_arrays[key])

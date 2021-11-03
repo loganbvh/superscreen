@@ -1,6 +1,11 @@
 from .about import version_dict, version_table
-from .brandt import convert_field, solve, solve_many
+from .solve import convert_field, solve, solve_many
 from .device import Layer, Polygon, Device
+from .fluxoid import (
+    make_fluxoid_polygons,
+    find_fluxoid_solution,
+    find_single_fluxoid_solution,
+)
 from .io import save_solutions, load_solutions, iload_solutions
 from .parameter import Parameter, Constant
 from .solution import Solution, Fluxoid, Vortex

@@ -89,11 +89,9 @@ def C_vector(points: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarra
     a = np.ptp(x[mask]) / 2
     b = np.ptp(y[mask]) / 2
     with np.errstate(divide="ignore"):
-        C = (
-            np.sqrt((a - x) ** (-2) + (b - y) ** (-2))
-            + np.sqrt((a + x) ** (-2) + (b - y) ** (-2))
-            + np.sqrt((a - x) ** (-2) + (b + y) ** (-2))
-            + np.sqrt((a + x) ** (-2) + (b + y) ** (-2))
+        C = sum(
+            np.sqrt((a - p * x) ** (-2) + (b - q * y) ** (-2))
+            for p, q in itertools.product((-1, 1), repeat=2)
         )
     C[np.isinf(C)] = 1e30
     C[~mask] = 0
@@ -136,7 +134,7 @@ def convert_field(
     new_units: Union[str, pint.Unit],
     old_units: Optional[Union[str, pint.Unit]] = None,
     ureg: Optional[pint.UnitRegistry] = None,
-    magnitude: bool = False,
+    with_units: bool = True,
 ) -> Union[pint.Quantity, np.ndarray, float]:
     """Converts a value between different field units, either magnetic field H
     [current] / [length] or flux density B = mu0 * H [mass] / ([curret] [time]^2)).
@@ -151,11 +149,11 @@ def convert_field(
             is not a string with units or a ``pint.Quantity``.
         ureg: The ``pint.UnitRegistry`` to use for conversion. If None is given,
             a new instance is created.
-        magnitude: Whether to return just the magnitude instead of a full ``pint.Quantity``
+        with_units: Whether to return a ``pint.Quantity`` with units attached.
 
     Returns:
         The converted value, either a pint.Quantity (scalar or array with units),
-        or an array or float without units, depending on the ``magnitude`` argument.
+        or an array or float without units, depending on the ``with_units`` argument.
     """
     if ureg is None:
         ureg = pint.UnitRegistry()
@@ -183,7 +181,7 @@ def convert_field(
         # value is B = mu0 * H in units with dimensionality
         # [mass] / ([current] [time]^2) and we want H = B / mu0
         value = (value / ureg("mu0")).to(new_units)
-    if magnitude:
+    if not with_units:
         value = value.magnitude
     return value
 
@@ -221,7 +219,7 @@ def field_conversion_factor(
     return field / ureg(field_units)
 
 
-def brandt_layer(
+def solve_layer(
     *,
     device: "Device",
     layer: str,
@@ -283,7 +281,7 @@ def brandt_layer(
     if sp.issparse(Del2):
         Del2 = Del2.toarray()
 
-    Q = device.Q(layer, weights=weights)
+    Q = device.Q
     points = device.points
     if Lambda is None:
         Lambda = device.layers[layer].Lambda
@@ -375,11 +373,11 @@ def brandt_layer(
 
         for vortex in film_to_vortices[name]:
             # Index of the mesh vertex that is closest to the vortex position:
-            # in the film-specific subarray...
+            # in the film-specific subarray
             j_film = np.argmin(
                 np.sum(np.square(points[ix1d] - [[vortex.x, vortex.y]]), axis=1)
             )
-            # and in the full device mesh.
+            # ... and in the full device mesh.
             j_device = np.argmin(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
@@ -537,7 +535,7 @@ def solve(
     for name, layer in device.layers.items():
         logger.info(f"Calculating {name} response to applied field.")
 
-        g, total_field, screening_field = brandt_layer(
+        g, total_field, screening_field = solve_layer(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
@@ -672,7 +670,7 @@ def solve(
                         f"Calculating {name} response to applied field and "
                         f"screening field from other layers ({i+1}/{iterations})."
                     )
-                    g, total_field, screening_field = brandt_layer(
+                    g, total_field, screening_field = solve_layer(
                         device=device,
                         layer=name,
                         applied_field=new_layer_fields[name],
@@ -774,7 +772,7 @@ def solve_many(
             the results are not automatically saved to disk.
         return_solutions: Whether to return the Solution objects.
         keep_only_final_solution: Whether to keep/save only the Solution from
-            the final iteration of superscreen.brandt.solve for each setup.
+            the final iteration of superscreen.solve.solve for each setup.
         cache_memory_cutoff: If the memory needed for layer-to-layer kernel
             matrices exceeds ``cache_memory_cutoff`` times the current available
             system memory, then the kernel matrices will be cached to disk rather than

@@ -196,17 +196,7 @@ using the following recipe:
 Finite Element Implementation
 -----------------------------
 
-Here we describe the numerical implementation of the model described above.
-
-.. .. _brandt-strategy:
-
-.. .. figure:: /images/brandt.jpg
-..    :scale: 30%
-..    :align: center
-..    :alt: Simulation strategy
-
-..    Schematic of the numerical implementation of Brandt's method.
-
+Here we describe the numerical implementation of the model outlined above.
 
 Discretized model
 =================
@@ -323,9 +313,6 @@ and [Laplacian-SGP-2014]_ the Laplace operator :math:`\mathbf{\nabla}^2` for a m
 defined in terms of two matrices, the mass matrix :math:`\mathbf{M}` and the
 Laplacian matrix :math:`\mathbf{L}`: :math:`\mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}`.
 
-Mass matrix
-***********
-
 The mass matrix gives an effective area to each vertex in the mesh. There are multiple
 ways to construct the mass matrix, but here we use a "lumped" mass matrix, which is diagonal
 with elements :math:`(\mathbf{M})_{ii} = \sum_{t\in\mathcal{N}(i)}\frac{1}{3}\mathrm{area}(t)`,
@@ -340,10 +327,11 @@ above is simply the diagonal of the mass matrix :math:`\mathbf{M}`.
     :align: center
     :width: 30%
 
-.. _weight-matrix:
+The Laplacian matrix :math:`\mathbf{L}` is defined in terms of the weight matrix :math:`\mathbf{W}`:
 
-Weight matrix
-*************
+.. math::
+
+    (\mathbf{L})_{ij} = (\mathbf{W})_{ij} - \delta_{ij}\sum_{\ell}W_{i\ell}.
 
 There are several different methods for constructing the weight matrix
 :math:`\mathbf{W}`:
@@ -384,16 +372,6 @@ There are several different methods for constructing the weight matrix
             \frac{1}{2}\left(\cot\alpha_{ij}+\cot\beta_{ij}\right)&\text{if }i\text{ is adjacent to }j\\
             0&\text{otherwise}
         \end{cases}
-
-
-Laplacian matrix
-****************
-
-The Laplacian matrix :math:`\mathbf{L}` is defined in terms of the weight matrix :math:`\mathbf{w}`:
-
-.. math::
-
-    (\mathbf{L})_{ij} = (\mathbf{w})_{ij} - \delta_{ij}\sum_{\ell}w_{i\ell}.
 
 Finally, the Laplace operator is given by:
 
