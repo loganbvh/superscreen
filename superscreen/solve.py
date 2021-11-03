@@ -364,11 +364,11 @@ def solve_layer(
         g[ix1d] = gf
         if check_inversion:
             # Validate solution
-            errors = (-A @ gf) - h
-            if not np.allclose(errors, 0):
+            hsim = -A @ gf
+            if not np.allclose(hsim, h):
                 logger.warning(
                     f"Unable to solve for stream function in {layer} ({name}), "
-                    f"maximum error {np.abs(errors).max():.3e}."
+                    f"maximum error {np.abs(hsim - h).max():.3e}."
                 )
 
         for vortex in film_to_vortices[name]:
