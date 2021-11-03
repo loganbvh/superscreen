@@ -11,7 +11,7 @@ import superscreen as sc
 from superscreen.visualization import non_gui_backend
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def device():
 
     layers = [

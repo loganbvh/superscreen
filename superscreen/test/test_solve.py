@@ -17,19 +17,19 @@ def device():
     ]
 
     films = [
-        sc.Polygon("ring", layer="layer1", points=sc.geometry.circle(4)),
+        sc.Polygon("ring", layer="layer1", points=geo.circle(4)),
     ]
 
     holes = [
         sc.Polygon(
             "ring_hole",
             layer="layer1",
-            points=sc.geometry.circle(3, center=(0.5, 0.5)),
+            points=geo.circle(3, center=(0.5, 0.5)),
         ),
     ]
 
     abstract_regions = [
-        sc.Polygon("bounding_box", layer="layer1", points=sc.geometry.square(10))
+        sc.Polygon("bounding_box", layer="layer1", points=geo.square(10))
     ]
 
     device = sc.Device(
@@ -41,6 +41,59 @@ def device():
     )
     device.make_mesh(min_triangles=10000, optimesh_steps=200)
 
+    return device
+
+
+@pytest.fixture(scope="module")
+def two_rings():
+    length_units = "um"
+    inner_radius = 2.5
+    outer_radius = 5
+
+    layers = [
+        sc.Layer("layer0", Lambda=1, z0=0),
+        sc.Layer("layer1", Lambda=1, z0=1),
+    ]
+
+    films = [
+        sc.Polygon(
+            "square_ring",
+            layer="layer0",
+            points=geo.square(1.5 * outer_radius, points_per_side=50),
+        ),
+        sc.Polygon(
+            "round_ring", layer="layer1", points=geo.circle(outer_radius, points=200)
+        ),
+    ]
+
+    holes = [
+        sc.Polygon(
+            "square_hole",
+            layer="layer0",
+            points=geo.square(1 * inner_radius, points_per_side=50),
+        ),
+        sc.Polygon(
+            "round_hole", layer="layer1", points=geo.circle(inner_radius, points=100)
+        ),
+    ]
+
+    abstract_regions = [
+        sc.Polygon(
+            "bbox",
+            layer="layer0",
+            points=geo.square(1.25 * 2 * outer_radius, points_per_side=10),
+        )
+    ]
+
+    device = sc.Device(
+        "two_rings",
+        layers=layers,
+        films=films,
+        holes=holes,
+        abstract_regions=abstract_regions,
+        length_units=length_units,
+    )
+    device.make_mesh(min_triangles=8_000)
     return device
 
 
@@ -122,59 +175,6 @@ def test_invalid_vortex_args(device):
         )
 
 
-@pytest.fixture
-def two_rings():
-    length_units = "um"
-    inner_radius = 2.5
-    outer_radius = 5
-
-    layers = [
-        sc.Layer("layer0", Lambda=1, z0=0),
-        sc.Layer("layer1", Lambda=1, z0=1),
-    ]
-
-    films = [
-        sc.Polygon(
-            "square_ring",
-            layer="layer0",
-            points=geo.square(1.5 * outer_radius, points_per_side=50),
-        ),
-        sc.Polygon(
-            "round_ring", layer="layer1", points=geo.circle(outer_radius, points=200)
-        ),
-    ]
-
-    holes = [
-        sc.Polygon(
-            "square_hole",
-            layer="layer0",
-            points=geo.square(1 * inner_radius, points_per_side=50),
-        ),
-        sc.Polygon(
-            "round_hole", layer="layer1", points=geo.circle(inner_radius, points=100)
-        ),
-    ]
-
-    abstract_regions = [
-        sc.Polygon(
-            "bbox",
-            layer="layer0",
-            points=geo.square(1.25 * 2 * outer_radius, points_per_side=10),
-        )
-    ]
-
-    device = sc.Device(
-        "two_rings",
-        layers=layers,
-        films=films,
-        holes=holes,
-        abstract_regions=abstract_regions,
-        length_units=length_units,
-    )
-    device.make_mesh(min_triangles=10_000, optimesh_steps=40)
-    return device
-
-
 @pytest.mark.parametrize("all_iterations", [False, True])
 def test_mutual_inductance_matrix(two_rings, all_iterations):
     hole_polygon_mapping = {
@@ -216,7 +216,43 @@ def test_mutual_inductance_matrix(two_rings, all_iterations):
     else:
         assert isinstance(M, pint.Quantity)
         assert isinstance(M.magnitude, np.ndarray)
-    assert np.allclose(M, M2, rtol=1e-2)
+    assert np.allclose(M, M2, rtol=5e-3)
     # Check that M is symmetric
-    # assert np.abs((M[0, 1] - M[1, 0]) / min(M[0, 1], M[1, 0])) < 1e-3
-    assert np.isclose(M[0, 1], M[1, 0], rtol=1e-3)
+    assert np.isclose(M[0, 1], M[1, 0], rtol=5e-3)
+
+
+def test_fluxoid_single(device):
+
+    from scipy.optimize import RootResults
+
+    solution, result = sc.find_fluxoid_solution(device)
+    assert isinstance(solution, sc.Solution)
+    assert isinstance(result, RootResults)
+    fluxoid = solution.hole_fluxoid(device.holes_list[0].name)
+    assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
+
+
+@pytest.mark.parametrize(
+    "hole_polygon_fluxoid_mapping",
+    [
+        None,
+        {"round_hole": (None, 0), "square_hole": (None, 0)},
+        {"round_hole": (None, None)},
+    ],
+)
+def test_fluxoid_multi(two_rings, hole_polygon_fluxoid_mapping):
+
+    from scipy.optimize import OptimizeResult
+
+    solution, result = sc.find_fluxoid_solution(
+        two_rings,
+        hole_polygon_fluxoid_mapping=hole_polygon_fluxoid_mapping,
+        applied_field=sc.sources.ConstantField(0.1),
+        field_units="mT",
+        current_units="mA",
+    )
+    assert isinstance(solution, sc.Solution)
+    assert isinstance(result, OptimizeResult)
+    for hole_name in two_rings.holes:
+        fluxoid = solution.hole_fluxoid(hole_name)
+        assert np.isclose(sum(fluxoid).to("Phi_0").m, 0, atol=1e-6)
