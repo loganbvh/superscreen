@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Optional, Union, List, Dict, Tuple
 
 import numpy as np
@@ -9,6 +10,9 @@ from .solve import solve
 from .device import Device
 from .geometry import close_curve
 from .solution import Solution
+
+
+logger = logging.getLogger(__name__)
 
 
 def make_fluxoid_polygons(
@@ -159,6 +163,7 @@ def find_fluxoid_solution(
         raise ValueError("find_fluxoid_solution requires one or more holes.")
     if len(hole_polygon_fluxoid_mapping) == 1:
         for hole_name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
+            logger.info("Finding fluxoid solution using root finding...")
             return find_single_fluxoid_solution(
                 device,
                 hole_name=hole_name,
@@ -168,6 +173,7 @@ def find_fluxoid_solution(
                 **solve_kwargs,
             )
 
+    logger.info("Finding fluxoid solution using least-squares minimization...")
     solve_kwargs = solve_kwargs.copy()
     hole_names = list(hole_polygon_fluxoid_mapping)
     solution = None
@@ -178,6 +184,7 @@ def find_fluxoid_solution(
         circulating_currents = solve_kwargs.get("circulating_currents", {})
         for name, current in zip(hole_names, currents):
             circulating_currents[name] = current
+        logger.info(f"Solving device with circulating_currents={circulating_currents}.")
         solve_kwargs["circulating_currents"] = circulating_currents
         solution = solve(device=device, **solve_kwargs)[-1]
         errors = []
@@ -185,11 +192,18 @@ def find_fluxoid_solution(
             total_fluxoid = (
                 sum(solution.hole_fluxoid(name, points=polygon)).to("Phi_0").magnitude
             )
+            logger.info(
+                f"Hole {name}: target = {target_fluxoid:.3e} Phi_0, "
+                f"actual = {total_fluxoid:.3e} Phi_0."
+            )
             errors.append(total_fluxoid - target_fluxoid)
-        return np.sum(np.square(errors))
+        total_cost = np.sum(np.square(errors))
+        logger.info(f"Total cost = {total_cost:.3e} Phi_0 ** 2.")
+        return total_cost
 
     if x0 is None:
         x0 = np.zeros(len(hole_names))
+    minimize_kwargs = minimize_kwargs or {}
 
     result = optimize.minimize(fluxoid_cost, x0, **minimize_kwargs)
     return solution, result
