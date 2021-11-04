@@ -224,6 +224,9 @@ def test_fluxoid_single(device):
 
     from scipy.optimize import RootResults
 
+    with pytest.raises(ValueError):
+        solution, result = sc.find_fluxoid_solution(device, {})
+
     fluxoids = {hole: 0 for hole in device.holes}
     solution, result = sc.find_fluxoid_solution(device, fluxoids)
     assert isinstance(solution, sc.Solution)
