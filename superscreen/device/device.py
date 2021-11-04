@@ -774,15 +774,11 @@ class Device(object):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        # Pickle can't handle a pint.UnitRegistry.
-        del state["ureg"]
         # Use dill for Layer objects because Layer.Lambda could be a Parameter
         state["layers_list"] = dill.dumps(self.layers_list)
         return state
 
     def __setstate__(self, state):
-        # Pickle can't handle a pint.UnitRegistry.
-        state["ureg"] = ureg
         # Use dill for Layer objects because Layer.Lambda could be a Parameter
         state["layers_list"] = dill.loads(state["layers_list"])
         self.__dict__.update(state)
