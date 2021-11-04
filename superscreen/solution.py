@@ -410,7 +410,7 @@ class Solution(object):
         layers: Optional[Union[str, List[str]]] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         interp_method: str = "linear",
-        flux_units: Optional[str] = "Phi_0",
+        units: Optional[str] = "Phi_0",
         with_units: bool = True,
     ) -> Dict[str, Fluxoid]:
         """Computes the :class:`Fluxoid` (flux + supercurrent) for
@@ -439,7 +439,7 @@ class Solution(object):
                 If a single integer N is given, then the grid will be square,
                 shape = (N, N).
             interp_method: Interpolation method to use.
-            flux_units: The desired units for the current density.
+            units: The desired units for the current density.
                 Defaults to :math:`\\Phi_0`.
             with_units: Whether to return values as pint.Quantities with units attached.
 
@@ -453,8 +453,8 @@ class Solution(object):
             layers = list(device.layers)
         if isinstance(layers, str):
             layers = [layers]
-        if flux_units is None:
-            flux_units = f"{self.field_units} * {self.device.length_units} ** 2"
+        if units is None:
+            units = f"{self.field_units} * {self.device.length_units} ** 2"
         polygon = Polygon(
             "__polygon",
             layer=layers[0],
@@ -494,7 +494,7 @@ class Solution(object):
                 device.abstract_regions_list = old_regions + [polygon]
                 flux_part = self.polygon_flux(
                     polygons=polygon.name,
-                    units=flux_units,
+                    units=units,
                     with_units=True,
                 )[polygon.name]
             finally:
@@ -512,7 +512,7 @@ class Solution(object):
                 Lambda_poly * np.sum(J_poly * np.diff(points, axis=0), axis=1)
             )
             int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
-            supercurrent_part = (ureg("mu_0") * int_J).to(flux_units)
+            supercurrent_part = (ureg("mu_0") * int_J).to(units)
             if not with_units:
                 flux_part = flux_part.magnitude
                 supercurrent_part = supercurrent_part.magnitude
@@ -525,7 +525,7 @@ class Solution(object):
         points: Optional[np.ndarray] = None,
         grid_shape: Union[int, Tuple[int, int]] = (200, 200),
         interp_method: str = "linear",
-        flux_units: Optional[str] = "Phi_0",
+        units: Optional[str] = "Phi_0",
         with_units: bool = True,
     ) -> Fluxoid:
         """Calculcates the fluxoid for a polygon enclosing the specified hole.
@@ -539,7 +539,7 @@ class Solution(object):
                 If a single integer N is given, then the grid will be square,
                 shape = (N, N).
             interp_method: Interpolation method to use.
-            flux_units: The desired units for the current density.
+            units: The desired units for the current density.
                 Defaults to :math:`\\Phi_0`.
             with_units: Whether to return values as pint.Quantities with units attached.
 
@@ -560,7 +560,7 @@ class Solution(object):
             hole.layer,
             grid_shape=grid_shape,
             interp_method=interp_method,
-            flux_units=flux_units,
+            units=units,
             with_units=with_units,
         )
         return fluxoids[hole.layer]
