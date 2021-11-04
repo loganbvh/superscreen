@@ -114,9 +114,7 @@ def find_single_fluxoid_solution(
 
 def find_fluxoid_solution(
     device: Device,
-    hole_polygon_fluxoid_mapping: Optional[
-        Dict[str, Tuple[Optional[np.ndarray], Optional[float]]]
-    ] = None,
+    fluxoids: Dict[str, float],
     x0: Optional[np.ndarray] = None,
     minimize_kwargs: Optional[Dict[str, Any]] = None,
     **solve_kwargs,
@@ -126,11 +124,9 @@ def find_fluxoid_solution(
 
     Args:
         device: The Device for which to find the given fluxoid solution.
-        hole_polygon_fluxoid_mapping: A dict of
-            ``{hole_name: (polygon_points, fluxoid_number)}`` specifying the desired
-            fluxoid state. If ``polygon_points`` for any ``hole_name``, the polygon
-            will be generated using :func:`make_fluxoid_polygons`. ``fluxoid_number``
-            defaults to 0.
+        fluxoids: A dict of ``{hole_name: fluxoid_value}``, where ``fluxoid_value`` is
+            in units of :math:`\\Phi_0`. The fluxoid for any holes not in this dict
+            will not be constrained.
         x0: Initial guess for the circulating currents.
         minimize_kwargs: A dict of keyword arguments passed to
             :func:`scipy.optimize.minimize` (or to :func:`scipy.optimize.root_scalar`
@@ -142,26 +138,14 @@ def find_fluxoid_solution(
         The optimized :class:`superscreen.solution.Solution` and the minimizer
         results object.
     """
-    if hole_polygon_fluxoid_mapping is None:
-        hole_polygon_fluxoid_mapping = {}
-        for name, poly in make_fluxoid_polygons(device).items():
-            hole_polygon_fluxoid_mapping[name] = (poly, 0)
-    else:
-        for name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
-            if polygon is None:
-                polygon = make_fluxoid_polygons(device, holes=name)[name]
-            if fluxoid_n is None:
-                fluxoid_n = 0
-            hole_polygon_fluxoid_mapping[name] = (polygon, fluxoid_n)
-    for name in device.holes:
-        # Constrain all unspecified holes to have zero fluxoid.
-        if name not in hole_polygon_fluxoid_mapping:
-            polygon = make_fluxoid_polygons(device, holes=name)[name]
-            fluxoid_n = 0
-            hole_polygon_fluxoid_mapping[name] = (polygon, fluxoid_n)
-
-    if len(hole_polygon_fluxoid_mapping) < 1:
+    if len(fluxoids) < 1:
         raise ValueError("find_fluxoid_solution requires one or more holes.")
+
+    hole_polygon_fluxoid_mapping = {}
+    for hole, fluxoid_n in fluxoids.items():
+        polygon = polygon = make_fluxoid_polygons(device, holes=hole)[hole]
+        hole_polygon_fluxoid_mapping[hole] = (polygon, fluxoid_n)
+
     if len(hole_polygon_fluxoid_mapping) == 1:
         for hole_name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
             logger.info("Finding fluxoid solution using root finding...")

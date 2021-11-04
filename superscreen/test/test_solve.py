@@ -224,28 +224,22 @@ def test_fluxoid_single(device):
 
     from scipy.optimize import RootResults
 
-    solution, result = sc.find_fluxoid_solution(device)
+    fluxoids = {hole: 0 for hole in device.holes}
+    solution, result = sc.find_fluxoid_solution(device, fluxoids)
     assert isinstance(solution, sc.Solution)
     assert isinstance(result, RootResults)
     fluxoid = solution.hole_fluxoid(device.holes_list[0].name)
     assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
 
 
-@pytest.mark.parametrize(
-    "hole_polygon_fluxoid_mapping",
-    [
-        None,
-        {"round_hole": (None, 0), "square_hole": (None, 0)},
-        {"round_hole": (None, None)},
-    ],
-)
-def test_fluxoid_multi(two_rings, hole_polygon_fluxoid_mapping):
+def test_fluxoid_multi(two_rings):
 
     from scipy.optimize import OptimizeResult
 
+    fluxoids = {hole: 0 for hole in two_rings.holes}
     solution, result = sc.find_fluxoid_solution(
         two_rings,
-        hole_polygon_fluxoid_mapping=hole_polygon_fluxoid_mapping,
+        fluxoids,
         applied_field=sc.sources.ConstantField(0.1),
         field_units="mT",
         current_units="mA",
@@ -254,4 +248,8 @@ def test_fluxoid_multi(two_rings, hole_polygon_fluxoid_mapping):
     assert isinstance(result, OptimizeResult)
     for hole_name in two_rings.holes:
         fluxoid = solution.hole_fluxoid(hole_name)
-        assert np.isclose(sum(fluxoid).to("Phi_0").m, 0, atol=1e-6)
+        assert np.isclose(
+            sum(fluxoid).to("Phi_0").m,
+            fluxoids[hole_name],
+            atol=1e-6,
+        )
