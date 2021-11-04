@@ -20,19 +20,19 @@ Devices
 Device
 ======
 
-.. autoclass:: superscreen.device.Device
+.. autoclass:: superscreen.device.device.Device
     :members:
 
 Layer
 =====
 
-.. autoclass:: superscreen.device.Layer
+.. autoclass:: superscreen.device.components.Layer
     :members:
 
 Polygon
 =======
 
-.. autoclass:: superscreen.device.Polygon
+.. autoclass:: superscreen.device.components.Polygon
     :members:
 
 Parameters
