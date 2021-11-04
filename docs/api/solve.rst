@@ -13,6 +13,8 @@ of Brandt's method, as described :ref:`here <background>`.
 Solve
 -----
 
+.. autofunction:: superscreen.solve.solve_layer
+
 .. autofunction:: superscreen.solve.solve
 
 Solve Many
@@ -59,8 +61,6 @@ Supporting Functions
 
 Brandt Core
 ===========
-
-.. autofunction:: superscreen.solve.solve_layer
 
 .. autofunction:: superscreen.solve.q_matrix
 
