@@ -328,10 +328,10 @@ def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
 @pytest.mark.parametrize("layers", ["layer0", ["layer0"]])
 @pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("flux_units", ["Phi_0", None])
+@pytest.mark.parametrize("units", ["Phi_0", None])
 def test_fluxoid_simply_connected(
     solution1,
-    flux_units,
+    units,
     with_units,
     layers,
     center,
@@ -356,11 +356,11 @@ def test_fluxoid_simply_connected(
         fluxoid_dict = solution1.polygon_fluxoid(
             polygon_points=coords,
             layers=layers,
-            flux_units=flux_units,
+            units=units,
             with_units=with_units,
         )
-    if flux_units is None:
-        flux_units = f"{solution1.field_units} * {solution1.device.length_units} ** 2"
+    if units is None:
+        units = f"{solution1.field_units} * {solution1.device.length_units} ** 2"
 
     if center == (-4, 0):
         return
@@ -382,7 +382,7 @@ def test_fluxoid_simply_connected(
             if vortex.layer == name:
                 if sc.fem.in_polygon(coords, [vortex.x, vortex.y]):
                     total_vortex_flux += (
-                        (vortex.nPhi0 * ureg("Phi_0")).to(flux_units).magnitude
+                        (vortex.nPhi0 * ureg("Phi_0")).to(units).magnitude
                     )
         if total_vortex_flux:
             # There are vortices in the region.
