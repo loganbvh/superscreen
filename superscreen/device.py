@@ -11,9 +11,11 @@ from pint import UnitRegistry
 import matplotlib.pyplot as plt
 from matplotlib import path
 import scipy.sparse as sp
-from scipy.spatial import ConvexHull
+from scipy import spatial
+from scipy import interpolate
 from meshpy import triangle
 import optimesh
+import pyclipper
 
 from . import solve
 from . import fem
@@ -215,6 +217,65 @@ class Polygon(object):
             return np.where(boundary)[0]
         return boundary
 
+    def offset_points(
+        self,
+        delta: float,
+        join_type: str = "square",
+        miter_limit: float = 2.0,
+        as_polygon: bool = False,
+    ) -> Union[np.ndarray, "Polygon"]:
+        """Returns polygon points or a Polygon object with vertices offset from
+        ``self.points`` by a distance ``delta``. If ``delta > 0`` this "inflates"
+        the polygon, and if ``delta < 0`` this shrinks the polygon.
+
+        Args:
+            delta: The amount by which to offset the polygon points, in units of
+                ``self.length_units``.
+            join_type: The join type to use in generating the offset points. See the
+                `Clipper documentation <http://www.angusj.com/delphi/clipper/
+                documentation/ Docs/Units/ClipperLib/Types/JoinType.htm>`_
+                for more details.
+            miter_limit: The MiterLimit to use if ``join_type == "miter"``. See the
+                `Clipper documentation <http://www.angusj.com/delphi/clipper/
+                documentation/Docs/Units/ClipperLib/Classes/ClipperOffset/Properties/
+                MiterLimit.htm>`_ for more details.
+            as_polygon: Whether to return a new Polygon instance or just an array
+                of vertices.
+
+        Returns:
+            A new :class:`superscreen.device.Polygon` instance with the
+            offset polygon vertices if ``as_polygon`` is True. Otherwise returns
+            a shape ``(m, 2)`` array of offset polygon vertices.
+        """
+        jt = {
+            "square": pyclipper.JT_SQUARE,
+            "miter": pyclipper.JT_MITER,
+            "round": pyclipper.JT_ROUND,
+        }[join_type.lower()]
+        pco = pyclipper.PyclipperOffset()
+        if jt == pyclipper.JT_MITER:
+            pco.MiterLimit = miter_limit
+        pco.AddPath(
+            pyclipper.scale_to_clipper(self.points),
+            jt,
+            pyclipper.ET_CLOSEDPOLYGON,
+        )
+        solution = pco.Execute(pyclipper.scale_to_clipper(delta))
+        points = np.array(pyclipper.scale_from_clipper(solution)).squeeze()
+        points = close_curve(points)
+        if points.shape[0] < self.points.shape[0]:
+            tck, _ = interpolate.splprep(points.T, k=1, s=0)
+            x, y = interpolate.splev(np.linspace(0, 1, self.points.shape[0]), tck)
+            points = close_curve(np.stack([x, y], axis=1))
+        if not as_polygon:
+            return points
+        return Polygon(
+            f"{self.name} ({delta:+.3f})",
+            layer=self.layer,
+            points=points,
+            mesh=self.mesh,
+        )
+
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}("{self.name}", layer="{self.layer}", '
@@ -234,7 +295,7 @@ class Polygon(object):
             and np.allclose(self.points, other.points)
         )
 
-    def copy(self):
+    def copy(self) -> "Polygon":
         return deepcopy(self)
 
 
@@ -518,7 +579,7 @@ class Device(object):
         logger.info("Generating mesh...")
         # Mesh the entire convex hull of poly_points
         poly_points = self.poly_points
-        hull = ConvexHull(poly_points)
+        hull = spatial.ConvexHull(poly_points)
         mesh_info = triangle.MeshInfo()
         mesh_info.set_points(poly_points)
         mesh_info.set_facets(hull.simplices)

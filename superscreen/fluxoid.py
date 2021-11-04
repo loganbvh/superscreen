@@ -18,18 +18,18 @@ logger = logging.getLogger(__name__)
 def make_fluxoid_polygons(
     device: Device,
     holes: Optional[Union[List[str], str]] = None,
+    join_type: str = "square",
     interp_points: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """Generates polygons enclosing the given holes to calculate the fluxoid.
-
-    Note that this function may fail for non-convex holes.
 
     Args:
         device: The Device for which to generate polygons.
         holes: Name(s) of the hole(s) in the device for which to generate polygons.
             Defaults to all holes in the device.
+        join_type: See :meth:`superscreen.device.Device.offset_polygon`.
         interp_points: If provided, the resulting polygons will be interpolated to
-            ``inter_points`` vertices.
+            ``interp_points`` vertices.
 
     Returns:
         A dict of ``{hole_name: fluxoid_polygon}``.
@@ -43,20 +43,19 @@ def make_fluxoid_polygons(
     polygons = {}
     for name in holes:
         hole = device_holes[name]
-        points = hole.points
-        center = points.mean(axis=0)
-        other_polygons = [
-            poly
+        other_points = [
+            poly.points
             for poly in device_polygons.values()
             if poly.layer == hole.layer and poly.name != name
         ]
-        other_points = np.concatenate([poly.points for poly in other_polygons])
+        other_points = np.concatenate(other_points)
         min_dist = spatial.distance.cdist(hole.points, other_points).min()
-        margin = min_dist / max(hole.extents)
-        new_points = (1 + margin) * (points - center) + center
+        if join_type.lower() == "miter":
+            delta = min_dist / 2.5
+        else:
+            delta = min_dist / 2
+        new_points = close_curve(hole.offset_points(delta, join_type=join_type))
         if interp_points:
-            _, ix = np.unique(new_points, axis=0, return_index=True)
-            new_points = new_points[np.sort(ix)]
             tck, _ = interpolate.splprep(new_points.T, k=1, s=0)
             x, y = interpolate.splev(np.linspace(0, 1, interp_points), tck)
             new_points = close_curve(np.stack([x, y], axis=1))
@@ -88,7 +87,8 @@ def find_single_fluxoid_solution(
             :func:`superscreen.solve.solve`.
 
     Returns:
-        The optimized :class:`superscreen.Solution` and the minimizer results object.
+        The optimized :class:`superscreen.solution.Solution` and the minimizer
+        results object.
     """
     if minimize_kwargs is None:
         minimize_kwargs = dict(x0=-1, x1=1)
@@ -114,9 +114,7 @@ def find_single_fluxoid_solution(
 
 def find_fluxoid_solution(
     device: Device,
-    hole_polygon_fluxoid_mapping: Optional[
-        Dict[str, Tuple[Optional[np.ndarray], Optional[float]]]
-    ] = None,
+    fluxoids: Dict[str, float],
     x0: Optional[np.ndarray] = None,
     minimize_kwargs: Optional[Dict[str, Any]] = None,
     **solve_kwargs,
@@ -126,11 +124,9 @@ def find_fluxoid_solution(
 
     Args:
         device: The Device for which to find the given fluxoid solution.
-        hole_polygon_fluxoid_mapping: A dict of
-            ``{hole_name: (polygon_points, fluxoid_number)}`` specifying the desired
-            fluxoid state. If ``polygon_points`` for any ``hole_name``, the polygon
-            will be generated using :func:`make_fluxoid_polygons`. ``fluxoid_number``
-            defaults to 0.
+        fluxoids: A dict of ``{hole_name: fluxoid_value}``, where ``fluxoid_value`` is
+            in units of :math:`\\Phi_0`. The fluxoid for any holes not in this dict
+            will not be constrained.
         x0: Initial guess for the circulating currents.
         minimize_kwargs: A dict of keyword arguments passed to
             :func:`scipy.optimize.minimize` (or to :func:`scipy.optimize.root_scalar`
@@ -139,28 +135,17 @@ def find_fluxoid_solution(
             :func:`superscreen.solve.solve`.
 
     Returns:
-        The optimized :class:`superscreen.Solution` and the minimizer results object.
+        The optimized :class:`superscreen.solution.Solution` and the minimizer
+        results object.
     """
-    if hole_polygon_fluxoid_mapping is None:
-        hole_polygon_fluxoid_mapping = {}
-        for name, poly in make_fluxoid_polygons(device).items():
-            hole_polygon_fluxoid_mapping[name] = (poly, 0)
-    else:
-        for name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
-            if polygon is None:
-                polygon = make_fluxoid_polygons(device, holes=name)[name]
-            if fluxoid_n is None:
-                fluxoid_n = 0
-            hole_polygon_fluxoid_mapping[name] = (polygon, fluxoid_n)
-    for name in device.holes:
-        # Constrain all unspecified holes to have zero fluxoid.
-        if name not in hole_polygon_fluxoid_mapping:
-            polygon = make_fluxoid_polygons(device, holes=name)[name]
-            fluxoid_n = 0
-            hole_polygon_fluxoid_mapping[name] = (polygon, fluxoid_n)
-
-    if len(hole_polygon_fluxoid_mapping) < 1:
+    if len(fluxoids) < 1:
         raise ValueError("find_fluxoid_solution requires one or more holes.")
+
+    hole_polygon_fluxoid_mapping = {}
+    for hole, fluxoid_n in fluxoids.items():
+        polygon = polygon = make_fluxoid_polygons(device, holes=hole)[hole]
+        hole_polygon_fluxoid_mapping[hole] = (polygon, fluxoid_n)
+
     if len(hole_polygon_fluxoid_mapping) == 1:
         for hole_name, (polygon, fluxoid_n) in hole_polygon_fluxoid_mapping.items():
             logger.info("Finding fluxoid solution using root finding...")

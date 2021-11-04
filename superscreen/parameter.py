@@ -5,8 +5,6 @@ from typing import Callable, Union, Optional
 import dill
 import numpy as np
 
-Numeric = Union[int, float, np.ndarray]
-
 
 class _FakeArgSpec(object):
     def __init__(
@@ -76,9 +74,9 @@ class Parameter(object):
         func: A callable/function that actually calculates the parameter's value.
             The function must take x, y (and optionally z) as the first and only
             positional arguments, and all other arguments must be keyword arguments.
-            Therefore func should have a signature like ``func(x, y, z, a=1, b=2, c=True)``,
-            ``func(x, y, *, a, b, c)``, ``func(x, y, z, *, a, b, c)``,
-            or ``func(x, y, z, *, a, b=None, c=3)``.
+            Therefore func should have a signature like
+            ``func(x, y, z, a=1, b=2, c=True)``, ``func(x, y, *, a, b, c)``,
+            ``func(x, y, z, *, a, b, c)``, or ``func(x, y, z, *, a, b=None, c=3)``.
         kwargs: Keyword arguments for func.
     """
 
@@ -116,14 +114,18 @@ class Parameter(object):
 
     def __call__(
         self,
-        x: Numeric,
-        y: Numeric,
-        z: Optional[Numeric] = None,
-    ) -> Numeric:
+        x: Union[int, float, np.ndarray],
+        y: Union[int, float, np.ndarray],
+        z: Optional[Union[int, float, np.ndarray]] = None,
+    ) -> Union[int, float, np.ndarray]:
         kwargs = self.kwargs.copy()
+        x, y = np.atleast_1d(x, y)
         if z is not None:
-            kwargs["z"] = z
-        return self.func(x, y, **kwargs)
+            kwargs["z"] = np.atleast_1d(z)
+        result = self.func(x, y, **kwargs).squeeze()
+        if result.ndim == 0:
+            result = result.item()
+        return result
 
     def _get_argspec(self) -> _FakeArgSpec:
         kwargs, kwarg_values = list(zip(*self.kwargs.items()))
@@ -251,10 +253,10 @@ class CompositeParameter(Parameter):
 
     def __call__(
         self,
-        x: Numeric,
-        y: Numeric,
-        z: Optional[Numeric] = None,
-    ) -> Numeric:
+        x: Union[int, float, np.ndarray],
+        y: Union[int, float, np.ndarray],
+        z: Optional[Union[int, float, np.ndarray]] = None,
+    ) -> Union[int, float, np.ndarray]:
         if isinstance(self.left, (int, float)):
             left_val = self.left
         else:

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class Vortex(NamedTuple):
     """A vortex located at position ``(x, y)`` in ``layer`` containing
-    a total flux ``nPhi0`` in units of the flux quantum ``Phi_0``.
+    a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
     """
 
     x: float
@@ -439,7 +439,8 @@ class Solution(object):
                 If a single integer N is given, then the grid will be square,
                 shape = (N, N).
             interp_method: Interpolation method to use.
-            flux_units: The desired units for the current density. Defaults to ``Phi_0``.
+            flux_units: The desired units for the current density.
+                Defaults to :math:`\\Phi_0`.
             with_units: Whether to return values as pint.Quantities with units attached.
 
         Returns:
@@ -538,7 +539,8 @@ class Solution(object):
                 If a single integer N is given, then the grid will be square,
                 shape = (N, N).
             interp_method: Interpolation method to use.
-            flux_units: The desired units for the current density. Defaults to ``Phi_0``.
+            flux_units: The desired units for the current density.
+                Defaults to :math:`\\Phi_0`.
             with_units: Whether to return values as pint.Quantities with units attached.
 
         Returns:

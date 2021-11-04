@@ -1,4 +1,5 @@
 from typing import Optional, Union
+import warnings
 
 import numpy as np
 import scipy.linalg as la
@@ -307,12 +308,14 @@ def laplace_operator(
     if isinstance(masses, np.ndarray):
         masses = sp.diags(masses, format="csc")
     L = calculate_weights(points, triangles, weight_method, sparse=True)
-    L.setdiag(0)
-    w_sum = np.atleast_2d(L.sum(axis=1))
-    L.setdiag(-w_sum)
-    L = L.tocsr()
-    # * is matrix multiplication for sparse matrices
-    Del2 = (sp.linalg.inv(masses) * L).tocsr()
+    with warnings.catch_warnings():
+        # scipy.sparse throws a warning here
+        warnings.filterwarnings("ignore", message="Changing the sparsity structure")
+        L.setdiag(0)
+        w_sum = np.atleast_2d(L.sum(axis=1))
+        L.setdiag(-w_sum)
+        L = L.tocsr()
+    Del2 = (sp.linalg.inv(masses) @ L).tocsr()
     if not sparse:
         Del2 = Del2.toarray()
     return Del2
