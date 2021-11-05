@@ -78,6 +78,7 @@ class Solution(object):
         device: Device,
         streams: Dict[str, np.ndarray],
         fields: Dict[str, np.ndarray],
+        screening_fields: Dict[str, np.ndarray],
         applied_field: Callable,
         field_units: str,
         current_units: str,
@@ -91,7 +92,7 @@ class Solution(object):
         self.streams = streams
         self.fields = fields
         self.applied_field = applied_field
-        self._screening_fields = None
+        self.screening_fields = screening_fields
         self.circulating_currents = circulating_currents or {}
         self.vortices = vortices or []
         # Make field_units and current_units "read-only" attributes.
@@ -126,29 +127,6 @@ class Solution(object):
     def version_info(self) -> Dict[str, str]:
         """A dictionary of dependency versions."""
         return self._version_info
-
-    @property
-    def screening_fields(self) -> Dict[str, np.ndarray]:
-        """A dict of ``{layer_name: screening_field}`` in units
-        of ``self.field_units``.
-        """
-        from .solve import field_conversion_factor
-
-        field_conversion = field_conversion_factor(
-            self.field_units,
-            self.current_units,
-            length_units=self.device.length_units,
-            ureg=self.device.ureg,
-        )
-        if self._screening_fields is None:
-            self._screening_fields = {}
-            for layer, g in self.streams.items():
-                Q = self.device.Q
-                weights = self.device.weights
-                screening_field = Q @ (weights * g)
-                screening_field = screening_field / field_conversion.magnitude
-                self.screening_fields[layer] = screening_field
-        return self._screening_fields
 
     def grid_data(
         self,
@@ -753,6 +731,7 @@ class Solution(object):
                 os.path.join(directory, path),
                 streams=self.streams[layer],
                 fields=self.fields[layer],
+                screening_fields=self.screening_fields[layer],
             )
             array_paths.append(path)
 
@@ -814,12 +793,14 @@ class Solution(object):
         # Load arrays
         streams = {}
         fields = {}
+        screening_fields = {}
         array_paths = info.pop("arrays")
         for path in array_paths:
             layer = path.replace("_arrays.npz", "")
             with np.load(os.path.join(directory, path)) as arrays:
                 streams[layer] = arrays["streams"]
                 fields[layer] = arrays["fields"]
+                screening_fields[layer] = arrays["screening_fields"]
 
         # Load applied field function
         with open(os.path.join(directory, info.pop("applied_field")), "rb") as f:
@@ -834,6 +815,7 @@ class Solution(object):
             device=device,
             streams=streams,
             fields=fields,
+            screening_fields=screening_fields,
             applied_field=applied_field,
             vortices=vortices,
             **info,

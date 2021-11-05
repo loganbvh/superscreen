@@ -225,11 +225,11 @@ class Device(object):
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
         for name in ("Del2",):
-            valid_types[name] = (valid_types[name], sp.spmatrix)
+            valid_types[name] = valid_types[name] + (sp.spmatrix,)
         for name, array in arrays.items():
             if name not in self.ARRAY_NAMES:
                 raise ValueError(f"Unexpected array name: {name}.")
-            if not isinstance(array, valid_types[name]):
+            if array is not None and not isinstance(array, valid_types[name]):
                 raise TypeError(
                     f"Expected type in {valid_types[name]} for array '{name}', "
                     f"but got {type(array)}."
@@ -633,22 +633,11 @@ class Device(object):
         if save_mesh:
             # Serialize mesh, if it exists.
             save_npz = np.savez_compressed if compressed else np.savez
-            data = {}
             if self.points is not None:
-                data["points"] = self.points
-                data["triangles"] = self.triangles
-            if self.weights is not None:
-                data["weights"] = self.weights
-            if self.Q is not None:
-                data["Q"] = self.Q
-            if self.Del2 is not None and not sp.issparse(self.Del2):
-                data["laplace"] = self.Del2
-            save_npz(os.path.join(directory, "mesh.npz"), **data)
-            if self.Del2 is not None and sp.issparse(self.Del2):
-                sp.save_npz(
-                    os.path.join(directory, "laplace.npz"),
-                    self.Del2,
-                    compressed=compressed,
+                save_npz(
+                    os.path.join(directory, "mesh.npz"),
+                    points=self.points,
+                    triangles=self.triangles,
                 )
 
     @classmethod
@@ -722,14 +711,6 @@ class Device(object):
             with np.load(os.path.join(directory, "mesh.npz")) as npz:
                 device.points = npz["points"]
                 device.triangles = npz["triangles"]
-                if "weights" in npz:
-                    device.weights = npz["weights"]
-                if "Q" in npz:
-                    device.Q = npz["Q"]
-                if "laplace" in npz:
-                    device.Del2 = npz["laplace"]
-        if "laplace.npz" in os.listdir(directory):
-            device.Del2 = sp.load_npz(os.path.join(directory, "laplace.npz"))
 
         if compute_matrices and device.Del2 is None:
             device.compute_matrices()
