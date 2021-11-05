@@ -633,15 +633,26 @@ class Device(object):
         if save_mesh:
             # Serialize mesh, if it exists.
             save_npz = np.savez_compressed if compressed else np.savez
+            data = {}
             if self.points is not None:
-                save_npz(
-                    os.path.join(directory, "mesh.npz"),
-                    points=self.points,
-                    triangles=self.triangles,
+                data["points"] = self.points
+                data["triangles"] = self.triangles
+            if self.weights is not None:
+                data["weights"] = self.weights
+            if self.Q is not None:
+                data["Q"] = self.Q
+            if self.Del2 is not None and not sp.issparse(self.Del2):
+                data["laplace"] = self.Del2
+            save_npz(os.path.join(directory, "mesh.npz"), **data)
+            if self.Del2 is not None and sp.issparse(self.Del2):
+                sp.save_npz(
+                    os.path.join(directory, "laplace.npz"),
+                    self.Del2,
+                    compressed=compressed,
                 )
 
     @classmethod
-    def from_file(cls, directory: str, compute_matrices: bool = True) -> "Device":
+    def from_file(cls, directory: str, compute_matrices: bool = False) -> "Device":
         """Creates a new Device from one serialized to disk.
 
         Args:
@@ -708,13 +719,20 @@ class Device(object):
 
         # Load the mesh if it exists
         if "mesh.npz" in os.listdir(directory):
-            with np.load(os.path.join(directory, "mesh.npz")) as mesh:
-                points = mesh["points"]
-                triangles = mesh["triangles"]
-            device.points = points
-            device.triangles = triangles
-            if compute_matrices:
-                device.compute_matrices()
+            with np.load(os.path.join(directory, "mesh.npz")) as npz:
+                device.points = npz["points"]
+                device.triangles = npz["triangles"]
+                if "weights" in npz:
+                    device.weights = npz["weights"]
+                if "Q" in npz:
+                    device.Q = npz["Q"]
+                if "laplace" in npz:
+                    device.Del2 = npz["laplace"]
+        if "laplace.npz" in os.listdir(directory):
+            device.Del2 = sp.load_npz(os.path.join(directory, "laplace.npz"))
+
+        if compute_matrices and device.Del2 is None:
+            device.compute_matrices()
 
         return device
 
