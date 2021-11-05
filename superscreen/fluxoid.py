@@ -114,6 +114,7 @@ def find_single_fluxoid_solution(
 
 def find_fluxoid_solution(
     device: Device,
+    *,
     fluxoids: Dict[str, float],
     x0: Optional[np.ndarray] = None,
     minimize_kwargs: Optional[Dict[str, Any]] = None,

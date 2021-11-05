@@ -225,10 +225,10 @@ def test_fluxoid_single(device):
     from scipy.optimize import RootResults
 
     with pytest.raises(ValueError):
-        solution, result = sc.find_fluxoid_solution(device, {})
+        solution, result = sc.find_fluxoid_solution(device, fluxoids=dict())
 
     fluxoids = {hole: 0 for hole in device.holes}
-    solution, result = sc.find_fluxoid_solution(device, fluxoids)
+    solution, result = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
     assert isinstance(solution, sc.Solution)
     assert isinstance(result, RootResults)
     fluxoid = solution.hole_fluxoid(device.holes_list[0].name)
@@ -242,7 +242,7 @@ def test_fluxoid_multi(two_rings):
     fluxoids = {hole: 0 for hole in two_rings.holes}
     solution, result = sc.find_fluxoid_solution(
         two_rings,
-        fluxoids,
+        fluxoids=fluxoids,
         applied_field=sc.sources.ConstantField(0.1),
         field_units="mT",
         current_units="mA",

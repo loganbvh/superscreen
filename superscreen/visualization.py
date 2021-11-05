@@ -183,7 +183,7 @@ def cross_section(
     dataset_coords: np.ndarray,
     dataset_values: np.ndarray,
     cross_section_coords: Union[np.ndarray, Sequence[np.ndarray]],
-    interp_method: str = "cubic",
+    interp_method: str = "linear",
 ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
     """Takes a cross-section of the specified dataset values along
     a path given by the given dataset coordinates.

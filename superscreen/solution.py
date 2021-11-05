@@ -87,7 +87,7 @@ class Solution(object):
         vortices: Optional[List[Vortex]] = None,
         solver: str = "superscreen.solve",
     ):
-        self.device = device
+        self.device = device.copy(with_arrays=True, copy_arrays=False)
         self.streams = streams
         self.fields = fields
         self.applied_field = applied_field
