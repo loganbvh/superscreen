@@ -100,7 +100,10 @@ def test_solution_equals(solution1, solution2):
     assert solution1 != 0
 
 
-@pytest.mark.parametrize("dataset", ["streams", "fields", "screening_fields"])
+@pytest.mark.parametrize(
+    "dataset",
+    ["streams", "fields", "screening_fields", "current_density"]
+)
 @pytest.mark.parametrize("with_units", [False, True])
 def test_grid_data(solution1, dataset, with_units):
 
@@ -134,11 +137,20 @@ def test_grid_data(solution1, dataset, with_units):
             assert isinstance(array.magnitude, np.ndarray)
             if dataset == "streams":
                 assert array.units == solution1.device.ureg(solution1.current_units)
+            elif dataset == "current_density":
+                device = solution1.device
+                current_units = device.ureg(solution1.current_units)
+                length_units = device.ureg(device.length_units)
+                assert array.units == current_units / length_units
             else:
                 assert array.units == solution1.device.ureg(solution1.field_units)
         else:
             assert isinstance(array, np.ndarray)
-        assert xgrid.shape == ygrid.shape == array.shape
+        if dataset == "current_density":
+            assert xgrid.shape == ygrid.shape
+            assert array.shape == (2, ) + xgrid.shape
+        else:
+            assert xgrid.shape == ygrid.shape == array.shape
 
 
 @pytest.mark.parametrize("units", [None, "mA / um"])

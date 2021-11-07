@@ -64,6 +64,7 @@ class Solution(object):
         device: The ``Device`` that was solved
         streams: A dict of ``{layer_name: stream_function}``
         fields: A dict of ``{layer_name: total_field}``
+        screening_fields: A dict of ``{layer_name: screening_field}``
         applied_field: The function defining the applied field
         field_units: Units of the applied field
         current_units: Units used for current quantities.
@@ -144,7 +145,7 @@ class Solution(object):
 
         Args:
             dataset: Name of the dataset to interpolate
-                (one of "streams", "fields", or "screening_fields").
+                (one of "streams", "fields", or "screening_fields", "current_density").
             layers: Name(s) of the layer(s) for which to interpolate results.
             grid_shape: Shape of the desired rectangular grid. If a single integer
                 N is given, then the grid will be square, shape = (N, N).
@@ -154,9 +155,17 @@ class Solution(object):
         Returns:
             x grid, y grid, dict of interpolated data for each layer
         """
-        valid_data = ("streams", "fields", "screening_fields")
+        valid_data = ("streams", "fields", "screening_fields", "current_density")
         if dataset not in valid_data:
             raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
+        if dataset == "current_density":
+            return self.grid_current_density(
+                layers=layers,
+                grid_shape=grid_shape,
+                method=method,
+                with_units=with_units,
+                **kwargs,
+            )
         datasets = getattr(self, dataset)
 
         if isinstance(layers, str):
