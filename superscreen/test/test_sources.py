@@ -151,11 +151,22 @@ def test_pearl_vortex_field(shape, vortex_position):
     x = np.random.random(size).reshape(shape)
     y = np.random.random(size).reshape(shape)
     z = np.random.random(size).reshape(shape)
+    x0, y0, z0 = vortex_position
 
     xs = np.linspace(-2, 2, 101)
     ys = np.linspace(-2, 2, 101)
 
-    x0, y0, z0 = vortex_position
+    if (
+        (x - x0).min() < xs.min()
+        or (x - x0).max() > xs.max()
+        or (y - y0).min() < xs.min()
+        or (y - y0).max() > ys.max()
+    ):
+        with pytest.raises(ValueError):
+            param = PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)
+            field = param(x, y, z)
+        return
+
     if shape != ():
         with pytest.raises(ValueError):
             param = PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)

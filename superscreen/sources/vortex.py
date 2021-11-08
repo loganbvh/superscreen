@@ -75,7 +75,6 @@ def pearl_vortex(
     y0: float = 0,
     z0: float = 0,
     nPhi0: Union[int, float] = 1,
-    interp_method: str = "linear",
 ) -> Union[float, np.ndarray]:
     """The z-component of the field from a Pearl vortex.
 
@@ -112,27 +111,14 @@ def pearl_vortex(
         nPhi0: Number of flux quanta contained in the monopole.
         xs, ys: Vectors of x and y coordinates defining the the domain in which the
             field will be computed using a Fourier transform as described above.
-        interp_method: The interpolation method to use: "nearest", "linear", "cubic".
 
     Returns:
         The out-of-plane field :math:`\\mu_0H_z` evaluated at the given coordinates in
         units of ``Phi_0 / (length_units)**2``.
     """
 
-    from scipy import interpolate
+    from scipy.interpolate import LinearNDInterpolator
 
-    valid_methods = ("nearest", "linear", "cubic")
-    if interp_method not in valid_methods:
-        raise ValueError(
-            f"Interpolation method must be one of {valid_methods}"
-            f" (got {interp_method})."
-        )
-    if interp_method == "nearest":
-        interpolator = interpolate.NearestNDInterpolator
-    elif interp_method == "linear":
-        interpolator = interpolate.LinearNDInterpolator
-    else:  # "cubic"
-        interpolator = interpolate.CloughTocher2DInterpolator
     x, y, z = np.atleast_1d(x, y, z)
     if not np.allclose(z, z[0]):
         raise ValueError("All elements of the vector z must be equal.")
@@ -141,6 +127,16 @@ def pearl_vortex(
     z = z[0] - z0
     xs = np.sort(xs)
     ys = np.sort(ys)
+    if (
+        x.min() < xs.min()
+        or x.max() > xs.max()
+        or y.min() < ys.min()
+        or y.max() > ys.max()
+    ):
+        raise ValueError(
+            "The rectangle defined by xs and ys must contain the convex hull of the "
+            "region defined by (x - x0) and (y - y0)."
+        )
     dx = xs[1] - xs[0]
     dy = ys[1] - ys[0]
     # Define Fourier-space coordinates
@@ -158,7 +154,7 @@ def pearl_vortex(
     hz = np.abs(np.fft.fftshift(np.fft.ifft2(hzk))) / (dx * dy)
     # Interpolate to x, y, z coordinates
     XY = np.stack([X.ravel(), Y.ravel()], axis=1)
-    interp = interpolator(XY, hz.ravel(), fill_value=0)
+    interp = LinearNDInterpolator(XY, hz.ravel())
     return interp(np.stack([x, y], axis=1)).squeeze()
 
 
@@ -204,7 +200,6 @@ def PearlVortexField(
         nPhi0: Number of flux quanta contained in the monopole.
         xs, ys: Vectors of x and y coordinates defining the the domain in which the
             field will be computed using a Fourier transform as described above.
-        interp_method: The interpolation method to use: "nearest", "linear", "cubic".
 
     Returns:
         A Parameter that returns the out-of-plane field in units of
@@ -219,5 +214,4 @@ def PearlVortexField(
         y0=y0,
         z0=z0,
         nPhi0=nPhi0,
-        interp_method=interp_method,
     )
