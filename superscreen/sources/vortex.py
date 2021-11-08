@@ -188,7 +188,9 @@ def PearlVortexField(
     ``Phi_0 / (length_units)**2``, where ``length_units`` are the units of
     ``xs``, ``ys``, etc. The field is calculated by inverse Fourier-transforming the
     above expression for an :math:`x-y` plane defined by parameters ``xs`` and ``ys``,
-    then interpolating the field to the desired coordinates.
+    then interpolating the field to the desired coordinates. Note that the
+    Fourier method may not be accurate if ``xs`` and ``ys`` are not sampled finely
+    enough.
 
     .. seealso:: References: [Pearl-APL-1964]_, [Tafuri-PRL-2004]_.
 
