@@ -124,7 +124,7 @@ def pearl_vortex(
         raise ValueError("All elements of the vector z must be equal.")
     x = x - x0
     y = y - y0
-    z = z[0] - z0
+    z = np.abs(z[0] - z0)
     xs = np.sort(xs)
     ys = np.sort(ys)
     if (
@@ -145,8 +145,8 @@ def pearl_vortex(
     kx = np.linspace(-kmaxx, kmaxx, xs.shape[0])
     ky = np.linspace(-kmaxy, kmaxy, ys.shape[0])
     X, Y = np.meshgrid(xs, ys)
-    Kx, Kx = np.meshgrid(kx, ky)
-    K = np.sqrt(Kx ** 2 + Kx ** 2)
+    KX, KY = np.meshgrid(kx, ky)
+    K = np.sqrt(KX ** 2 + KY ** 2)
     Lambda_Pearl = 2 * Lambda
     # Fourier transform of mu_0 * H_z(x, y, z)
     hzk = nPhi0 * np.exp(-K * z) / (1 + K * Lambda_Pearl)
@@ -167,7 +167,6 @@ def PearlVortexField(
     nPhi0: Union[int, float] = 1,
     xs: np.ndarray,
     ys: np.ndarray,
-    interp_method: str = "linear",
 ) -> Parameter:
     """Returns a Parameter that computes the z-component of the field from a Pearl
     vortex located at position ``(x0, y0, z0)`` in a film with effective penetration
