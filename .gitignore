@@ -6,6 +6,5 @@ __pycache__
 build
 _build
 .coverage
-.coverage*
 dist
 .pytest_cache
