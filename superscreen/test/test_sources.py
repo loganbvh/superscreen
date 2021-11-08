@@ -2,7 +2,12 @@ import pytest
 import numpy as np
 
 from superscreen import Parameter
-from superscreen.sources import ConstantField, VortexField, DipoleField
+from superscreen.sources import (
+    ConstantField,
+    VortexField,
+    PearlVortexField,
+    DipoleField,
+)
 
 
 @pytest.mark.parametrize("shape", [(), (10,), (100,)])
@@ -137,3 +142,41 @@ def test_dipole_field(shape, num_dipoles):
     else:
         assert field.shape == shape
     assert np.isfinite(field).all()
+
+
+@pytest.mark.parametrize("shape", [(), (10,), (100,)])
+@pytest.mark.parametrize("vortex_position", [(0, 0, 0), (1, 0, 1), (5, -5, 4)])
+def test_pearl_vortex_field(shape, vortex_position):
+    size = int(np.prod(shape))
+    x = np.random.random(size).reshape(shape)
+    y = np.random.random(size).reshape(shape)
+    z = np.random.random(size).reshape(shape)
+    x0, y0, z0 = vortex_position
+
+    xs = np.linspace(-2, 2, 101)
+    ys = np.linspace(-2, 2, 101)
+
+    if (
+        (x - x0).min() < xs.min()
+        or (x - x0).max() > xs.max()
+        or (y - y0).min() < xs.min()
+        or (y - y0).max() > ys.max()
+    ):
+        with pytest.raises(ValueError):
+            param = PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)
+            field = param(x, y, z)
+        return
+
+    if shape != ():
+        with pytest.raises(ValueError):
+            param = PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)
+            field = param(x, y, z)
+        z = np.atleast_1d(z)[0] * np.ones(shape)
+    param = PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=xs)
+    field = param(x, y, z)
+    assert isinstance(param, Parameter)
+    if shape == ():
+        assert isinstance(field, float)
+    else:
+        assert field.shape == shape
+    assert np.all(field >= 0)

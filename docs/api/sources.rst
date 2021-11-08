@@ -15,10 +15,15 @@ ConstantField
 
 .. autofunction:: superscreen.sources.ConstantField
 
-VortexField
------------
+MonopoleField
+-------------
 
-.. autofunction:: superscreen.sources.VortexField
+.. autofunction:: superscreen.sources.MonopoleField
+
+PearlVortexField
+----------------
+
+.. autofunction:: superscreen.sources.PearlVortexField
 
 DipoleField
 -----------

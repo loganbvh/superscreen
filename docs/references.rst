@@ -25,6 +25,11 @@ References
 .. [Pearl-APL-1964]
     `Applied Physics Letters 5, 65 (1964) <https://doi.org/10.1063/1.1754056>`_
 
+.. [Tafuri-PRL-2004]
+    `Physical Review Letters 92, 157006 (2004) <https://doi.org/10.1103/PhysRevLett.92.157006>`_
+
+    `Full Text PDF. <https://art.torvergata.it/retrieve/handle/2108/33451/53023/PRL%20Tafuri%202004.pdf>`_
+
 .. [Laplacian-SGP-2014]
     `Laplace-Beltrami: The Swiss Army Knife of Geometry Processing
     <http://www.cs.cmu.edu/~kmcrane/Projects/Other/SwissArmyLaplacian.pdf>`_
