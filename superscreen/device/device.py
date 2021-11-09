@@ -405,6 +405,8 @@ class Device(object):
     def mutual_inductance_matrix(
         self,
         hole_polygon_mapping: Optional[Dict[str, np.ndarray]] = None,
+        upper_only: bool = False,
+        lower_only: bool = False,
         iterations: int = 1,
         units: str = "pH",
         with_units: bool = True,
@@ -424,6 +426,10 @@ class Device(object):
                 enclosing those holes, for which the fluxoid will be calculated.
                 The length of this dict, ``n_holes``, will determine the dimension
                 of the square mutual inductance matrix :math:`M`.
+            upper_only: If True, evaluate only the upper triangular mutual inductance
+                matrix. Must be False if lower_only is True.
+            lower_only: If True, evaluate only the lower triangular mutual inductance
+                matrix. Must be False if upper_only is True.
             iterations: The number of iterations used to solve the device. This value
                 is ignored if there is only a single layer in the device.
             units: The units in which to report the mutual inductance.
@@ -440,6 +446,9 @@ class Device(object):
             ``iterations + 1`` if the device has multiple layers.
         """
         from ..solve import solve
+
+        if upper_only and lower_only:
+            raise ValueError("Only one of upper_only and lower_only may be True.")
 
         holes = self.holes
         if hole_polygon_mapping is None:
@@ -464,7 +473,7 @@ class Device(object):
         else:
             n_iter = 1
             solution_slice = slice(-1, None)
-        mutual_inductance = np.full((n_iter, n_holes, n_holes), np.nan)
+        mutual_inductance = np.zeros((n_iter, n_holes, n_holes))
         for j, hole_name in enumerate(hole_polygon_mapping):
             solutions = solve(
                 device=self,
@@ -473,6 +482,8 @@ class Device(object):
             )[solution_slice]
             for n, solution in enumerate(solutions):
                 for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
+                    if (upper_only and i > j) or (lower_only and i < j):
+                        continue
                     layer = holes[name].layer
                     fluxoid = solution.polygon_fluxoid(polygon, layer)[layer]
                     mutual_inductance[n, i, j] = (
