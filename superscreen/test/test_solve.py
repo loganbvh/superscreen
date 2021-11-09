@@ -175,49 +175,67 @@ def test_invalid_vortex_args(device):
         )
 
 
-@pytest.mark.parametrize("all_iterations", [False, True])
-def test_mutual_inductance_matrix(two_rings, all_iterations, iterations=3):
-    hole_polygon_mapping = {
-        "square_hole": geo.square(6, points_per_side=101),
-        "round_hole": geo.circle(4, points=301),
-    }
+def test_mutual_inductance_errors(two_rings):
+    with pytest.raises(ValueError):
+        _ = two_rings.mutual_inductance_matrix(
+            upper_only=True,
+            lower_only=True,
+        )
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
             hole_polygon_mapping={"invalid": None},
-            iterations=iterations,
-            all_iterations=all_iterations,
         )
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
             hole_polygon_mapping={"round_hole": geo.circle(1)},
-            iterations=iterations,
-            all_iterations=all_iterations,
         )
+
+
+def test_mutual_inductance_matrix(two_rings, iterations=3):
+    hole_polygon_mapping = {
+        "square_hole": geo.square(6, points_per_side=101),
+        "round_hole": geo.circle(4, points=301),
+    }
 
     M = two_rings.mutual_inductance_matrix(
         hole_polygon_mapping=hole_polygon_mapping,
         iterations=iterations,
-        all_iterations=all_iterations,
+        all_iterations=True,
     )
+    assert isinstance(M, list)
+    assert len(M) == iterations + 1
+    assert all(isinstance(m, pint.Quantity) for m in M)
+    assert all(isinstance(m.magnitude, np.ndarray) for m in M)
+    M = M[-1]
+
     M2 = two_rings.mutual_inductance_matrix(
         iterations=iterations,
-        all_iterations=all_iterations,
+        all_iterations=False,
     )
-    if all_iterations:
-        assert isinstance(M, list)
-        assert len(M) == iterations + 1
-        assert all(isinstance(m, pint.Quantity) for m in M)
-        assert all(isinstance(m.magnitude, np.ndarray) for m in M)
-        M = M[-1]
-        M2 = M2[-1]
-    else:
-        assert isinstance(M, pint.Quantity)
-        assert isinstance(M.magnitude, np.ndarray)
+    assert isinstance(M, pint.Quantity)
+    assert isinstance(M.magnitude, np.ndarray)
     assert np.allclose(M, M2, rtol=1e-2)
     # Check that M is symmetric
     assert np.isclose(M[0, 1], M[1, 0], rtol=1e-2)
+
+
+def test_mutual_inductance_upper_lower(two_rings, iterations=1):
+
+    M = two_rings.mutual_inductance_matrix(
+        iterations=iterations,
+        upper_only=True,
+        with_units=False,
+    )
+    assert np.array_equal(M, np.triu(M))
+
+    M = two_rings.mutual_inductance_matrix(
+        iterations=iterations,
+        lower_only=True,
+        with_units=False,
+    )
+    assert np.array_equal(M, np.tril(M))
 
 
 def test_fluxoid_single(device):
