@@ -237,14 +237,14 @@ def test_mutual_inductance_upper_lower(two_rings, iterations=1):
     M = two_rings.mutual_inductance_matrix(
         iterations=iterations,
         upper_only=True,
-    )
-    assert np.array_equal(M.magnitude, np.triu(M))
+    ).magnitude
+    assert np.array_equal(M, np.triu(M))
 
     M = two_rings.mutual_inductance_matrix(
         iterations=iterations,
         lower_only=True,
-    )
-    assert np.array_equal(M.magnitude, np.tril(M))
+    ).magnitude
+    assert np.array_equal(M, np.tril(M))
 
 
 def test_plot_mutual_inductance(mutual_inductance_matrix):
