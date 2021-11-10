@@ -1,14 +1,15 @@
 import warnings
+import itertools
 from contextlib import contextmanager
 from typing import Optional, Union, Tuple, List, Dict, Sequence
 
+import pint
 import numpy as np
 from scipy import interpolate
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
-
 
 from .solve import convert_field
 from .solution import Solution
@@ -780,6 +781,107 @@ def plot_field_at_positions(
             cbar = fig.colorbar(im, ax=ax, orientation="vertical")
             cbar.set_label(label)
     return fig, axes
+
+
+def plot_mutual_inductance(
+    M: Union[np.ndarray, List[np.ndarray]],
+    diff: bool = False,
+    iteration_offset: int = 1,
+    absolute: bool = False,
+    ax: Optional[plt.Axes] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+    logy: bool = False,
+    grid: bool = True,
+    legend: bool = True,
+    **kwargs,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Plot the convergence vs. iteration of a set of mutual inductance matrices,
+    given by the output of :meth:`superscreen.Device.mutual_inductance_matrix`
+    with ``all_iterations=True``.
+
+    Args:
+        M: A length ``m`` list of shape ``(n, n)`` mutual inductance matrices, or
+            a shape ``(m, n, n)`` array representing the same.
+        diff: If True, plots the difference in mutual inductance between subsequent
+            iterations.
+        iteration_offset: The first iteration (index in ``M``) to consider when
+            calculating convergence.
+        absolute: If True (and diff is True), plots the absolute change in mutual
+            inductance vs. iteration, otherwise plots relative change.
+        ax: Matplotlib Axes instance on which to plot.
+        figsize: Matplotlib figure size to create if ``ax`` is None.
+        logy: If True, sets the y axis scaling to logarithmic.
+        grid: If True, turns on plot grid lines.
+        legend: If True, adds a legend to the plot.
+        kwargs: Passed to ``ax.plot()``.
+
+    Returns:
+        Matplotlib Figure and Axes.
+    """
+    if isinstance(M, list):
+        for i, item in enumerate(M):
+            is_quantity = isinstance(item, pint.Quantity) and isinstance(
+                item.magnitude, np.ndarray
+            )
+            if not (
+                is_quantity
+                or isinstance(item, np.ndarray)
+                and item.ndim == 2
+                and item.shape[0] == item.shape[1]
+            ):
+                raise ValueError(
+                    f"Element {i} of list M is not a square array: {item!r}."
+                )
+        M = np.stack(M, axis=0)
+    if isinstance(M, pint.Quantity):
+        units = f"${M.units:~L}$"
+        M = M.magnitude
+    else:
+        units = "?"
+    if not (isinstance(M, np.ndarray) and M.ndim == 3 and M.shape[1] == M.shape[2]):
+        raise ValueError(f"Expected M to be a shape (m, n, n) array, but got {M!r}.")
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+    n = M.shape[1]
+    i0 = int(iteration_offset)
+    iterations = np.arange(M.shape[0])[i0:]
+    plot_kwargs = kwargs.copy()
+    for i, j in itertools.product(range(n), repeat=2):
+        plot_kwargs["label"] = f"$M_{{{i}{j}}}$"
+        if diff:
+            xs = iterations[:-1]
+            ys = np.abs(np.diff(M[i0:, i, j]))
+            if not absolute:
+                ys = ys / np.abs(M[i0:-1, i, j])
+            ax.plot(xs, ys, **plot_kwargs)
+        else:
+            xs = iterations
+            ax.plot(xs, M[i0:, i, j], **plot_kwargs)
+    ax.set_xticks(xs)
+    if logy:
+        ax.set_yscale("log")
+    if grid:
+        ax.grid(True)
+    if legend:
+        ax.legend(loc=0)
+    if diff:
+        ylabel = "$\\Delta M_{{ij, k}}$"
+        if absolute:
+            title = "$\\Delta M_{{ij, k}} = |M_{{ij, k+1}} - M_{{ij, k}}|$"
+            ylabel = ylabel + f" [{units}]"
+        else:
+            title = (
+                "$\\Delta M_{{ij, k}} = "
+                "\\frac{{|M_{{ij, k+1}} - M_{{ij, k}}|}}{{|M_{{ij, k+1}}|}}$"
+            )
+        ax.set_title(title)
+    else:
+        ylabel = f"$M_{{ij, k}}$ [{units}]"
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("Iteration, $k$")
+    return fig, ax
 
 
 def _patch_docstring(func):

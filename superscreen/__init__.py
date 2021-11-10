@@ -19,6 +19,7 @@ from .visualization import (
     plot_fields,
     plot_currents,
     plot_field_at_positions,
+    plot_mutual_inductance,
 )
 from . import fem
 from . import geometry
