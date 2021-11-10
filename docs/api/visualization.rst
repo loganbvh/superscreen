@@ -27,6 +27,11 @@ Stream Functions
 
 .. autofunction:: superscreen.visualization.plot_streams
 
+Miscellaneous
+-------------
+
+.. autofunction:: superscreen.visualization.plot_mutual_inductance
+
 
 Supporting Functions
 --------------------

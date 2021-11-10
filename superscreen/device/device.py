@@ -409,7 +409,6 @@ class Device(object):
         lower_only: bool = False,
         iterations: int = 1,
         units: str = "pH",
-        with_units: bool = True,
         all_iterations: bool = False,
     ) -> Union[np.ndarray, List[np.ndarray]]:
         """Calculates the mutual inductance matrix :math:`\\mathbf{M}` for the Device.
@@ -433,8 +432,6 @@ class Device(object):
             iterations: The number of iterations used to solve the device. This value
                 is ignored if there is only a single layer in the device.
             units: The units in which to report the mutual inductance.
-            with_units: Whether to return the mutual inductance as a pint.Quantity
-                with units attached, or a bare np.ndarray.
             all_iterations: Whether to return mutual inductance matrices for all
                 ``iterations + 1`` solutions, or just the final solution.
 
@@ -489,8 +486,7 @@ class Device(object):
                     mutual_inductance[n, i, j] = (
                         (sum(fluxoid) / I_circ).to(units).magnitude
                     )
-        if with_units:
-            mutual_inductance = mutual_inductance * self.ureg(units)
+        mutual_inductance = mutual_inductance * self.ureg(units)
         # Return a list to make it clear that we are returning n_iter distinct
         # matrices. You can convert back to an ndarray using
         # np.stack([m for m in mutual_inductance], axis=0).

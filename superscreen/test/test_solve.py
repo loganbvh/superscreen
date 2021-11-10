@@ -3,6 +3,7 @@ import os
 import pint
 import pytest
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 import superscreen as sc
@@ -193,7 +194,20 @@ def test_mutual_inductance_errors(two_rings):
         )
 
 
-def test_mutual_inductance_matrix(two_rings, iterations=3):
+@pytest.fixture
+def mutual_inductance_matrix(two_rings, iterations=3):
+    M = two_rings.mutual_inductance_matrix(
+        iterations=iterations,
+        all_iterations=True,
+    )
+    return M
+
+
+def test_mutual_inductance_matrix(
+    two_rings,
+    mutual_inductance_matrix,
+    iterations=3,
+):
     hole_polygon_mapping = {
         "square_hole": geo.square(6, points_per_side=101),
         "round_hole": geo.circle(4, points=301),
@@ -210,10 +224,7 @@ def test_mutual_inductance_matrix(two_rings, iterations=3):
     assert all(isinstance(m.magnitude, np.ndarray) for m in M)
     M = M[-1]
 
-    M2 = two_rings.mutual_inductance_matrix(
-        iterations=iterations,
-        all_iterations=False,
-    )
+    M2 = mutual_inductance_matrix[-1]
     assert isinstance(M, pint.Quantity)
     assert isinstance(M.magnitude, np.ndarray)
     assert np.allclose(M, M2, rtol=1e-2)
@@ -226,16 +237,51 @@ def test_mutual_inductance_upper_lower(two_rings, iterations=1):
     M = two_rings.mutual_inductance_matrix(
         iterations=iterations,
         upper_only=True,
-        with_units=False,
-    )
+    ).magnitude
     assert np.array_equal(M, np.triu(M))
 
     M = two_rings.mutual_inductance_matrix(
         iterations=iterations,
         lower_only=True,
-        with_units=False,
-    )
+    ).magnitude
     assert np.array_equal(M, np.tril(M))
+
+
+def test_plot_mutual_inductance(mutual_inductance_matrix):
+    M = mutual_inductance_matrix
+    with sc.visualization.non_gui_backend():
+        fig, ax = sc.plot_mutual_inductance(
+            M,
+            diff=True,
+            logy=True,
+        )
+        fig, ax = sc.plot_mutual_inductance(
+            [m for m in M],
+            diff=True,
+            absolute=True,
+            logy=False,
+        )
+        fig, ax = sc.plot_mutual_inductance(
+            [m.magnitude for m in M],
+            diff=True,
+            logy=True,
+        )
+        fig, ax = plt.subplots()
+        f, a = sc.plot_mutual_inductance(
+            M,
+            ax=ax,
+            diff=False,
+            logy=True,
+        )
+        assert f is fig
+        assert a is ax
+        plt.close(fig)
+
+    with pytest.raises(ValueError):
+        _ = sc.plot_mutual_inductance(M[0])
+
+    with pytest.raises(ValueError):
+        _ = sc.plot_mutual_inductance([M[0], 0])
 
 
 def test_fluxoid_single(device):
