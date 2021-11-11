@@ -43,7 +43,7 @@ def device():
         sc.Polygon(
             "bounding_box",
             layer="layer0",
-            points=sc.geometry.square(12, angle=90),
+            points=sc.geometry.box(12, angle=90),
         ),
     ]
 
@@ -133,22 +133,18 @@ def device_with_mesh():
 
 @pytest.mark.parametrize("subplots", [False, True])
 @pytest.mark.parametrize("legend", [False, True])
-def test_plot_polygons(device, device_with_mesh, legend, subplots, plot_mesh=True):
+def test_plot_polygons(device, device_with_mesh, legend, subplots, mesh=True):
     with non_gui_backend():
-        fig, axes = device.plot_polygons(legend=legend, subplots=subplots)
+        fig, axes = device.plot(legend=legend, subplots=subplots)
         if subplots:
             assert isinstance(axes, np.ndarray)
             assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
         plt.close(fig)
 
         with pytest.raises(RuntimeError):
-            _ = device.plot_polygons(
-                legend=legend, subplots=subplots, plot_mesh=plot_mesh
-            )
+            _ = device.plot(legend=legend, subplots=subplots, mesh=mesh)
 
-        fig, axes = device_with_mesh.plot_polygons(
-            legend=legend, subplots=subplots, plot_mesh=plot_mesh
-        )
+        fig, axes = device_with_mesh.plot(legend=legend, subplots=subplots, mesh=mesh)
         plt.close(fig)
 
 
