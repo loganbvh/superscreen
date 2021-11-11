@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 
@@ -84,11 +84,10 @@ def circle(
     )
 
 
-def rectangle(
+def box(
     width: float,
-    height: float,
-    x_points: int = 25,
-    y_points: int = 25,
+    height: Optional[float] = None,
+    points_per_side: int = 25,
     center: Tuple[float, float] = (0, 0),
     angle: float = 0,
 ) -> np.ndarray:
@@ -97,33 +96,35 @@ def rectangle(
 
     Args:
         width: Width of the rectangle (in the x direction).
-        height: Height of the rectangle (in the y direction).
-        x_points: Number of points in the top and bottom of the rectangle.
-        y_points: Number of points in the sides of the rectangle.
+        height: Height of the rectangle (in the y direction). If None is given,
+            then height is set to width and the function returns a square.
+        points_per_side: Number of points on each side of the box.
         center: Coordinates of the center of the rectangle.
         angle: Angle (in degrees) by which to rotate counterclockwise about (0, 0)
             **before** translating to the specified center.
 
     Returns:
-        A shape ``(2 * (x_points + y_points), 2)`` array of (x, y) coordinates
+        A shape ``(4 * points_per_side, 2)`` array of (x, y) coordinates
     """
     width = abs(width)
+    if height is None:
+        height = width
     height = abs(height)
     x0, y0 = center
     xs = np.concatenate(
         [
-            width / 2 * np.ones(y_points),
-            np.linspace(width / 2, -width / 2, x_points),
-            -width / 2 * np.ones(y_points),
-            np.linspace(-width / 2, width / 2, x_points),
+            width / 2 * np.ones(points_per_side),
+            np.linspace(width / 2, -width / 2, points_per_side),
+            -width / 2 * np.ones(points_per_side),
+            np.linspace(-width / 2, width / 2, points_per_side),
         ]
     )
     ys = np.concatenate(
         [
-            np.linspace(-height / 2, height / 2, y_points),
-            height / 2 * np.ones(x_points),
-            np.linspace(height / 2, -height / 2, y_points),
-            -height / 2 * np.ones(x_points),
+            np.linspace(-height / 2, height / 2, points_per_side),
+            height / 2 * np.ones(points_per_side),
+            np.linspace(height / 2, -height / 2, points_per_side),
+            -height / 2 * np.ones(points_per_side),
         ]
     )
     coords = np.stack([xs, ys], axis=1)
@@ -132,35 +133,6 @@ def rectangle(
     coords[:, 0] += x0
     coords[:, 1] += y0
     return coords
-
-
-def square(
-    side_length: float,
-    points_per_side: int = 25,
-    center: Tuple[float, float] = (0, 0),
-    angle: float = 0,
-) -> np.ndarray:
-    """Returns the coordinates for a square with the given side length, centered at the
-    specified center.
-
-    Args:
-        side_length: The width and height of the square
-        points_per_side: Number of points in each side of the square.
-        center: Coordinates of the center of the square
-        angle: Angle by which to rotate counterclockwise about (0, 0)
-            **before** translating to the specified center.
-
-    Returns:
-        A shape ``(4 * points_per_side, 2)`` array of (x, y) coordinates
-    """
-    return rectangle(
-        side_length,
-        side_length,
-        x_points=points_per_side,
-        y_points=points_per_side,
-        center=center,
-        angle=angle,
-    )
 
 
 def close_curve(points: np.ndarray) -> np.ndarray:

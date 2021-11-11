@@ -8,7 +8,6 @@ from scipy import spatial
 
 from .solve import solve
 from .device import Device
-from .geometry import close_curve
 from .solution import Solution
 
 

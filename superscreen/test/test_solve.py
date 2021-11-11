@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 import superscreen as sc
-import superscreen.geometry as geo
+from superscreen import geometry as geo
 
 
 @pytest.fixture(scope="module")
