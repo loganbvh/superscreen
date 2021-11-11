@@ -43,23 +43,15 @@ def make_fluxoid_polygons(
     polygons = {}
     for name in holes:
         hole = device_holes[name]
-        other_points = [
-            poly.points
-            for poly in device_polygons.values()
-            if poly.layer == hole.layer and poly.name != name
-        ]
-        other_points = np.concatenate(other_points)
-        min_dist = spatial.distance.cdist(hole.points, other_points).min()
-        if join_style.lower() == "mitre":
-            delta = min_dist / 2.5
-        else:
-            delta = min_dist / 2
-        new_points = close_curve(hole.buffer(delta, join_style=join_style))
-        if interp_points:
-            tck, _ = interpolate.splprep(new_points.T, k=1, s=0)
-            x, y = interpolate.splev(np.linspace(0, 1, interp_points), tck)
-            new_points = close_curve(np.stack([x, y], axis=1))
-        polygons[name] = new_points
+        hole_poly = hole.polygon
+        min_dist = min(
+            hole_poly.exterior.distance(other.polygon.exterior)
+            for other in device_polygons.values()
+            if other.layer == hole.layer and other.name != name
+        )
+        delta = min_dist / 2
+        new_poly = hole.buffer(delta, join_style=join_style).resample(interp_points)
+        polygons[name] = new_poly.points
     return polygons
 
 

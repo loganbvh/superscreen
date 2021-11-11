@@ -24,11 +24,11 @@ def device():
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    offset_film = films[0].buffer(1, join_style="mitre")
+    offset_film = films[0].buffer(1, join_style="mitre", as_polygon=False)
     assert isinstance(offset_film, np.ndarray)
     assert offset_film.shape[0] >= films[0].points.shape[0]
 
-    offset_poly = films[0].buffer(1, as_polygon=True)
+    offset_poly = films[0].buffer(1)
     assert isinstance(offset_poly, sc.Polygon)
     assert films[0].name in offset_poly.name
 
@@ -102,10 +102,6 @@ def device_with_mesh():
     device.make_mesh(min_triangles=2500)
 
     print(device)
-    assert all(polygon.counter_clockwise for polygon in films + holes)
-    assert sc.Polygon(
-        "cw_circle", layer="layer0", points=sc.geometry.circle(2)[::-1]
-    ).clockwise
     assert device == device
     assert all(film == film for film in films)
     assert all(layer == layer for layer in layers)

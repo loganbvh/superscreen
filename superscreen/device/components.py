@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib import path
 from scipy import interpolate
 from shapely import geometry
+import shapely
 
 from ..geometry import close_curve
 from ..parameter import Parameter
@@ -122,21 +123,24 @@ class Polygon(object):
         *,
         layer: str,
         points: Union[np.ndarray, geometry.polygon.Polygon],
-        mesh: bool = True
+        mesh: bool = True,
     ):
         self.name = name
         self.layer = layer
-        if isinstance(points, geometry.polygon.Polygon):
+        if isinstance(points, shapely.geometry.polygon.Polygon):
             if points.interiors:
                 raise ValueError("Expected a simply-connected polygon.")
-            points = geometry.polygon.orient(points).exterior.coords
-        self.points = np.asarray(points)
-        # Ensure that it is a closed polygon.
-        self.points = close_curve(self.points)
+            points = shapely.geometry.polygon.orient(points).exterior.coords
+        points = close_curve(np.asarray(points))
+        if points.ndim != 2 or points.shape[-1] != 2:
+            raise ValueError(f"Expected shape (n, 2), but got {points.shape}.")
+        self._points = points
         self.mesh = mesh
 
-        if self.points.ndim != 2 or self.points.shape[-1] != 2:
-            raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
+    @property
+    def points(self) -> np.ndarray:
+        """A shape ``(n, 2)`` array of counter-clockwise-oriented polygon vertices."""
+        return self._points
 
     @property
     def area(self) -> float:
@@ -146,17 +150,8 @@ class Polygon(object):
     @property
     def extents(self) -> Tuple[float, float]:
         """Returns the total x, y extent of the polygon, (Dx, Dy)."""
-        return tuple(np.ptp(self.points, axis=0))
-
-    @property
-    def clockwise(self) -> bool:
-        """True if the polygon vertices are oriented clockwise."""
-        return not self.polygon.exterior.is_ccw
-
-    @property
-    def counter_clockwise(self) -> bool:
-        """True if the polygon vertices are oriented counter-clockwise."""
-        return self.polygon.exterior.is_ccw
+        minx, miny, maxx, maxy = self.polygon.bounds
+        return (maxx - minx), (maxy - miny)
 
     @property
     def path(self) -> path.Path:
@@ -166,7 +161,7 @@ class Polygon(object):
     @property
     def polygon(self) -> geometry.polygon.Polygon:
         """A :class:`shapely.geometry.polygon.Polygon` representing the Polygon."""
-        return geometry.polygon.orient(geometry.polygon.Polygon(self.points))
+        return geometry.polygon.Polygon(self._points)
 
     def contains_points(
         self,
@@ -277,7 +272,9 @@ class Polygon(object):
                 raise ValueError("Cannot join with a polygon in other layer.")
             if name is None:
                 name = f"{self.name} {operator} {other.name}"
-        elif isinstance(other, (geometry.polygon.LinearRing, geometry.linestring.LineString)):
+        elif isinstance(
+            other, (geometry.polygon.LinearRing, geometry.linestring.LineString)
+        ):
             other_poly = geometry.polygon.Polygon(other)
         elif not isinstance(other, geometry.polygon.Polygon):
             raise TypeError(
@@ -356,7 +353,7 @@ class Polygon(object):
         join_style: Union[str, int] = "mitre",
         mitre_limit: float = 5.0,
         single_sided: bool = True,
-        as_polygon: bool = False,
+        as_polygon: bool = True,
     ) -> Union[np.ndarray, "Polygon"]:
         if isinstance(join_style, str):
             join_style = getattr(geometry.JOIN_STYLE, join_style)
@@ -366,7 +363,7 @@ class Polygon(object):
             mitre_limit=mitre_limit,
             single_sided=single_sided,
         )
-        
+
         polygon = Polygon(
             f"{self.name} ({distance:+.3f})",
             layer=self.layer,
@@ -374,17 +371,25 @@ class Polygon(object):
             mesh=self.mesh,
         )
         npts = max(polygon.points.shape[0], self.points.shape[0])
-        polygon.resample(npts)
+        polygon = polygon.resample(npts)
         if as_polygon:
             return polygon
         return polygon.points
 
-    def resample(self, num_points, degree: int = 1, smooth: float = 0) -> None:
-        points = self.points.copy()
-        tck, _ = interpolate.splprep(points.T, k=degree, s=smooth)
+    def resample(
+        self, num_points: Optional[int] = None, degree: int = 1, smooth: float = 0
+    ) -> "Polygon":
+        if num_points is None:
+            return self
+        tck, _ = interpolate.splprep(self.points.T, k=degree, s=smooth)
         x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
-        self.points = close_curve(np.stack([x, y], axis=1))
-        return self
+        points = close_curve(np.stack([x, y], axis=1))
+        return Polygon(
+            self.name,
+            layer=self.layer,
+            points=points,
+            mesh=self.mesh,
+        )
 
     def __repr__(self) -> str:
         return (
