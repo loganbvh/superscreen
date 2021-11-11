@@ -1,10 +1,11 @@
 from copy import deepcopy
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Iterable
 
 import numpy as np
 from matplotlib import path
+import matplotlib.pyplot as plt
 from scipy import interpolate
-import pyclipper
+from shapely import geometry as geo
 
 from ..geometry import close_curve
 from ..parameter import Parameter
@@ -110,56 +111,76 @@ class Polygon(object):
     Args:
         name: Name of the polygon.
         layer: Name of the layer in which the polygon is located.
-        points: An array of shape (n, 2) specifying the x, y coordinates of
-            the polyon's vertices.
+        points: The polygon vertices. This can be a shape ``(n, 2)`` array of x, y
+            coordinates or a shapely ``LineString``, ``LinearRing``, or ``Polygon``.
         mesh: Whether to include this polygon when computing a mesh.
-
     """
 
-    def __init__(self, name: str, *, layer: str, points: np.ndarray, mesh: bool = True):
+    def __init__(
+        self,
+        name: str,
+        *,
+        layer: str,
+        points: Union[
+            np.ndarray,
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        ],
+        mesh: bool = True,
+    ):
         self.name = name
         self.layer = layer
-        self.points = np.asarray(points)
-        # Ensure that it is a closed polygon.
-        self.points = close_curve(self.points)
+        self.points = points
         self.mesh = mesh
 
-        if self.points.ndim != 2 or self.points.shape[-1] != 2:
-            raise ValueError(f"Expected shape (n, 2), but got {self.points.shape}.")
+    @property
+    def points(self) -> np.ndarray:
+        """A shape ``(n, 2)`` array of counter-clockwise-oriented polygon vertices."""
+        return self._points
+
+    @points.setter
+    def points(self, points) -> None:
+        geom_types = (
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        )
+        if isinstance(points, Polygon):
+            points = points.points
+        if not isinstance(points, geom_types):
+            points = np.asarray(points)
+        points = geo.polygon.Polygon(points)
+        points = geo.polygon.orient(points)
+        if points.interiors:
+            raise ValueError("Expected a simply-connected polygon.")
+        if not points.is_valid:
+            raise ValueError("The given points do not define a valid polygon.")
+        points = close_curve(np.array(points.exterior.coords))
+        if points.ndim != 2 or points.shape[-1] != 2:
+            raise ValueError(f"Expected shape (n, 2), but got {points.shape}.")
+        self._points = points
 
     @property
     def area(self) -> float:
         """The area of the polygon."""
-        # https://en.wikipedia.org/wiki/Shoelace_formula
-        # https://stackoverflow.com/a/30408825/11655306
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        return 0.5 * np.abs(np.dot(y, np.roll(x, 1)) - np.dot(x, np.roll(y, 1)))
+        return self.polygon.area
 
     @property
     def extents(self) -> Tuple[float, float]:
-        """Returns the total x, y extent of the polygon, (Dx, Dy)."""
-        return tuple(np.ptp(self.points, axis=0))
-
-    @property
-    def clockwise(self) -> bool:
-        """True if the polygon vertices are oriented clockwise."""
-        # # https://stackoverflow.com/a/1165943
-        # # https://www.element84.com/blog/
-        # # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        return np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1])) > 0
-
-    @property
-    def counter_clockwise(self) -> bool:
-        """True if the polygon vertices are oriented counter-clockwise."""
-        return not self.clockwise
+        """Returns the total x, y extent of the polygon, (Delta_x, Delta_y)."""
+        minx, miny, maxx, maxy = self.polygon.bounds
+        return (maxx - minx), (maxy - miny)
 
     @property
     def path(self) -> path.Path:
         """A matplotlib.path.Path representing the polygon boundary."""
         return path.Path(self.points, closed=True)
+
+    @property
+    def polygon(self) -> geo.polygon.Polygon:
+        """A shapely ``Polygon`` representing the Polygon."""
+        return geo.polygon.Polygon(self.points)
 
     def contains_points(
         self,
@@ -190,73 +211,372 @@ class Polygon(object):
     def on_boundary(
         self, points: np.ndarray, radius: float = 1e-3, index: bool = False
     ):
+        """Determines whether ``points`` lie within a given radius of the Polygon
+        boundary.
+
+        Args:
+            points: Shape ``(n, 2)`` array of x, y coordinates.
+            radius: Points within ``radius`` of the boundary are considered
+                to lie on the boundary.
+            index: If True, then return the indices of the points in ``points``
+                that lie on the boundary. Otherwise, returns a shape ``(n, )``
+                boolean array.
+
+        Returns:
+            If index is True, returns the indices of the points in ``points``
+            that lie within the polygon. Otherwise, returns a shape ``(n, )``
+            boolean array indicating whether each point lies within the polygon.
+        """
         points = np.atleast_2d(points)
         p = self.path
-        outer = p.contains_points(points, radius=radius)
-        inner = p.contains_points(points, radius=-radius)
-        boundary = np.logical_and(outer, ~inner)
+        in_outer = p.contains_points(points, radius=radius)
+        in_inner = p.contains_points(points, radius=-radius)
+        boundary = np.logical_and(in_outer, ~in_inner)
         if index:
             return np.where(boundary)[0]
         return boundary
 
-    def offset_points(
+    def _join_via(
         self,
-        delta: float,
-        join_type: str = "square",
-        miter_limit: float = 2.0,
-        as_polygon: bool = False,
-    ) -> Union[np.ndarray, "Polygon"]:
-        """Returns polygon points or a Polygon object with vertices offset from
-        ``self.points`` by a distance ``delta``. If ``delta > 0`` this "inflates"
-        the polygon, and if ``delta < 0`` this shrinks the polygon.
+        other: Union[
+            np.ndarray,
+            "Polygon",
+            geo.polygon.Polygon,
+            geo.polygon.LinearRing,
+        ],
+        operation: str,
+    ) -> geo.polygon.Polygon:
+        """Joins ``self.polygon`` with another polygon-like object
+        via a given operation.
+        """
+        valid_types = (
+            np.ndarray,
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        )
+        valid_operations = (
+            "union",
+            "intersection",
+            "difference",
+            "symmetric_difference",
+        )
+        if operation not in valid_operations:
+            raise ValueError(
+                f"Unknown operation: {operation}. "
+                f"Valid operations are {valid_operations}."
+            )
+        if isinstance(other, Polygon):
+            other_poly = other.polygon
+            if self.layer != other.layer:
+                raise ValueError("Cannot join with a polygon in other layer.")
+        elif isinstance(other, valid_types):
+            other_poly = geo.polygon.Polygon(other)
+        if not isinstance(other_poly, geo.polygon.Polygon):
+            raise TypeError(
+                f"Valid types are {(Polygon, ) + valid_types}, got {type(other)}."
+            )
+        joined = getattr(self.polygon, operation)(other_poly)
+        if (
+            not isinstance(joined, geo.polygon.Polygon)
+            or joined.is_empty
+            or not joined.is_valid
+        ):
+            raise ValueError(
+                f"The {operation} of the two polygons is not a valid polygon."
+            )
+        return joined
+
+    def union(
+        self,
+        other: Union[
+            "Polygon",
+            np.ndarray,
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        ],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        """Returns the union of the polygon and another polygon.
 
         Args:
-            delta: The amount by which to offset the polygon points, in units of
-                ``self.length_units``.
-            join_type: The join type to use in generating the offset points. See the
-                `Clipper documentation <http://www.angusj.com/delphi/clipper/
-                documentation/ Docs/Units/ClipperLib/Types/JoinType.htm>`_
-                for more details.
-            miter_limit: The MiterLimit to use if ``join_type == "miter"``. See the
-                `Clipper documentation <http://www.angusj.com/delphi/clipper/
-                documentation/Docs/Units/ClipperLib/Classes/ClipperOffset/Properties/
-                MiterLimit.htm>`_ for more details.
-            as_polygon: Whether to return a new Polygon instance or just an array
-                of vertices.
+            other: The object with which to join the polygon.
+            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
 
         Returns:
-            A new :class:`superscreen.device.Polygon` instance with the
-            offset polygon vertices if ``as_polygon`` is True. Otherwise returns
-            a shape ``(m, 2)`` array of offset polygon vertices.
+            A new :class:`Polygon` instance representing the union
+            of ``self`` and ``other``.
         """
-        jt = {
-            "square": pyclipper.JT_SQUARE,
-            "miter": pyclipper.JT_MITER,
-            "round": pyclipper.JT_ROUND,
-        }[join_type.lower()]
-        pco = pyclipper.PyclipperOffset()
-        if jt == pyclipper.JT_MITER:
-            pco.MiterLimit = miter_limit
-        pco.AddPath(
-            pyclipper.scale_to_clipper(self.points),
-            jt,
-            pyclipper.ET_CLOSEDPOLYGON,
-        )
-        solution = pco.Execute(pyclipper.scale_to_clipper(delta))
-        points = np.array(pyclipper.scale_from_clipper(solution)).squeeze()
-        points = close_curve(points)
-        if points.shape[0] < self.points.shape[0]:
-            tck, _ = interpolate.splprep(points.T, k=1, s=0)
-            x, y = interpolate.splev(np.linspace(0, 1, self.points.shape[0]), tck)
-            points = close_curve(np.stack([x, y], axis=1))
-        if not as_polygon:
-            return points
         return Polygon(
-            f"{self.name} ({delta:+.3f})",
+            name or self.name,
+            layer=self.layer,
+            points=self._join_via(other, "union"),
+            mesh=self.mesh,
+        )
+
+    def intersection(
+        self,
+        other: Union[
+            "Polygon",
+            np.ndarray,
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        ],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        """Returns the intersection of the polygon and another polygon.
+
+        Args:
+            other: The object with which to join the polygon.
+            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
+
+        Returns:
+            A new :class:`Polygon` instance representing the intersection
+            of ``self`` and ``other``.
+        """
+        return Polygon(
+            name or self.name,
+            layer=self.layer,
+            points=self._join_via(other, "intersection"),
+            mesh=self.mesh,
+        )
+
+    def difference(
+        self,
+        other: Union[
+            "Polygon",
+            np.ndarray,
+            geo.linestring.LineString,
+            geo.polygon.LinearRing,
+            geo.polygon.Polygon,
+        ],
+        symmetric: bool = False,
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        """Returns the difference of the polygon and another polygon.
+
+        Args:
+            other: The object with which to join the polygon.
+            symmetric: Whether to join via a symmetric difference operation.
+                See the `shapely documentation`_.
+            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
+
+        Returns:
+            A new :class:`Polygon` instance representing the difference
+            of ``self`` and ``other``.
+
+        .. _shapely documentation: https://shapely.readthedocs.io/en/stable/manual.html
+        """
+        operation = "symmetric_difference" if symmetric else "difference"
+        return Polygon(
+            name or self.name,
+            layer=self.layer,
+            points=self._join_via(other, operation),
+            mesh=self.mesh,
+        )
+
+    def buffer(
+        self,
+        distance: float,
+        join_style: Union[str, int] = "mitre",
+        mitre_limit: float = 5.0,
+        single_sided: bool = True,
+        as_polygon: bool = True,
+    ) -> Union[np.ndarray, "Polygon"]:
+        """Returns polygon points or a new Polygon object with vertices offset from
+        ``self.points`` by a given ``distance``. If ``distance > 0`` this "inflates"
+        the polygon, and if ``distance < 0`` this shrinks the polygon.
+
+
+        Args:
+            join_style: One of "round" (1), "mitre" (2), or "bevel" (3).
+                See the `shapely documentation`_.
+            mitre_limit: See the `shapely documentation`_.
+            single_sided: See the `shapely documentation`_.
+            as_polygon: If True, returns a new ``Polygon`` instance, otherwise
+                returns a shape ``(n, 2)`` array of polygon vertices.
+
+        Returns:
+            A new ``Polygon`` or an array of vertices offset by ``distance``.
+
+        .. _shapely documentation: https://shapely.readthedocs.io/en/stable/manual.html
+        """
+        if isinstance(join_style, str):
+            join_style = getattr(geo.JOIN_STYLE, join_style)
+        poly = self.polygon.buffer(
+            distance,
+            join_style=join_style,
+            mitre_limit=mitre_limit,
+            single_sided=single_sided,
+        )
+
+        polygon = Polygon(
+            f"{self.name} ({distance:+.3f})",
+            layer=self.layer,
+            points=poly,
+            mesh=self.mesh,
+        )
+        npts = max(polygon.points.shape[0], self.points.shape[0])
+        polygon = polygon.resample(npts)
+        if as_polygon:
+            return polygon
+        return polygon.points
+
+    def resample(
+        self, num_points: Optional[int] = None, degree: int = 1, smooth: float = 0
+    ) -> "Polygon":
+        """Resample vertices so that they are approximately uniformly distributed
+        along the polygon boundary.
+
+        Args:
+            num_points: Number of points to interpolate to. If ``num_points`` is None,
+                the polygon is resampled to ``len(self.points)`` points. If
+                ``num_points`` is not None and has a boolean value of False,
+                then an unaltered copy of the polygon is returned.
+            degree: The degree of the spline with which to iterpolate.
+                Defaults to 1 (linear spline).
+
+        """
+        if num_points is None:
+            num_points = self.points.shape[0]
+        if not num_points:
+            return self.copy()
+        tck, _ = interpolate.splprep(self.points.T, k=degree, s=smooth)
+        x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
+        points = close_curve(np.stack([x, y], axis=1))
+        return Polygon(
+            self.name,
             layer=self.layer,
             points=points,
             mesh=self.mesh,
         )
+
+    def plot(self, ax: Optional[plt.Axes] = None, **kwargs) -> plt.Axes:
+        """Plots the Polygon's vertices.
+
+        Args:
+            ax: The matplotlib Axes on which to plot. If None is given, a new one
+                is created.
+            kwargs: Passed to ``ax.plot()``.
+
+        Returns:
+            The matplotlib Axes.
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        kwargs = kwargs.copy()
+        kwargs["label"] = self.name
+        ax.plot(*self.points.T, **kwargs)
+        ax.set_aspect("equal")
+        return ax
+
+    @classmethod
+    def from_union(
+        cls,
+        items: Iterable[
+            Union[
+                "Polygon",
+                np.ndarray,
+                geo.linestring.LineString,
+                geo.polygon.LinearRing,
+                geo.polygon.Polygon,
+            ],
+        ],
+        *,
+        name: str,
+        layer: str,
+        mesh: bool = True,
+    ) -> "Polygon":
+        """Creates a new :class:`Polygon` from the union of a sequence of polygons.
+
+        Args:
+            items: A sequence of polygon-like objects to join.
+            name: Name of the polygon.
+            layer: Name of the layer in which the polygon is located.
+            mesh: Whether to include this polygon when computing a mesh.
+
+        Returns:
+            A new :class:`Polygon`.
+        """
+        first, *rest = items
+        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        for item in rest:
+            polygon = polygon.union(item)
+        return polygon
+
+    @classmethod
+    def from_intersection(
+        cls,
+        items: Iterable[
+            Union[
+                "Polygon",
+                np.ndarray,
+                geo.linestring.LineString,
+                geo.polygon.LinearRing,
+                geo.polygon.Polygon,
+            ],
+        ],
+        *,
+        name: str,
+        layer: str,
+        mesh: bool = True,
+    ) -> "Polygon":
+        """Creates a new :class:`Polygon` from the intersection
+        of a sequence of polygons.
+
+        Args:
+            items: A sequence of polygon-like objects to join.
+            name: Name of the polygon.
+            layer: Name of the layer in which the polygon is located.
+            mesh: Whether to include this polygon when computing a mesh.
+
+        Returns:
+            A new :class:`Polygon`.
+        """
+        first, *rest = items
+        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        for item in rest:
+            polygon = polygon.intersection(item)
+        return polygon
+
+    @classmethod
+    def from_difference(
+        cls,
+        items: Iterable[
+            Union[
+                "Polygon",
+                np.ndarray,
+                geo.linestring.LineString,
+                geo.polygon.LinearRing,
+                geo.polygon.Polygon,
+            ],
+        ],
+        *,
+        name: str,
+        layer: str,
+        mesh: bool = True,
+        symmetric: bool = False,
+    ) -> "Polygon":
+        """Creates a new :class:`Polygon` from the difference
+        of a sequence of polygons.
+
+        Args:
+            items: A sequence of polygon-like objects to join.
+            name: Name of the polygon.
+            layer: Name of the layer in which the polygon is located.
+            mesh: Whether to include this polygon when computing a mesh.
+            symmetric:
+
+        Returns:
+            A new :class:`Polygon`.
+        """
+        first, *rest = items
+        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        for item in rest:
+            polygon = polygon.difference(item, symmetric=symmetric)
+        return polygon
 
     def __repr__(self) -> str:
         return (

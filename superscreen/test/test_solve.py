@@ -29,9 +29,7 @@ def device():
         ),
     ]
 
-    abstract_regions = [
-        sc.Polygon("bounding_box", layer="layer1", points=geo.square(10))
-    ]
+    abstract_regions = [sc.Polygon("bounding_box", layer="layer1", points=geo.box(10))]
 
     device = sc.Device(
         "device",
@@ -60,7 +58,7 @@ def two_rings():
         sc.Polygon(
             "square_ring",
             layer="layer0",
-            points=geo.square(1.5 * outer_radius, points_per_side=50),
+            points=geo.box(1.5 * outer_radius, points_per_side=50),
         ),
         sc.Polygon(
             "round_ring", layer="layer1", points=geo.circle(outer_radius, points=200)
@@ -71,7 +69,7 @@ def two_rings():
         sc.Polygon(
             "square_hole",
             layer="layer0",
-            points=geo.square(1 * inner_radius, points_per_side=50),
+            points=geo.box(1 * inner_radius, points_per_side=50),
         ),
         sc.Polygon(
             "round_hole", layer="layer1", points=geo.circle(inner_radius, points=100)
@@ -82,7 +80,7 @@ def two_rings():
         sc.Polygon(
             "bbox",
             layer="layer0",
-            points=geo.square(1.25 * 2 * outer_radius, points_per_side=10),
+            points=geo.box(1.25 * 2 * outer_radius, points_per_side=10),
         )
     ]
 
@@ -209,7 +207,7 @@ def test_mutual_inductance_matrix(
     iterations=3,
 ):
     hole_polygon_mapping = {
-        "square_hole": geo.square(6, points_per_side=101),
+        "square_hole": geo.box(6, points_per_side=101),
         "round_hole": geo.circle(4, points=301),
     }
 

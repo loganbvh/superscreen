@@ -2,13 +2,10 @@ import logging
 from typing import Any, Optional, Union, List, Dict, Tuple
 
 import numpy as np
-from scipy import interpolate
 from scipy import optimize
-from scipy import spatial
 
 from .solve import solve
 from .device import Device
-from .geometry import close_curve
 from .solution import Solution
 
 
@@ -18,7 +15,7 @@ logger = logging.getLogger(__name__)
 def make_fluxoid_polygons(
     device: Device,
     holes: Optional[Union[List[str], str]] = None,
-    join_type: str = "square",
+    join_style: str = "mitre",
     interp_points: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """Generates polygons enclosing the given holes to calculate the fluxoid.
@@ -27,7 +24,7 @@ def make_fluxoid_polygons(
         device: The Device for which to generate polygons.
         holes: Name(s) of the hole(s) in the device for which to generate polygons.
             Defaults to all holes in the device.
-        join_type: See :meth:`superscreen.device.Device.offset_points`.
+        join_style: See :meth:`superscreen.device.Device.buffer`.
         interp_points: If provided, the resulting polygons will be interpolated to
             ``interp_points`` vertices.
 
@@ -43,23 +40,15 @@ def make_fluxoid_polygons(
     polygons = {}
     for name in holes:
         hole = device_holes[name]
-        other_points = [
-            poly.points
-            for poly in device_polygons.values()
-            if poly.layer == hole.layer and poly.name != name
-        ]
-        other_points = np.concatenate(other_points)
-        min_dist = spatial.distance.cdist(hole.points, other_points).min()
-        if join_type.lower() == "miter":
-            delta = min_dist / 2.5
-        else:
-            delta = min_dist / 2
-        new_points = close_curve(hole.offset_points(delta, join_type=join_type))
-        if interp_points:
-            tck, _ = interpolate.splprep(new_points.T, k=1, s=0)
-            x, y = interpolate.splev(np.linspace(0, 1, interp_points), tck)
-            new_points = close_curve(np.stack([x, y], axis=1))
-        polygons[name] = new_points
+        hole_poly = hole.polygon
+        min_dist = min(
+            hole_poly.exterior.distance(other.polygon.exterior)
+            for other in device_polygons.values()
+            if other.layer == hole.layer and other.name != name
+        )
+        delta = min_dist / 2
+        new_poly = hole.buffer(delta, join_style=join_style).resample(interp_points)
+        polygons[name] = new_poly.points
     return polygons
 
 

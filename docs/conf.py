@@ -84,4 +84,5 @@ intersphinx_mapping = {
     "numpy": ("http://docs.scipy.org/doc/numpy", None),
     "scipy": ("http://docs.scipy.org/doc/scipy/reference", None),
     "matplotlib": ("http://matplotlib.org/stable", None),
+    "shapely": ("https://shapely.readthedocs.io/en/stable/", None),
 }

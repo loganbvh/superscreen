@@ -4,11 +4,92 @@ import tempfile
 
 import pytest
 import numpy as np
+import shapely
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend
+
+
+def test_set_polygon_points():
+    box = shapely.geometry.box(0, 0, 1, 1).exterior.coords
+    hole = shapely.geometry.box(0.25, 0.25, 0.75, 0.75, ccw=False)
+    polygon = shapely.geometry.polygon.Polygon(box, holes=[hole.exterior.coords])
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon("bad", layer="None", points=polygon)
+
+    invalid = shapely.geometry.polygon.LinearRing(
+        [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
+    )
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon("bad", layer="None", points=invalid)
+
+    x, y = sc.geometry.circle(1).T
+    z = np.ones_like(x)
+    points = np.stack([x, y, z], axis=1)
+    with pytest.raises(ValueError):
+        _ = sc.Polygon("bad", layer="None", points=points)
+
+
+def test_polygon_on_boundary(radius=1):
+    points = sc.geometry.circle(radius, points=501)
+    polygon = sc.Polygon("circle", layer="None", points=points)
+    Delta_x, Delta_y = polygon.extents
+    assert np.isclose(Delta_x, 2 * radius)
+    assert np.isclose(Delta_y, 2 * radius)
+
+    smaller = sc.geometry.circle(radius - 0.01)
+    bigger = sc.geometry.circle(radius + 0.01)
+    assert polygon.on_boundary(smaller, radius=0.1).all()
+    assert polygon.on_boundary(bigger, radius=0.1).all()
+    assert not polygon.on_boundary(smaller, radius=0.001).any()
+    assert not polygon.on_boundary(bigger, radius=0.001).any()
+    assert polygon.on_boundary(smaller, index=True).dtype is np.dtype(int)
+
+
+def test_polygon_join():
+
+    square1 = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1))
+    square2 = sc.Polygon(
+        "square1", layer="layer", points=sc.geometry.box(1, center=(0.5, 0.5))
+    )
+    name = "name"
+    layer = "layer"
+    for items in (
+        [square1, square2],
+        [square1.points, square2.points],
+        [square1.polygon, square2.polygon],
+    ):
+        _ = sc.Polygon.from_union(items, name=name, layer=layer)
+        _ = sc.Polygon.from_difference(items, name=name, layer=layer)
+        _ = sc.Polygon.from_intersection(items, name=name, layer=layer)
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon.from_union([square1, square2], name=name, layer="invalid")
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon.from_difference([square1, square1], name=name, layer=layer)
+
+    with pytest.raises(ValueError):
+        _ = square1._join_via(square2, "invalid")
+
+    with pytest.raises(ValueError):
+        _ = sc.Polygon.from_difference(
+            [square1, square2],
+            name=name,
+            layer=layer,
+            symmetric=True,
+        )
+
+    assert square1.resample(False) == square1
+
+
+def test_plot_polygon():
+    ax = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1)).plot()
+    assert isinstance(ax, plt.Axes)
 
 
 @pytest.fixture(scope="module")
@@ -24,11 +105,15 @@ def device():
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    offset_film = films[0].offset_points(1, join_type="miter")
+    holes = [
+        sc.Polygon("hole", layer="layer1", points=sc.geometry.circle(1)),
+    ]
+
+    offset_film = films[0].buffer(1, join_style="mitre", as_polygon=False)
     assert isinstance(offset_film, np.ndarray)
     assert offset_film.shape[0] >= films[0].points.shape[0]
 
-    offset_poly = films[0].offset_points(1, as_polygon=True)
+    offset_poly = films[0].buffer(1)
     assert isinstance(offset_poly, sc.Polygon)
     assert films[0].name in offset_poly.name
 
@@ -43,7 +128,7 @@ def device():
         sc.Polygon(
             "bounding_box",
             layer="layer0",
-            points=sc.geometry.square(12, angle=90),
+            points=sc.geometry.box(12, angle=90),
         ),
     ]
 
@@ -51,7 +136,7 @@ def device():
         "device",
         layers=layers,
         films=films,
-        holes=None,
+        holes=holes,
         abstract_regions=abstract_regions,
     )
 
@@ -102,10 +187,6 @@ def device_with_mesh():
     device.make_mesh(min_triangles=2500)
 
     print(device)
-    assert all(polygon.counter_clockwise for polygon in films + holes)
-    assert sc.Polygon(
-        "cw_circle", layer="layer0", points=sc.geometry.circle(2)[::-1]
-    ).clockwise
     assert device == device
     assert all(film == film for film in films)
     assert all(layer == layer for layer in layers)
@@ -137,23 +218,48 @@ def device_with_mesh():
 
 @pytest.mark.parametrize("subplots", [False, True])
 @pytest.mark.parametrize("legend", [False, True])
-def test_plot_polygons(device, device_with_mesh, legend, subplots, plot_mesh=True):
+def test_plot_device(device, device_with_mesh, legend, subplots, mesh=True):
     with non_gui_backend():
-        fig, axes = device.plot_polygons(legend=legend, subplots=subplots)
+        fig, axes = device.plot(legend=legend, subplots=subplots)
         if subplots:
             assert isinstance(axes, np.ndarray)
             assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
-        plt.close(fig)
-
+            with pytest.raises(ValueError):
+                fig, ax = plt.subplots()
+                _ = device.plot(ax=ax, subplots=subplots)
         with pytest.raises(RuntimeError):
-            _ = device.plot_polygons(
-                legend=legend, subplots=subplots, plot_mesh=plot_mesh
-            )
+            _ = device.plot(legend=legend, subplots=subplots, mesh=mesh)
+        fig, axes = device_with_mesh.plot(legend=legend, subplots=subplots, mesh=mesh)
+        plt.close("all")
 
-        fig, axes = device_with_mesh.plot_polygons(
-            legend=legend, subplots=subplots, plot_mesh=plot_mesh
+
+@pytest.mark.parametrize("subplots", [False, True])
+@pytest.mark.parametrize("legend", [False, True])
+def test_draw_device(device, legend, subplots):
+    with non_gui_backend():
+        fig, axes = device.draw(exclude="disk", legend=legend, subplots=subplots)
+        fig, axes = device.draw(
+            legend=legend,
+            subplots=subplots,
+            layer_order="decreasing",
         )
-        plt.close(fig)
+        if subplots:
+            assert isinstance(axes, np.ndarray)
+            assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
+            with pytest.raises(ValueError):
+                fig, ax = plt.subplots()
+                _ = device.draw(ax=ax, subplots=subplots)
+
+    with pytest.raises(ValueError):
+        _ = device.draw(layer_order="invalid")
+
+    fig, ax = plt.subplots()
+    _ = sc.Device(
+        "device",
+        layers=[sc.Layer("layer", Lambda=0, z0=0)],
+        films=[sc.Polygon("disk", layer="layer", points=sc.geometry.circle(1))],
+    ).draw(ax=ax)
+    plt.close("all")
 
 
 @pytest.mark.parametrize(

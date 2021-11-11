@@ -40,7 +40,7 @@ def device():
     ]
 
     abstract_regions = [
-        sc.Polygon("bounding_box", layer="layer0", points=sc.geometry.square(12)),
+        sc.Polygon("bounding_box", layer="layer0", points=sc.geometry.box(12)),
     ]
 
     device = sc.Device(
@@ -353,9 +353,7 @@ def test_fluxoid_simply_connected(
     if polygon_shape == "circle":
         coords = sc.geometry.circle(1.5, points=501, center=center)
     else:
-        coords = sc.geometry.rectangle(3, 2, x_points=100, y_points=100, center=center)[
-            ::-1
-        ]
+        coords = sc.geometry.box(3, 2, points_per_side=100, center=center)[::-1]
 
     if center == (-4, 0):
         # The polygon goes outside of the film -> raise ValueError

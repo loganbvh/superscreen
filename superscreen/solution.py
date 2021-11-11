@@ -418,9 +418,7 @@ class Solution(object):
 
         Args:
             polygon_points: A shape ``(n, 2)`` array of ``(x, y)`` coordinates of
-                polygon vertices defining the closed region :math:`S`. The polygon
-                vertices must be oriented counter-clockwise; if not, the vertices will
-                be reversed prior to calculating the fluxoid (with a warning).
+                polygon vertices defining the closed region :math:`S`.
             layers: Name(s) of the layer(s) for which to compute the fluxoid.
             grid_shape: Shape of the desired rectangular grid to use for interpolation.
                 If a single integer N is given, then the grid will be square,
@@ -447,13 +445,6 @@ class Solution(object):
             layer=layers[0],
             points=polygon_points,
         )
-        if polygon.clockwise:
-            logger.warning(
-                "The provided polygon vertices are oriented clockwise. Reversing them "
-                "to counter-clockwise before calculating the fluxoid."
-            )
-            polygon.points = polygon.points[::-1]
-        assert polygon.counter_clockwise
         points = polygon.points
         if not any(film.contains_points(points).all() for film in device.films_list):
             raise ValueError(

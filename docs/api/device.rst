@@ -69,6 +69,4 @@ Geometry
 
 .. autofunction:: superscreen.geometry.circle
 
-.. autofunction:: superscreen.geometry.rectangle
-
-.. autofunction:: superscreen.geometry.square
+.. autofunction:: superscreen.geometry.box

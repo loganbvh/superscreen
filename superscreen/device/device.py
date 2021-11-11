@@ -9,6 +9,8 @@ import dill
 import pint
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
 import scipy.sparse as sp
 from scipy import spatial
 from meshpy import triangle
@@ -496,28 +498,30 @@ class Device(object):
             result = result[0]
         return result
 
-    def plot_polygons(
+    def plot(
         self,
         ax: Optional[plt.Axes] = None,
         subplots: bool = False,
         legend: bool = True,
         figsize: Optional[Tuple[float, float]] = None,
-        plot_mesh: bool = False,
+        mesh: bool = False,
         mesh_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Tuple[plt.Figure, plt.Axes]:
         """Plot all of the device's polygons.
 
-        Keyword arguments are passed to ax.plot().
-
         Args:
             ax: matplotlib axis on which to plot. If None, a new figure is created.
-            grid: Whether to add grid lines.
+            subplots: If True, plots each layer on a different subplot.
             legend: Whether to add a legend.
             figsize: matplotlib figsize, only used if ax is None.
+            mesh: If True, plot the mesh.
+            mesh_kwargs: Keyword arguments passed to ``ax.triplot()``
+                if ``mesh`` is True.
+            kwargs: Passed to ``ax.plot()`` for the polygon boundaries.
 
         Returns:
-            matplotlib axis
+            Matplotlib Figure and Axes
         """
         if len(self.layers_list) > 1 and subplots and ax is not None:
             raise ValueError(
@@ -544,7 +548,7 @@ class Device(object):
         polygons_by_layer = defaultdict(list)
         for polygon in self.polygons.values():
             polygons_by_layer[polygon.layer].append(polygon)
-        if plot_mesh:
+        if mesh:
             if self.triangles is None:
                 raise RuntimeError(
                     "Mesh does not exist. Run device.make_mesh() to generate the mesh."
@@ -560,7 +564,7 @@ class Device(object):
                 axes[0].triplot(x, y, tri, **mesh_kwargs)
         for ax, (layer, polygons) in zip(axes.flat, polygons_by_layer.items()):
             for polygon in polygons:
-                ax.plot(*polygon.points.T, label=polygon.name, **kwargs)
+                ax = polygon.plot(ax=ax, **kwargs)
             if subplots:
                 ax.set_title(layer)
             if legend:
@@ -571,6 +575,152 @@ class Device(object):
             ax.set_aspect("equal")
         if not subplots:
             axes = axes[0]
+        return fig, axes
+
+    def patches(self) -> Dict[str, Dict[str, PathPatch]]:
+        """Returns a dict of ``{layer_name: {film_name: PathPatch}}``
+        for visualizing the device.
+        `"""
+        polygons_by_layer = defaultdict(list)
+        holes_by_layer = defaultdict(list)
+        holes = self.holes
+        abstract_regions = self.abstract_regions
+        for polygon in self.polygons.values():
+            if polygon.name in holes:
+                holes_by_layer[polygon.layer].append(polygon)
+            else:
+                polygons_by_layer[polygon.layer].append(polygon)
+        patches = defaultdict(dict)
+        for layer, regions in polygons_by_layer.items():
+            for region in regions:
+                coords = region.points.tolist()
+                codes = [Path.LINETO for _ in coords]
+                codes[0] = Path.MOVETO
+                codes[-1] = Path.CLOSEPOLY
+                poly = region.polygon
+                for hole in holes_by_layer[layer]:
+                    if region.name not in abstract_regions and poly.contains(
+                        hole.polygon
+                    ):
+                        hole_coords = hole.points.tolist()[::-1]
+                        hole_codes = [Path.LINETO for _ in hole_coords]
+                        hole_codes[0] = Path.MOVETO
+                        hole_codes[-1] = Path.CLOSEPOLY
+                        coords.extend(hole_coords)
+                        codes.extend(hole_codes)
+                patches[layer][region.name] = PathPatch(Path(coords, codes))
+        return dict(patches)
+
+    def draw(
+        self,
+        ax: Optional[plt.Axes] = None,
+        subplots: bool = False,
+        max_cols: int = 3,
+        legend: bool = False,
+        figsize: Optional[Tuple[float, float]] = None,
+        alpha: float = 0.5,
+        exclude: Optional[Union[str, List[str]]] = None,
+        layer_order: str = "increasing",
+    ) -> Tuple[plt.Figure, Union[plt.Axes, np.ndarray]]:
+        """Draws all polygons in the device as matplotlib patches.
+
+        Args:
+            ax: matplotlib axis on which to plot. If None, a new figure is created.
+            subplots: If True, plots each layer on a different subplot.
+            max_cols: The maximum number of columns to create if ``subplots`` is True.
+            legend: Whether to add a legend.
+            figsize: matplotlib figsize, only used if ax is None.
+            alpha: The alpha (opacity) value for the patches (0 <= alpha <= 1).
+            exclude: A polygon name or list of polygon names to exclude
+                from the figure.
+            layer_order: If ``"increasing"`` (``"decreasing"``) draw polygons in
+                increasing (decreasing) order by layer height ``layer.z0``.
+
+        Returns:
+            Matplotlib Figre and Axes.
+        """
+        if len(self.layers_list) > 1 and subplots and ax is not None:
+            raise ValueError(
+                "Axes may not be provided if subplots is True and the device has "
+                "multiple layers."
+            )
+        layer_order = layer_order.lower()
+        layer_orders = ("increasing", "decreasing")
+        if layer_order not in layer_orders:
+            raise ValueError(
+                f"Invalid layer_order: {layer_order}. "
+                f"Valid layer orders are {layer_orders}."
+            )
+        if ax is None:
+            if subplots:
+                from ..visualization import auto_grid
+
+                fig, axes = auto_grid(
+                    len(self.layers_list),
+                    max_cols=max_cols,
+                    figsize=figsize,
+                    constrained_layout=True,
+                )
+            else:
+                fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+                axes = np.array([ax for _ in self.layers_list])
+        else:
+            subplots = False
+            fig = ax.get_figure()
+            axes = np.array([ax for _ in self.layers_list])
+        exclude = exclude or []
+        if isinstance(exclude, str):
+            exclude = [exclude]
+        layers = [layer.name for layer in sorted(self.layers_list, key=lambda x: x.z0)]
+        if layer_order == "decreasing":
+            layers = layers[::-1]
+        patches = self.patches()
+        used_axes = set()
+        units = self.ureg(self.length_units).units
+        x, y = self.poly_points.T
+        margin = 0.1
+        dx = np.ptp(x)
+        dy = np.ptp(y)
+        x0 = x.min() + dx / 2
+        y0 = y.min() + dy / 2
+        dx *= 1 + margin
+        dy *= 1 + margin
+        labels = []
+        handles = []
+        for i, (layer, ax) in enumerate(zip(layers, axes.flat)):
+            ax.set_aspect("equal")
+            ax.grid(False)
+            ax.set_xlim(x0 - dx / 2, x0 + dx / 2)
+            ax.set_ylim(y0 - dy / 2, y0 + dy / 2)
+            ax.set_xlabel(f"$x$ $[{units:~L}]$")
+            ax.set_ylabel(f"$y$ $[{units:~L}]$")
+            if subplots:
+                labels = []
+                handles = []
+            j = 0
+            for name, patch in patches[layer].items():
+                if name in exclude:
+                    continue
+                patch.set_facecolor(f"C{i}")
+                patch.set_edgecolor(f"C{j}")
+                j += 1
+                patch.set_linewidth(3)
+                patch.set_alpha(alpha)
+                ax.add_artist(patch)
+                labels.append(name)
+                handles.append(patch)
+                used_axes.add(ax)
+            if subplots:
+                ax.set_title(layer)
+                if legend:
+                    ax.legend(handles, labels, bbox_to_anchor=(1, 1), loc="upper left")
+        if subplots:
+            for ax in fig.axes:
+                if ax not in used_axes:
+                    fig.delaxes(ax)
+        else:
+            axes = axes[0]
+            axes.legend(handles, labels, bbox_to_anchor=(1, 1), loc="upper left")
         return fig, axes
 
     def to_file(
