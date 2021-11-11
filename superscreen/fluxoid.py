@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def make_fluxoid_polygons(
     device: Device,
     holes: Optional[Union[List[str], str]] = None,
-    join_type: str = "square",
+    join_style: str = "mitre",
     interp_points: Optional[int] = None,
 ) -> Dict[str, np.ndarray]:
     """Generates polygons enclosing the given holes to calculate the fluxoid.
@@ -27,7 +27,7 @@ def make_fluxoid_polygons(
         device: The Device for which to generate polygons.
         holes: Name(s) of the hole(s) in the device for which to generate polygons.
             Defaults to all holes in the device.
-        join_type: See :meth:`superscreen.device.Device.offset_points`.
+        join_style: See :meth:`superscreen.device.Device.buffer`.
         interp_points: If provided, the resulting polygons will be interpolated to
             ``interp_points`` vertices.
 
@@ -50,11 +50,11 @@ def make_fluxoid_polygons(
         ]
         other_points = np.concatenate(other_points)
         min_dist = spatial.distance.cdist(hole.points, other_points).min()
-        if join_type.lower() == "miter":
+        if join_style.lower() == "mitre":
             delta = min_dist / 2.5
         else:
             delta = min_dist / 2
-        new_points = close_curve(hole.offset_points(delta, join_type=join_type))
+        new_points = close_curve(hole.buffer(delta, join_style=join_style))
         if interp_points:
             tck, _ = interpolate.splprep(new_points.T, k=1, s=0)
             x, y = interpolate.splev(np.linspace(0, 1, interp_points), tck)

@@ -24,11 +24,11 @@ def device():
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
-    offset_film = films[0].offset_points(1, join_type="miter")
+    offset_film = films[0].buffer(1, join_style="mitre")
     assert isinstance(offset_film, np.ndarray)
     assert offset_film.shape[0] >= films[0].points.shape[0]
 
-    offset_poly = films[0].offset_points(1, as_polygon=True)
+    offset_poly = films[0].buffer(1, as_polygon=True)
     assert isinstance(offset_poly, sc.Polygon)
     assert films[0].name in offset_poly.name
 

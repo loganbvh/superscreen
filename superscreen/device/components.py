@@ -4,7 +4,7 @@ from typing import Optional, Union, Tuple
 import numpy as np
 from matplotlib import path
 from scipy import interpolate
-import pyclipper
+from shapely import geometry
 
 from ..geometry import close_curve
 from ..parameter import Parameter
@@ -111,14 +111,25 @@ class Polygon(object):
         name: Name of the polygon.
         layer: Name of the layer in which the polygon is located.
         points: An array of shape (n, 2) specifying the x, y coordinates of
-            the polyon's vertices.
+            the polyon's vertices, or a shapely Polygon instance.
         mesh: Whether to include this polygon when computing a mesh.
 
     """
 
-    def __init__(self, name: str, *, layer: str, points: np.ndarray, mesh: bool = True):
+    def __init__(
+        self,
+        name: str,
+        *,
+        layer: str,
+        points: Union[np.ndarray, geometry.polygon.Polygon],
+        mesh: bool = True
+    ):
         self.name = name
         self.layer = layer
+        if isinstance(points, geometry.polygon.Polygon):
+            if points.interiors:
+                raise ValueError("Expected a simply-connected polygon.")
+            points = geometry.polygon.orient(points).exterior.coords
         self.points = np.asarray(points)
         # Ensure that it is a closed polygon.
         self.points = close_curve(self.points)
@@ -130,11 +141,7 @@ class Polygon(object):
     @property
     def area(self) -> float:
         """The area of the polygon."""
-        # https://en.wikipedia.org/wiki/Shoelace_formula
-        # https://stackoverflow.com/a/30408825/11655306
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        return 0.5 * np.abs(np.dot(y, np.roll(x, 1)) - np.dot(x, np.roll(y, 1)))
+        return self.polygon.area
 
     @property
     def extents(self) -> Tuple[float, float]:
@@ -144,22 +151,22 @@ class Polygon(object):
     @property
     def clockwise(self) -> bool:
         """True if the polygon vertices are oriented clockwise."""
-        # # https://stackoverflow.com/a/1165943
-        # # https://www.element84.com/blog/
-        # # determining-the-winding-of-a-polygon-given-as-a-set-of-ordered-points
-        x = self.points[:, 0]
-        y = self.points[:, 1]
-        return np.sum((x[1:] - x[:-1]) * (y[1:] + y[:-1])) > 0
+        return not self.polygon.exterior.is_ccw
 
     @property
     def counter_clockwise(self) -> bool:
         """True if the polygon vertices are oriented counter-clockwise."""
-        return not self.clockwise
+        return self.polygon.exterior.is_ccw
 
     @property
     def path(self) -> path.Path:
         """A matplotlib.path.Path representing the polygon boundary."""
         return path.Path(self.points, closed=True)
+
+    @property
+    def polygon(self) -> geometry.polygon.Polygon:
+        """A :class:`shapely.geometry.polygon.Polygon` representing the Polygon."""
+        return geometry.polygon.orient(geometry.polygon.Polygon(self.points))
 
     def contains_points(
         self,
@@ -199,64 +206,185 @@ class Polygon(object):
             return np.where(boundary)[0]
         return boundary
 
-    def offset_points(
+    # def offset_points(
+    #     self,
+    #     delta: float,
+    #     join_type: str = "square",
+    #     miter_limit: float = 2.0,
+    #     as_polygon: bool = False,
+    # ) -> Union[np.ndarray, "Polygon"]:
+    #     """Returns polygon points or a Polygon object with vertices offset from
+    #     ``self.points`` by a distance ``delta``. If ``delta > 0`` this "inflates"
+    #     the polygon, and if ``delta < 0`` this shrinks the polygon.
+
+    #     Args:
+    #         delta: The amount by which to offset the polygon points, in units of
+    #             ``self.length_units``.
+    #         join_type: The join type to use in generating the offset points. See the
+    #             `Clipper documentation <http://www.angusj.com/delphi/clipper/
+    #             documentation/ Docs/Units/ClipperLib/Types/JoinType.htm>`_
+    #             for more details.
+    #         miter_limit: The MiterLimit to use if ``join_type == "miter"``. See the
+    #             `Clipper documentation <http://www.angusj.com/delphi/clipper/
+    #             documentation/Docs/Units/ClipperLib/Classes/ClipperOffset/Properties/
+    #             MiterLimit.htm>`_ for more details.
+    #         as_polygon: Whether to return a new Polygon instance or just an array
+    #             of vertices.
+
+    #     Returns:
+    #         A new :class:`superscreen.device.Polygon` instance with the
+    #         offset polygon vertices if ``as_polygon`` is True. Otherwise returns
+    #         a shape ``(m, 2)`` array of offset polygon vertices.
+    #     """
+    #     jt = {
+    #         "square": pyclipper.JT_SQUARE,
+    #         "miter": pyclipper.JT_MITER,
+    #         "round": pyclipper.JT_ROUND,
+    #     }[join_type.lower()]
+    #     pco = pyclipper.PyclipperOffset()
+    #     if jt == pyclipper.JT_MITER:
+    #         pco.MiterLimit = miter_limit
+    #     pco.AddPath(
+    #         pyclipper.scale_to_clipper(self.points),
+    #         jt,
+    #         pyclipper.ET_CLOSEDPOLYGON,
+    #     )
+    #     solution = pco.Execute(pyclipper.scale_to_clipper(delta))
+    #     points = np.array(pyclipper.scale_from_clipper(solution)).squeeze()
+    #     points = close_curve(points)
+    #     if points.shape[0] < self.points.shape[0]:
+    #         tck, _ = interpolate.splprep(points.T, k=1, s=0)
+    #         x, y = interpolate.splev(np.linspace(0, 1, self.points.shape[0]), tck)
+    #         points = close_curve(np.stack([x, y], axis=1))
+    #     if not as_polygon:
+    #         return points
+    #     return Polygon(
+    #         f"{self.name} ({delta:+.3f})",
+    #         layer=self.layer,
+    #         points=points,
+    #         mesh=self.mesh,
+    #     )
+
+    def _validate_join(
         self,
-        delta: float,
-        join_type: str = "square",
-        miter_limit: float = 2.0,
-        as_polygon: bool = False,
-    ) -> Union[np.ndarray, "Polygon"]:
-        """Returns polygon points or a Polygon object with vertices offset from
-        ``self.points`` by a distance ``delta``. If ``delta > 0`` this "inflates"
-        the polygon, and if ``delta < 0`` this shrinks the polygon.
+        other: Union["Polygon", geometry.polygon.Polygon, geometry.polygon.LinearRing],
+        name: Optional[str],
+        operator: str,
+    ) -> Tuple[geometry.polygon.Polygon, Optional[str]]:
+        if isinstance(other, Polygon):
+            other_poly = other.polygon
+            if self.layer != other.layer:
+                raise ValueError("Cannot join with a polygon in other layer.")
+            if name is None:
+                name = f"{self.name} {operator} {other.name}"
+        elif isinstance(other, (geometry.polygon.LinearRing, geometry.linestring.LineString)):
+            other_poly = geometry.polygon.Polygon(other)
+        elif not isinstance(other, geometry.polygon.Polygon):
+            raise TypeError(
+                f"Expected other to be a superscreen Polygon, shapely Polygon, "
+                f"or shapely LinearRing/LineString, but got {type(other)}."
+            )
+        return other_poly, name
 
-        Args:
-            delta: The amount by which to offset the polygon points, in units of
-                ``self.length_units``.
-            join_type: The join type to use in generating the offset points. See the
-                `Clipper documentation <http://www.angusj.com/delphi/clipper/
-                documentation/ Docs/Units/ClipperLib/Types/JoinType.htm>`_
-                for more details.
-            miter_limit: The MiterLimit to use if ``join_type == "miter"``. See the
-                `Clipper documentation <http://www.angusj.com/delphi/clipper/
-                documentation/Docs/Units/ClipperLib/Classes/ClipperOffset/Properties/
-                MiterLimit.htm>`_ for more details.
-            as_polygon: Whether to return a new Polygon instance or just an array
-                of vertices.
-
-        Returns:
-            A new :class:`superscreen.device.Polygon` instance with the
-            offset polygon vertices if ``as_polygon`` is True. Otherwise returns
-            a shape ``(m, 2)`` array of offset polygon vertices.
-        """
-        jt = {
-            "square": pyclipper.JT_SQUARE,
-            "miter": pyclipper.JT_MITER,
-            "round": pyclipper.JT_ROUND,
-        }[join_type.lower()]
-        pco = pyclipper.PyclipperOffset()
-        if jt == pyclipper.JT_MITER:
-            pco.MiterLimit = miter_limit
-        pco.AddPath(
-            pyclipper.scale_to_clipper(self.points),
-            jt,
-            pyclipper.ET_CLOSEDPOLYGON,
-        )
-        solution = pco.Execute(pyclipper.scale_to_clipper(delta))
-        points = np.array(pyclipper.scale_from_clipper(solution)).squeeze()
-        points = close_curve(points)
-        if points.shape[0] < self.points.shape[0]:
-            tck, _ = interpolate.splprep(points.T, k=1, s=0)
-            x, y = interpolate.splev(np.linspace(0, 1, self.points.shape[0]), tck)
-            points = close_curve(np.stack([x, y], axis=1))
-        if not as_polygon:
-            return points
+    def union(
+        self,
+        other: Union["Polygon", geometry.polygon.Polygon, geometry.polygon.LinearRing],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        other_poly, name = self._validate_join(other, name, "|")
+        if name is None:
+            name = self.name
+        poly = self.polygon.union(other_poly)
         return Polygon(
-            f"{self.name} ({delta:+.3f})",
+            name,
             layer=self.layer,
-            points=points,
+            points=poly,
             mesh=self.mesh,
         )
+
+    def intersection(
+        self,
+        other: Union["Polygon", geometry.polygon.Polygon, geometry.polygon.LinearRing],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        other_poly, name = self._validate_join(other, "&")
+        if name is None:
+            name = self.name
+        poly = self.polygon.intersection(other_poly)
+        return Polygon(
+            name,
+            layer=self.layer,
+            points=poly,
+            mesh=self.mesh,
+        )
+
+    def difference(
+        self,
+        other: Union["Polygon", geometry.polygon.Polygon, geometry.polygon.LinearRing],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        other_poly, name = self._validate_join(other, "\\")
+        if name is None:
+            name = self.name
+        poly = self.polygon.difference(other_poly)
+        return Polygon(
+            name,
+            layer=self.layer,
+            points=poly,
+            mesh=self.mesh,
+        )
+
+    def symmetric_difference(
+        self,
+        other: Union["Polygon", geometry.polygon.Polygon, geometry.polygon.LinearRing],
+        name: Optional[str] = None,
+    ) -> "Polygon":
+        other_poly, name = self._validate_join(other, "\\")
+        if name is None:
+            name = self.name
+        poly = self.polygon.symmetric_difference(other_poly)
+        return Polygon(
+            name,
+            layer=self.layer,
+            points=poly,
+            mesh=self.mesh,
+        )
+
+    def buffer(
+        self,
+        distance: float,
+        join_style: Union[str, int] = "mitre",
+        mitre_limit: float = 5.0,
+        single_sided: bool = True,
+        as_polygon: bool = False,
+    ) -> Union[np.ndarray, "Polygon"]:
+        if isinstance(join_style, str):
+            join_style = getattr(geometry.JOIN_STYLE, join_style)
+        poly = self.polygon.buffer(
+            distance,
+            join_style=join_style,
+            mitre_limit=mitre_limit,
+            single_sided=single_sided,
+        )
+        
+        polygon = Polygon(
+            f"{self.name} ({distance:+.3f})",
+            layer=self.layer,
+            points=poly,
+            mesh=self.mesh,
+        )
+        npts = max(polygon.points.shape[0], self.points.shape[0])
+        polygon.resample(npts)
+        if as_polygon:
+            return polygon
+        return polygon.points
+
+    def resample(self, num_points, degree: int = 1, smooth: float = 0) -> None:
+        points = self.points.copy()
+        tck, _ = interpolate.splprep(points.T, k=degree, s=smooth)
+        x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
+        self.points = close_curve(np.stack([x, y], axis=1))
+        return self
 
     def __repr__(self) -> str:
         return (

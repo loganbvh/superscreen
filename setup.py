@@ -33,11 +33,11 @@ INSTALL_REQUIRES = [
     "optimesh",
     "pandas",
     "pint",
-    "pyclipper",
     "pytest",
     "pytest-cov",
     "ray[default]",
     "scipy",
+    "shapely",
 ]
 
 EXTRAS_REQUIRE = {
