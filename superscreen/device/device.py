@@ -599,9 +599,8 @@ class Device(object):
                 codes[-1] = Path.CLOSEPOLY
                 poly = region.polygon
                 for hole in holes_by_layer[layer]:
-                    if (
-                        region.name not in abstract_regions
-                        and poly.contains(hole.polygon)
+                    if region.name not in abstract_regions and poly.contains(
+                        hole.polygon
                     ):
                         hole_coords = hole.points.tolist()[::-1]
                         hole_codes = [Path.LINETO for _ in hole_coords]
@@ -684,8 +683,8 @@ class Device(object):
         dy = np.ptp(y)
         x0 = x.min() + dx / 2
         y0 = y.min() + dy / 2
-        dx *= (1 + margin)
-        dy *= (1 + margin)
+        dx *= 1 + margin
+        dy *= 1 + margin
         labels = []
         handles = []
         for i, (layer, ax) in enumerate(zip(layers, axes.flat)):

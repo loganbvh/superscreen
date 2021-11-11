@@ -29,9 +29,7 @@ def device():
         ),
     ]
 
-    abstract_regions = [
-        sc.Polygon("bounding_box", layer="layer1", points=geo.box(10))
-    ]
+    abstract_regions = [sc.Polygon("bounding_box", layer="layer1", points=geo.box(10))]
 
     device = sc.Device(
         "device",
