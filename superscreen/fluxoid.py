@@ -2,9 +2,7 @@ import logging
 from typing import Any, Optional, Union, List, Dict, Tuple
 
 import numpy as np
-from scipy import interpolate
 from scipy import optimize
-from scipy import spatial
 
 from .solve import solve
 from .device import Device
