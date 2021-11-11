@@ -146,6 +146,8 @@ class Polygon(object):
             geo.polygon.LinearRing,
             geo.polygon.Polygon,
         )
+        if isinstance(points, Polygon):
+            points = points.points
         if not isinstance(points, geom_types):
             points = np.asarray(points)
         points = geo.polygon.Polygon(points)
@@ -275,9 +277,11 @@ class Polygon(object):
                 f"Valid types are {(Polygon, ) + valid_types}, got {type(other)}."
             )
         joined = getattr(self.polygon, operation)(other_poly)
-        if joined.is_empty:
-            raise ValueError(f"The {operation} of the two polygons is the empty set.")
-        if not joined.is_valid:
+        if (
+            not isinstance(joined, geo.polygon.Polygon)
+            or joined.is_empty
+            or not joined.is_valid
+        ):
             raise ValueError(
                 f"The {operation} of the two polygons is not a valid polygon."
             )
@@ -430,7 +434,7 @@ class Polygon(object):
             num_points: Number of points to interpolate to. If ``num_points`` is None,
                 the polygon is resampled to ``len(self.points)`` points. If
                 ``num_points`` is not None and has a boolean value of False,
-                then the polygon is returned unaltered.
+                then an unaltered copy of the polygon is returned.
             degree: The degree of the spline with which to iterpolate.
                 Defaults to 1 (linear spline).
 
@@ -438,7 +442,7 @@ class Polygon(object):
         if num_points is None:
             num_points = self.points.shape[0]
         if not num_points:
-            return self
+            return self.copy()
         tck, _ = interpolate.splprep(self.points.T, k=degree, s=smooth)
         x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
         points = close_curve(np.stack([x, y], axis=1))
