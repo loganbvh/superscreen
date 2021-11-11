@@ -105,6 +105,10 @@ def device():
         sc.Polygon("ring", layer="layer1", points=sc.geometry.ellipse(3, 2, angle=5)),
     ]
 
+    holes = [
+        sc.Polygon("hole", layer="layer1", points=sc.geometry.circle(1)),
+    ]
+
     offset_film = films[0].buffer(1, join_style="mitre", as_polygon=False)
     assert isinstance(offset_film, np.ndarray)
     assert offset_film.shape[0] >= films[0].points.shape[0]
@@ -132,7 +136,7 @@ def device():
         "device",
         layers=layers,
         films=films,
-        holes=None,
+        holes=holes,
         abstract_regions=abstract_regions,
     )
 
@@ -233,17 +237,29 @@ def test_plot_device(device, device_with_mesh, legend, subplots, mesh=True):
 @pytest.mark.parametrize("legend", [False, True])
 def test_draw_device(device, legend, subplots):
     with non_gui_backend():
-        fig, axes = device.draw(exclude="layer0", legend=legend, subplots=subplots)
+        fig, axes = device.draw(exclude="disk", legend=legend, subplots=subplots)
+        fig, axes = device.draw(
+            legend=legend,
+            subplots=subplots,
+            layer_order="decreasing",
+        )
         if subplots:
             assert isinstance(axes, np.ndarray)
             assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
             with pytest.raises(ValueError):
                 fig, ax = plt.subplots()
                 _ = device.draw(ax=ax, subplots=subplots)
-        plt.close("all")
 
     with pytest.raises(ValueError):
         _ = device.draw(layer_order="invalid")
+
+    fig, ax = plt.subplots()
+    _ = sc.Device(
+        "device",
+        layers=[sc.Layer("layer", Lambda=0, z0=0)],
+        films=[sc.Polygon("disk", layer="layer", points=sc.geometry.circle(1))],
+    ).draw(ax=ax)
+    plt.close("all")
 
 
 @pytest.mark.parametrize(
