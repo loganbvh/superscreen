@@ -584,6 +584,7 @@ class Device(object):
         polygons_by_layer = defaultdict(list)
         holes_by_layer = defaultdict(list)
         holes = self.holes
+        abstract_regions = self.abstract_regions
         for polygon in self.polygons.values():
             if polygon.name in holes:
                 holes_by_layer[polygon.layer].append(polygon)
@@ -598,7 +599,10 @@ class Device(object):
                 codes[-1] = Path.CLOSEPOLY
                 poly = region.polygon
                 for hole in holes_by_layer[layer]:
-                    if poly.contains(hole.polygon):
+                    if (
+                        region.name not in abstract_regions
+                        and poly.contains(hole.polygon)
+                    ):
                         hole_coords = hole.points.tolist()[::-1]
                         hole_codes = [Path.LINETO for _ in hole_coords]
                         hole_codes[0] = Path.MOVETO
@@ -676,10 +680,12 @@ class Device(object):
         units = self.ureg(self.length_units).units
         x, y = self.poly_points.T
         margin = 0.1
-        dx = np.ptp(x) * (1 + margin)
-        dy = np.ptp(y) * (1 + margin)
-        x0 = x.mean()
-        y0 = y.mean()
+        dx = np.ptp(x)
+        dy = np.ptp(y)
+        x0 = x.min() + dx / 2
+        y0 = y.min() + dy / 2
+        dx *= (1 + margin)
+        dy *= (1 + margin)
         labels = []
         handles = []
         for i, (layer, ax) in enumerate(zip(layers, axes.flat)):
@@ -692,11 +698,14 @@ class Device(object):
             if subplots:
                 labels = []
                 handles = []
+            j = 0
             for name, patch in patches[layer].items():
                 if name in exclude:
                     continue
                 patch.set_facecolor(f"C{i}")
-                patch.set_edgecolor("k")
+                patch.set_edgecolor(f"C{j}")
+                j += 1
+                patch.set_linewidth(3)
                 patch.set_alpha(alpha)
                 ax.add_artist(patch)
                 labels.append(name)
