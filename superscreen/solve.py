@@ -520,8 +520,8 @@ def solve(
             raise TypeError(f"Expected a Vortex, but got {type(vortex)}.")
         if vortex.layer not in device.layers:
             raise ValueError(f"Vortex located in unknown layer: {vortex}.")
-        films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
-        holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
+        films_in_layer = [f for f in device.films.values() if f.layer == vortex.layer]
+        holes_in_layer = [h for h in device.holes.values() if h.layer == vortex.layer]
         if not any(
             film.contains_points([vortex.x, vortex.y]) for film in films_in_layer
         ):

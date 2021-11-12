@@ -118,9 +118,9 @@ class Polygon(object):
 
     def __init__(
         self,
-        name: str,
+        name: Optional[str] = None,
         *,
-        layer: str,
+        layer: Optional[str] = None,
         points: Union[
             np.ndarray,
             geo.linestring.LineString,
@@ -138,6 +138,13 @@ class Polygon(object):
     def points(self) -> np.ndarray:
         """A shape ``(n, 2)`` array of counter-clockwise-oriented polygon vertices."""
         return self._points
+
+    @property
+    def is_valid(self) -> bool:
+        """True if the ``Polygon`` has a ``name`` and ``layer`` its geometry is valid."""
+        return (
+            self.name is not None and self.layer is not None and self.polygon.is_valid
+        )
 
     @points.setter
     def points(self, points) -> None:
@@ -268,8 +275,12 @@ class Polygon(object):
             )
         if isinstance(other, Polygon):
             other_poly = other.polygon
-            if self.layer != other.layer:
-                raise ValueError("Cannot join with a polygon in other layer.")
+            if (
+                self.layer is not None
+                and other.layer is not None
+                and self.layer != other.layer
+            ):
+                raise ValueError("Cannot join with a polygon in another layer.")
         elif isinstance(other, valid_types):
             other_poly = geo.polygon.Polygon(other)
         if not isinstance(other_poly, geo.polygon.Polygon):
@@ -309,7 +320,7 @@ class Polygon(object):
             of ``self`` and ``other``.
         """
         return Polygon(
-            name or self.name,
+            name=name,
             layer=self.layer,
             points=self._join_via(other, "union"),
             mesh=self.mesh,
@@ -337,7 +348,7 @@ class Polygon(object):
             of ``self`` and ``other``.
         """
         return Polygon(
-            name or self.name,
+            name=name,
             layer=self.layer,
             points=self._join_via(other, "intersection"),
             mesh=self.mesh,
@@ -371,7 +382,7 @@ class Polygon(object):
         """
         operation = "symmetric_difference" if symmetric else "difference"
         return Polygon(
-            name or self.name,
+            name=name,
             layer=self.layer,
             points=self._join_via(other, operation),
             mesh=self.mesh,
@@ -413,7 +424,7 @@ class Polygon(object):
         )
 
         polygon = Polygon(
-            f"{self.name} ({distance:+.3f})",
+            name=f"{self.name} ({distance:+.3f})",
             layer=self.layer,
             points=poly,
             mesh=self.mesh,
@@ -450,7 +461,7 @@ class Polygon(object):
         x, y = interpolate.splev(np.linspace(0, 1, num_points - 1), tck)
         points = close_curve(np.stack([x, y], axis=1))
         return Polygon(
-            self.name,
+            name=self.name,
             layer=self.layer,
             points=points,
             mesh=self.mesh,
@@ -488,8 +499,8 @@ class Polygon(object):
             ],
         ],
         *,
-        name: str,
-        layer: str,
+        name: Optional[str] = None,
+        layer: Optional[str] = None,
         mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the union of a sequence of polygons.
@@ -504,7 +515,7 @@ class Polygon(object):
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
         for item in rest:
             polygon = polygon.union(item)
         return polygon
@@ -522,8 +533,8 @@ class Polygon(object):
             ],
         ],
         *,
-        name: str,
-        layer: str,
+        name: Optional[str] = None,
+        layer: Optional[str] = None,
         mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the intersection
@@ -539,7 +550,7 @@ class Polygon(object):
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
         for item in rest:
             polygon = polygon.intersection(item)
         return polygon
@@ -557,8 +568,8 @@ class Polygon(object):
             ],
         ],
         *,
-        name: str,
-        layer: str,
+        name: Optional[str] = None,
+        layer: Optional[str] = None,
         mesh: bool = True,
         symmetric: bool = False,
     ) -> "Polygon":
@@ -576,15 +587,17 @@ class Polygon(object):
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
         for item in rest:
             polygon = polygon.difference(item, symmetric=symmetric)
         return polygon
 
     def __repr__(self) -> str:
+        name = f'"{self.name}"' if self.name is not None else None
+        layer = f'"{self.layer}"' if self.layer is not None else None
         return (
-            f'{self.__class__.__name__}("{self.name}", layer="{self.layer}", '
-            f"points=ndarray[shape={self.points.shape}])"
+            f"{self.__class__.__name__}(name={name}, layer={layer}, "
+            f"points=ndarray[shape={self.points.shape}], mesh={self.mesh})"
         )
 
     def __eq__(self, other) -> bool:
