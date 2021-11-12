@@ -440,14 +440,14 @@ class Polygon(object):
 
         """
         if num_points is None:
-            num_points = self.points.shape[0] - 1
+            num_points = self.points.shape[0]
         if not num_points:
             return self.copy()
         points = self.points.copy()
         _, ix = np.unique(points, return_index=True, axis=0)
         points = points[np.sort(ix)]
         tck, _ = interpolate.splprep(points.T, k=degree, s=smooth)
-        x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
+        x, y = interpolate.splev(np.linspace(0, 1, num_points - 1), tck)
         points = close_curve(np.stack([x, y], axis=1))
         return Polygon(
             self.name,

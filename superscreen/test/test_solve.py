@@ -50,29 +50,33 @@ def two_rings():
     outer_radius = 5
 
     layers = [
-        sc.Layer("layer0", Lambda=1, z0=0),
-        sc.Layer("layer1", Lambda=1, z0=1),
+        sc.Layer("layer0", Lambda=0.5, z0=0),
+        sc.Layer("layer1", Lambda=0.5, z0=1),
     ]
 
     films = [
         sc.Polygon(
-            "square_ring",
+            "big_ring",
             layer="layer0",
-            points=geo.box(1.5 * outer_radius, points_per_side=50),
+            points=geo.circle(1.5 * outer_radius, points=200),
         ),
         sc.Polygon(
-            "round_ring", layer="layer1", points=geo.circle(outer_radius, points=200)
+            "little_ring",
+            layer="layer1",
+            points=geo.circle(outer_radius, points=100),
         ),
     ]
 
     holes = [
         sc.Polygon(
-            "square_hole",
+            "big_hole",
             layer="layer0",
-            points=geo.box(1 * inner_radius, points_per_side=50),
+            points=geo.circle(1.5 * inner_radius, points=100),
         ),
         sc.Polygon(
-            "round_hole", layer="layer1", points=geo.circle(inner_radius, points=100)
+            "little_hole",
+            layer="layer1",
+            points=geo.circle(inner_radius, points=100),
         ),
     ]
 
@@ -80,7 +84,7 @@ def two_rings():
         sc.Polygon(
             "bbox",
             layer="layer0",
-            points=geo.box(1.25 * 2 * outer_radius, points_per_side=10),
+            points=geo.circle(2 * outer_radius, points=51),
         )
     ]
 
@@ -192,12 +196,14 @@ def test_mutual_inductance_errors(two_rings):
         )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def mutual_inductance_matrix(two_rings, iterations=3):
     M = two_rings.mutual_inductance_matrix(
         iterations=iterations,
         all_iterations=True,
     )
+    # Check that M is symmetric
+    assert np.isclose(M[-1][0, 1], M[-1][1, 0], rtol=2e-2)
     return M
 
 
@@ -207,8 +213,8 @@ def test_mutual_inductance_matrix(
     iterations=3,
 ):
     hole_polygon_mapping = {
-        "square_hole": geo.box(6, points_per_side=101),
-        "round_hole": geo.circle(4, points=301),
+        "big_hole": geo.circle(6),
+        "little_hole": geo.circle(4),
     }
 
     M = two_rings.mutual_inductance_matrix(
@@ -221,13 +227,12 @@ def test_mutual_inductance_matrix(
     assert all(isinstance(m, pint.Quantity) for m in M)
     assert all(isinstance(m.magnitude, np.ndarray) for m in M)
     M = M[-1]
-
-    M2 = mutual_inductance_matrix[-1]
     assert isinstance(M, pint.Quantity)
     assert isinstance(M.magnitude, np.ndarray)
-    assert np.allclose(M, M2, rtol=1e-2)
+    M2 = mutual_inductance_matrix[-1]
+    assert np.allclose(M, M2, rtol=2e-2)
     # Check that M is symmetric
-    assert np.isclose(M[0, 1], M[1, 0], rtol=1e-2)
+    assert np.isclose(M[0, 1], M[1, 0], rtol=2e-2)
 
 
 def test_mutual_inductance_upper_lower(two_rings, iterations=1):

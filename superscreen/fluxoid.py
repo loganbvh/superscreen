@@ -24,7 +24,7 @@ def make_fluxoid_polygons(
         device: The Device for which to generate polygons.
         holes: Name(s) of the hole(s) in the device for which to generate polygons.
             Defaults to all holes in the device.
-        join_style: See :meth:`superscreen.device.Device.buffer`.
+        join_style: See :meth:`superscreen.components.Polygon.buffer`.
         interp_points: If provided, the resulting polygons will be interpolated to
             ``interp_points`` vertices.
 
