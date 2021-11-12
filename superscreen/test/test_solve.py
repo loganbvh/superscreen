@@ -289,6 +289,9 @@ def test_fluxoid_single(device):
     with pytest.raises(ValueError):
         solution, result = sc.find_fluxoid_solution(device, fluxoids=dict())
 
+    _ = sc.make_fluxoid_polygons(device, interp_points=None)
+    _ = sc.make_fluxoid_polygons(device, interp_points=101)
+
     fluxoids = {hole: 0 for hole in device.holes}
     solution, result = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
     assert isinstance(solution, sc.Solution)
