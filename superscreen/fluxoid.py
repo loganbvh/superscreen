@@ -31,7 +31,7 @@ def make_fluxoid_polygons(
     Returns:
         A dict of ``{hole_name: fluxoid_polygon}``.
     """
-    device_films = device.films
+    device_polygons = {**device.films, **device.holes}
     device_holes = device.holes
     if holes is None:
         holes = list(device_holes)
@@ -43,11 +43,13 @@ def make_fluxoid_polygons(
         hole_poly = hole.polygon
         min_dist = min(
             hole_poly.exterior.distance(other.polygon.exterior)
-            for other in device_films.values()
+            for other in device_polygons.values()
             if other.layer == hole.layer and other.name != name
         )
         delta = min_dist / 2
-        new_poly = hole.buffer(delta, join_style=join_style).resample(interp_points)
+        new_poly = hole.buffer(delta, join_style=join_style)
+        if interp_points:
+            new_poly = new_poly.resample(interp_points)
         polygons[name] = new_poly.points
     return polygons
 
