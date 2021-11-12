@@ -85,6 +85,8 @@ def test_polygon_join():
         )
 
     assert square1.resample(False) == square1
+    assert square1.resample(None).points.shape == square1.points.shape
+    assert square1.resample(71).points.shape != square1.points.shape
 
 
 def test_plot_polygon():

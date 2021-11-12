@@ -474,6 +474,11 @@ class Device(object):
             solution_slice = slice(-1, None)
         mutual_inductance = np.zeros((n_iter, n_holes, n_holes))
         for j, hole_name in enumerate(hole_polygon_mapping):
+            logger.info(
+                f"Evaluating '{self.name}' mutual inductance matrix "
+                f"column ({j+1}/{len(hole_polygon_mapping)}), "
+                f"source = '{hole_name}'."
+            )
             solutions = solve(
                 device=self,
                 circulating_currents={hole_name: str(I_circ)},
@@ -491,7 +496,7 @@ class Device(object):
         mutual_inductance = mutual_inductance * self.ureg(units)
         # Return a list to make it clear that we are returning n_iter distinct
         # matrices. You can convert back to an ndarray using
-        # np.stack([m for m in mutual_inductance], axis=0).
+        # np.stack(result, axis=0).
         result = [m for m in mutual_inductance]
         if not all_iterations:
             assert len(result) == 1
