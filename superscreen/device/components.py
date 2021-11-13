@@ -139,17 +139,6 @@ class Polygon(object):
         """A shape ``(n, 2)`` array of counter-clockwise-oriented polygon vertices."""
         return self._points
 
-    @property
-    def is_valid(self) -> bool:
-        """True if the ``Polygon`` has a ``name`` and ``layer`` its geometry is valid."""
-        polygon = self.polygon
-        return (
-            self.name is not None
-            and self.layer is not None
-            and polygon.is_valid
-            and not polygon.interiors
-        )
-
     @points.setter
     def points(self, points) -> None:
         geom_types = (
@@ -171,6 +160,17 @@ class Polygon(object):
         if points.ndim != 2 or points.shape[-1] != 2:
             raise ValueError(f"Expected shape (n, 2), but got {points.shape}.")
         self._points = points
+
+    @property
+    def is_valid(self) -> bool:
+        """True if the ``Polygon`` has a ``name`` and ``layer`` its geometry is valid."""
+        polygon = self.polygon
+        return (
+            self.name is not None
+            and self.layer is not None
+            and polygon.is_valid
+            and not polygon.interiors
+        )
 
     @property
     def area(self) -> float:
