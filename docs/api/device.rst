@@ -65,6 +65,8 @@ Geometry
 
 .. autofunction:: superscreen.geometry.rotate
 
+.. autofunction:: superscreen.geometry.translate
+
 .. autofunction:: superscreen.geometry.ellipse
 
 .. autofunction:: superscreen.geometry.circle

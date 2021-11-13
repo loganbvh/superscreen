@@ -441,12 +441,14 @@ class Solution(object):
         if units is None:
             units = f"{self.field_units} * {self.device.length_units} ** 2"
         polygon = Polygon(
-            "__polygon",
+            name="__polygon",
             layer=layers[0],
             points=polygon_points,
         )
         points = polygon.points
-        if not any(film.contains_points(points).all() for film in device.films_list):
+        if not any(
+            film.contains_points(points).all() for film in device.films.values()
+        ):
             raise ValueError(
                 "The polygon must lie completely within a superconducting film."
             )
@@ -462,21 +464,23 @@ class Solution(object):
             with_units=False,
         )
 
-        old_regions = device.abstract_regions_list
+        old_regions = device.abstract_regions
+        temp_regions = old_regions.copy()
+        temp_regions[polygon.name] = polygon
         fluxoids = {}
         for layer in layers:
             # Compute the flux part of the fluxoid:
             # \int_{poly} \mu_0 H_z(x, y) dx dy
             try:
                 polygon.layer = layer
-                device.abstract_regions_list = old_regions + [polygon]
+                device.abstract_regions = temp_regions
                 flux_part = self.polygon_flux(
                     polygons=polygon.name,
                     units=units,
                     with_units=True,
                 )[polygon.name]
             finally:
-                device.abstract_regions_list = old_regions
+                device.abstract_regions = old_regions
 
             # Compute the supercurrent part of the fluxoid:
             # \oint_{\\partial poly} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}

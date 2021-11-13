@@ -391,8 +391,8 @@ def solve_layer(
 
 
 def solve(
-    *,
     device: "Device",
+    *,
     applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
@@ -520,8 +520,8 @@ def solve(
             raise TypeError(f"Expected a Vortex, but got {type(vortex)}.")
         if vortex.layer not in device.layers:
             raise ValueError(f"Vortex located in unknown layer: {vortex}.")
-        films_in_layer = [f for f in device.films_list if f.layer == vortex.layer]
-        holes_in_layer = [h for h in device.holes_list if h.layer == vortex.layer]
+        films_in_layer = [f for f in device.films.values() if f.layer == vortex.layer]
+        holes_in_layer = [h for h in device.holes.values() if h.layer == vortex.layer]
         if not any(
             film.contains_points([vortex.x, vortex.y]) for film in films_in_layer
         ):
@@ -724,8 +724,8 @@ def solve(
 
 
 def solve_many(
-    *,
     device: "Device",
+    *,
     parallel_method: Optional[str] = None,
     applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[

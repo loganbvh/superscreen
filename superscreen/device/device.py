@@ -62,31 +62,46 @@ class Device(object):
         length_units: str = "um",
     ):
         self.name = name
+
+        self._films_list = []
+        self._holes_list = []
+        self._abstract_regions_list = []
+        self.layers_list = []
+
         if isinstance(layers, dict):
             self.layers = layers
         else:
-            self.layers_list = list(layers)
+            self.layers = {layer.name: layer for layer in layers}
         if isinstance(films, dict):
             self.films = films
         else:
-            self.films_list = list(films)
+            self.films = {film.name: film for film in films}
         if holes is None:
             holes = []
         if isinstance(holes, dict):
             self.holes = holes
         else:
-            self.holes_list = list(holes)
+            self.holes = {hole.name: hole for hole in holes}
         if abstract_regions is None:
             abstract_regions = []
         if isinstance(abstract_regions, dict):
             self.abstract_regions = abstract_regions
         else:
-            self.abstract_regions_list = list(abstract_regions)
+            self.abstract_regions = {region.name: region for region in abstract_regions}
+        for polygons, label in [(self._films_list, "film"), (self._holes_list, "hole")]:
+            for polygon in polygons:
+                if not polygon.is_valid:
+                    raise ValueError(f"The following {label} is not valid: {polygon}.")
+                if polygon.layer not in self.layers:
+                    raise ValueError(
+                        f"The following {label} is assigned to a layer that doesn not "
+                        f"exist in the device: {polygon}."
+                    )
 
         if len(self.polygons) < (
-            len(self.holes_list)
-            + len(self.films_list)
-            + len(self.abstract_regions_list)
+            len(self._holes_list)
+            + len(self._films_list)
+            + len(self._abstract_regions_list)
         ):
             raise ValueError("All Polygons in a Device must have a unique name.")
         # Make units a "read-only" attribute.
@@ -110,6 +125,13 @@ class Device(object):
         """Dict of ``{layer_name: layer}``"""
         return {layer.name: layer for layer in self.layers_list}
 
+    @staticmethod
+    def _validate_polygons(polygons: List[Polygon], label: str) -> List[Polygon]:
+        for polygon in polygons:
+            if not polygon.is_valid:
+                raise ValueError(f"The following {label} is not valid: {polygon}.")
+        return polygons
+
     @layers.setter
     def layers(self, layers_dict: Dict[str, Layer]) -> None:
         """Dict of ``{layer_name: layer}``"""
@@ -123,7 +145,7 @@ class Device(object):
     @property
     def films(self) -> Dict[str, Polygon]:
         """Dict of ``{film_name: film_polygon}``"""
-        return {film.name: film for film in self.films_list}
+        return {film.name: film for film in self._films_list}
 
     @films.setter
     def films(self, films_dict: Dict[str, Polygon]) -> None:
@@ -133,12 +155,14 @@ class Device(object):
             and all(isinstance(obj, Polygon) for obj in films_dict.values())
         ):
             raise TypeError("Films must be a dict of {film_name: Polygon}.")
-        self.films_list = list(films_dict.values())
+        for name, polygon in films_dict.items():
+            polygon.name = name
+        self._films_list = list(self._validate_polygons(films_dict.values(), "film"))
 
     @property
     def holes(self) -> Dict[str, Polygon]:
         """Dict of ``{hole_name: hole_polygon}``"""
-        return {hole.name: hole for hole in self.holes_list}
+        return {hole.name: hole for hole in self._holes_list}
 
     @holes.setter
     def holes(self, holes_dict: Dict[str, Polygon]) -> None:
@@ -148,12 +172,14 @@ class Device(object):
             and all(isinstance(obj, Polygon) for obj in holes_dict.values())
         ):
             raise TypeError("Holes must be a dict of {hole_name: Polygon}.")
-        self.holes_list = list(holes_dict.values())
+        for name, polygon in holes_dict.items():
+            polygon.name = name
+        self._holes_list = list(self._validate_polygons(holes_dict.values(), "hole"))
 
     @property
     def abstract_regions(self) -> Dict[str, Polygon]:
         """Dict of ``{region_name: region_polygon}``"""
-        return {region.name: region for region in self.abstract_regions_list}
+        return {region.name: region for region in self._abstract_regions_list}
 
     @abstract_regions.setter
     def abstract_regions(self, regions_dict: Dict[str, Polygon]) -> None:
@@ -165,7 +191,11 @@ class Device(object):
             raise TypeError(
                 "Abstract regions must be a dict of {region_name: Polygon}."
             )
-        self.abstract_regions_list = list(regions_dict.values())
+        for name, polygon in regions_dict.items():
+            polygon.name = name
+        self._abstract_regions_list = list(
+            self._validate_polygons(regions_dict.values(), "abstract region")
+        )
 
     @property
     def polygons(self) -> Dict[str, Polygon]:
@@ -252,9 +282,9 @@ class Device(object):
             A new Device instance, copied from self
         """
         layers = [layer.copy() for layer in self.layers_list]
-        films = [film.copy() for film in self.films_list]
-        holes = [hole.copy() for hole in self.holes_list]
-        abstract_regions = [region.copy() for region in self.abstract_regions_list]
+        films = [film.copy() for film in self.films.values()]
+        holes = [hole.copy() for hole in self.holes.values()]
+        abstract_regions = [region.copy() for region in self.abstract_regions.values()]
 
         device = Device(
             self.name,
@@ -909,9 +939,9 @@ class Device(object):
         args = [
             f'"{self.name}"',
             f"layers={format_list(self.layers_list)}",
-            f"films={format_list(self.films_list)}",
-            f"holes={format_list(self.holes_list)}",
-            f"abstract_regions={format_list(self.abstract_regions_list)}",
+            f"films={format_list(self._films_list)}",
+            f"holes={format_list(self._holes_list)}",
+            f"abstract_regions={format_list(self._abstract_regions_list)}",
             f'length_units="{self.length_units}"',
         ]
 
@@ -927,9 +957,9 @@ class Device(object):
         return (
             self.name == other.name
             and self.layers_list == other.layers_list
-            and self.films_list == other.films_list
-            and self.holes_list == other.holes_list
-            and self.abstract_regions_list == other.abstract_regions_list
+            and self.films == other.films
+            and self.holes == other.holes
+            and self.abstract_regions == other.abstract_regions
             and self.length_units == other.length_units
         )
 

@@ -25,18 +25,18 @@ def test_set_polygon_points():
     )
 
     with pytest.raises(ValueError):
-        _ = sc.Polygon("bad", layer="None", points=invalid)
+        _ = sc.Polygon(points=invalid)
 
     x, y = sc.geometry.circle(1).T
     z = np.ones_like(x)
     points = np.stack([x, y, z], axis=1)
     with pytest.raises(ValueError):
-        _ = sc.Polygon("bad", layer="None", points=points)
+        _ = sc.Polygon(points=points)
 
 
 def test_polygon_on_boundary(radius=1):
     points = sc.geometry.circle(radius, points=501)
-    polygon = sc.Polygon("circle", layer="None", points=points)
+    polygon = sc.Polygon(points=points)
     Delta_x, Delta_y = polygon.extents
     assert np.isclose(Delta_x, 2 * radius)
     assert np.isclose(Delta_y, 2 * radius)
@@ -52,10 +52,8 @@ def test_polygon_on_boundary(radius=1):
 
 def test_polygon_join():
 
-    square1 = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1))
-    square2 = sc.Polygon(
-        "square1", layer="layer", points=sc.geometry.box(1, center=(0.5, 0.5))
-    )
+    square1 = sc.Polygon(points=sc.geometry.box(1))
+    square2 = sc.Polygon(points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5))
     name = "name"
     layer = "layer"
     for items in (
@@ -68,8 +66,11 @@ def test_polygon_join():
         _ = sc.Polygon.from_intersection(items, name=name, layer=layer)
 
     with pytest.raises(ValueError):
-        _ = sc.Polygon.from_union([square1, square2], name=name, layer="invalid")
+        square1.layer = "layer"
+        square2.layer = "other_layer"
+        _ = square1.union(square2)
 
+    square1.layer = square2.layer = None
     with pytest.raises(ValueError):
         _ = sc.Polygon.from_difference([square1, square1], name=name, layer=layer)
 
@@ -87,6 +88,14 @@ def test_polygon_join():
     assert square1.resample(False) == square1
     assert square1.resample(None).points.shape == square1.points.shape
     assert square1.resample(71).points.shape != square1.points.shape
+
+    with pytest.raises(ValueError):
+        bowtie = [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
+        _ = sc.Polygon(name="bowtie", layer="layer", points=bowtie)
+
+    with pytest.raises(ValueError):
+        square1.name = None
+        sc.Device._validate_polygons([square1], "label")
 
 
 def test_plot_polygon():
@@ -133,6 +142,15 @@ def device():
             points=sc.geometry.box(12, angle=90),
         ),
     ]
+
+    with pytest.raises(ValueError):
+        device = sc.Device(
+            "device",
+            layers=layers[:1],
+            films=films,
+            holes=holes,
+            abstract_regions=abstract_regions,
+        )
 
     device = sc.Device(
         "device",

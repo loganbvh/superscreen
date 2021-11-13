@@ -301,7 +301,7 @@ def test_fluxoid_single(device):
     solution, result = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
     assert isinstance(solution, sc.Solution)
     assert isinstance(result, RootResults)
-    fluxoid = solution.hole_fluxoid(device.holes_list[0].name)
+    fluxoid = solution.hole_fluxoid(list(device.holes)[0])
     assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
 
 
