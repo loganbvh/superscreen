@@ -315,7 +315,7 @@ class Polygon(object):
         ],
         name: Optional[str] = None,
     ) -> "Polygon":
-        """Returns the union of the polygon and another polygon.
+        """Returns the union of the polygon and zero or more other polygons.
 
         Args:
             others: One or more objects with which to join the polygon.
@@ -346,7 +346,7 @@ class Polygon(object):
         ],
         name: Optional[str] = None,
     ) -> "Polygon":
-        """Returns the intersection of the polygon and another polygon.
+        """Returns the intersection of the polygon and zero or more other polygons.
 
         Args:
             others: One or more objects with which to join the polygon.
@@ -378,7 +378,7 @@ class Polygon(object):
         symmetric: bool = False,
         name: Optional[str] = None,
     ) -> "Polygon":
-        """Returns the difference of the polygon and another polygon.
+        """Returns the difference of the polygon and zero more other polygons.
 
         Args:
             others: One or more objects with which to join the polygon.
