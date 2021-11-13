@@ -53,9 +53,7 @@ def test_polygon_on_boundary(radius=1):
 def test_polygon_join():
 
     square1 = sc.Polygon(points=sc.geometry.box(1))
-    square2 = sc.Polygon(
-        points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5)
-    )
+    square2 = sc.Polygon(points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5))
     name = "name"
     layer = "layer"
     for items in (
