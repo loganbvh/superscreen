@@ -391,8 +391,8 @@ def solve_layer(
 
 
 def solve(
-    *,
     device: "Device",
+    *,
     applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
@@ -724,8 +724,8 @@ def solve(
 
 
 def solve_many(
-    *,
     device: "Device",
+    *,
     parallel_method: Optional[str] = None,
     applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[

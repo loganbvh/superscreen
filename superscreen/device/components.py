@@ -142,8 +142,12 @@ class Polygon(object):
     @property
     def is_valid(self) -> bool:
         """True if the ``Polygon`` has a ``name`` and ``layer`` its geometry is valid."""
+        polygon = self.polygon
         return (
-            self.name is not None and self.layer is not None and self.polygon.is_valid
+            self.name is not None
+            and self.layer is not None
+            and polygon.is_valid
+            and not polygon.interiors
         )
 
     @points.setter
