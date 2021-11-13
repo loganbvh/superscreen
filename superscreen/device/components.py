@@ -597,7 +597,7 @@ class Polygon(object):
         layer = f'"{self.layer}"' if self.layer is not None else None
         return (
             f"{self.__class__.__name__}(name={name}, layer={layer}, "
-            f"points=ndarray[shape={self.points.shape}], mesh={self.mesh})"
+            f"points=<ndarray: shape={self.points.shape}>, mesh={self.mesh})"
         )
 
     def __eq__(self, other) -> bool:
