@@ -64,7 +64,7 @@ def ellipse(
         A shape ``(points, 2)`` array of (x, y) coordinates
     """
     x0, y0 = center
-    theta = np.linspace(0, 2 * np.pi, points)
+    theta = np.linspace(0, 2 * np.pi, points, endpoint=False)
     xs = a * np.cos(theta)
     ys = b * np.sin(theta)
     coords = np.stack([xs, ys], axis=1)
