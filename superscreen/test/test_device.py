@@ -53,7 +53,9 @@ def test_polygon_on_boundary(radius=1):
 def test_polygon_join():
 
     square1 = sc.Polygon(points=sc.geometry.box(1))
-    square2 = sc.Polygon(points=sc.geometry.box(1, center=(0.5, 0.5)))
+    square2 = sc.Polygon(
+        points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5)
+    )
     name = "name"
     layer = "layer"
     for items in (
@@ -88,6 +90,14 @@ def test_polygon_join():
     assert square1.resample(False) == square1
     assert square1.resample(None).points.shape == square1.points.shape
     assert square1.resample(71).points.shape != square1.points.shape
+
+    with pytest.raises(ValueError):
+        bowtie = [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
+        _ = sc.Polygon(name="bowtie", layer="layer", points=bowtie)
+
+    with pytest.raises(ValueError):
+        square1.name = None
+        sc.Device._validate_polygons([square1], "label")
 
 
 def test_plot_polygon():
@@ -134,6 +144,15 @@ def device():
             points=sc.geometry.box(12, angle=90),
         ),
     ]
+
+    with pytest.raises(ValueError):
+        device = sc.Device(
+            "device",
+            layers=layers[:1],
+            films=films,
+            holes=holes,
+            abstract_regions=abstract_regions,
+        )
 
     device = sc.Device(
         "device",

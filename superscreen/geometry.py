@@ -28,6 +28,20 @@ def rotate(coords: np.ndarray, angle_degrees: float) -> np.ndarray:
     return (R @ coords.T).T
 
 
+def translate(coords: np.ndarray, dx: float, dy: float) -> np.ndarray:
+    """Translates the given (x, y) coordinates in the palne by ``(dx, dy)``.
+
+    Args:
+        coords: Shape (n, 2) array of (x, y) coordinates.
+        dx: Amount by which to translate in the x direction.
+        dy: Amount by which to translate in the y direction.
+
+    Returns:
+        Shape (n, 2) array of translated coordinates (x', y')
+    """
+    return coords + np.array([[dx, dy]])
+
+
 def ellipse(
     a: float,
     b: float,
@@ -50,7 +64,7 @@ def ellipse(
         A shape ``(points, 2)`` array of (x, y) coordinates
     """
     x0, y0 = center
-    theta = np.linspace(0, 2 * np.pi, points, endpoint=False)
+    theta = np.linspace(0, 2 * np.pi, points)
     xs = a * np.cos(theta)
     ys = b * np.sin(theta)
     coords = np.stack([xs, ys], axis=1)
