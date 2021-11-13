@@ -184,14 +184,14 @@ class Polygon(object):
         return (maxx - minx), (maxy - miny)
 
     @property
-    def path(self) -> path.Path:
-        """A matplotlib.path.Path representing the polygon boundary."""
-        return path.Path(self.points, closed=True)
-
-    @property
     def polygon(self) -> geo.polygon.Polygon:
         """A shapely ``Polygon`` representing the Polygon."""
         return geo.polygon.Polygon(self.points)
+
+    @property
+    def path(self) -> path.Path:
+        """A matplotlib.path.Path representing the polygon boundary."""
+        return path.Path(self.points, closed=True)
 
     def contains_points(
         self,

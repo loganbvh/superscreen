@@ -39,6 +39,9 @@ def translate(coords: np.ndarray, dx: float, dy: float) -> np.ndarray:
     Returns:
         Shape (n, 2) array of translated coordinates (x', y')
     """
+    coords = np.asarray(coords)
+    assert coords.ndim == 2
+    assert coords.shape[1] == 2
     return coords + np.array([[dx, dy]])
 
 
