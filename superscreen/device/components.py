@@ -284,7 +284,9 @@ class Polygon(object):
                 and other.layer is not None
                 and self.layer != other.layer
             ):
-                raise ValueError("Cannot join with a polygon in another layer.")
+                raise ValueError(
+                    "Cannot join with a polygon assigned to another layer."
+                )
         elif isinstance(other, valid_types):
             other_poly = geo.polygon.Polygon(other)
         if not isinstance(other_poly, geo.polygon.Polygon):
@@ -304,7 +306,7 @@ class Polygon(object):
 
     def union(
         self,
-        other: Union[
+        *others: Union[
             "Polygon",
             np.ndarray,
             geo.linestring.LineString,
@@ -316,23 +318,26 @@ class Polygon(object):
         """Returns the union of the polygon and another polygon.
 
         Args:
-            other: The object with which to join the polygon.
+            others: One or more objects with which to join the polygon.
             name: A name for the resulting joined Polygon (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the union
-            of ``self`` and ``other``.
+            of ``self`` and ``others``.
         """
+        if not others:
+            return self.copy()
+        first, *rest = others
         return Polygon(
             name=name,
             layer=self.layer,
-            points=self._join_via(other, "union"),
+            points=self._join_via(first, "union"),
             mesh=self.mesh,
-        )
+        ).union(*rest, name=name)
 
     def intersection(
         self,
-        other: Union[
+        *others: Union[
             "Polygon",
             np.ndarray,
             geo.linestring.LineString,
@@ -344,23 +349,26 @@ class Polygon(object):
         """Returns the intersection of the polygon and another polygon.
 
         Args:
-            other: The object with which to join the polygon.
+            others: One or more objects with which to join the polygon.
             name: A name for the resulting joined Polygon (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the intersection
-            of ``self`` and ``other``.
+            of ``self`` and ``others``.
         """
+        if not others:
+            return self.copy()
+        first, *rest = others
         return Polygon(
             name=name,
             layer=self.layer,
-            points=self._join_via(other, "intersection"),
+            points=self._join_via(first, "intersection"),
             mesh=self.mesh,
-        )
+        ).intersection(*rest, name=name)
 
     def difference(
         self,
-        other: Union[
+        *others: Union[
             "Polygon",
             np.ndarray,
             geo.linestring.LineString,
@@ -373,24 +381,27 @@ class Polygon(object):
         """Returns the difference of the polygon and another polygon.
 
         Args:
-            other: The object with which to join the polygon.
+            others: One or more objects with which to join the polygon.
             symmetric: Whether to join via a symmetric difference operation (aka XOR).
                 See the `shapely documentation`_.
             name: A name for the resulting joined Polygon (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the difference
-            of ``self`` and ``other``.
+            of ``self`` and ``others``.
 
         .. _shapely documentation: https://shapely.readthedocs.io/en/stable/manual.html
         """
         operation = "symmetric_difference" if symmetric else "difference"
+        if not others:
+            return self.copy()
+        first, *rest = others
         return Polygon(
             name=name,
             layer=self.layer,
-            points=self._join_via(other, operation),
+            points=self._join_via(first, operation),
             mesh=self.mesh,
-        )
+        ).difference(*rest, symmetric=symmetric, name=name)
 
     def buffer(
         self,
@@ -520,9 +531,7 @@ class Polygon(object):
         """
         first, *rest = items
         polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
-        for item in rest:
-            polygon = polygon.union(item)
-        return polygon
+        return polygon.union(*rest)
 
     @classmethod
     def from_intersection(
@@ -555,9 +564,7 @@ class Polygon(object):
         """
         first, *rest = items
         polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
-        for item in rest:
-            polygon = polygon.intersection(item)
-        return polygon
+        return polygon.intersection(*rest)
 
     @classmethod
     def from_difference(
@@ -593,9 +600,7 @@ class Polygon(object):
         """
         first, *rest = items
         polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
-        for item in rest:
-            polygon = polygon.difference(item, symmetric=symmetric)
-        return polygon
+        return polygon.difference(*rest, symmetric=symmetric)
 
     def __repr__(self) -> str:
         name = f'"{self.name}"' if self.name is not None else None

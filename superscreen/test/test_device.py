@@ -54,16 +54,32 @@ def test_polygon_join():
 
     square1 = sc.Polygon(points=sc.geometry.box(1))
     square2 = sc.Polygon(points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5))
+    square3 = sc.geometry.box(1, center=(-0.25, 0.25))
     name = "name"
     layer = "layer"
     for items in (
-        [square1, square2],
-        [square1.points, square2.points],
-        [square1.polygon, square2.polygon],
+        [square1, square2, square3],
+        [square1.points, square2.points, square3],
+        [square1.polygon, square2.polygon, square3],
     ):
         _ = sc.Polygon.from_union(items, name=name, layer=layer)
         _ = sc.Polygon.from_difference(items, name=name, layer=layer)
         _ = sc.Polygon.from_intersection(items, name=name, layer=layer)
+
+    assert (
+        square1.union(square2, square3).polygon
+        == sc.Polygon.from_union(items, name=name, layer=layer).polygon
+    )
+
+    assert (
+        square1.intersection(square2, square3).polygon
+        == sc.Polygon.from_intersection(items, name=name, layer=layer).polygon
+    )
+
+    assert (
+        square1.difference(square2, square3).polygon
+        == sc.Polygon.from_difference(items, name=name, layer=layer).polygon
+    )
 
     with pytest.raises(ValueError):
         square1.layer = "layer"
