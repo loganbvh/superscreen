@@ -374,7 +374,7 @@ class Polygon(object):
 
         Args:
             other: The object with which to join the polygon.
-            symmetric: Whether to join via a symmetric difference operation.
+            symmetric: Whether to join via a symmetric difference operation (aka XOR).
                 See the `shapely documentation`_.
             name: A name for the resulting joined Polygon (defaults to ``self.name``.)
 
@@ -585,7 +585,8 @@ class Polygon(object):
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
             mesh: Whether to include this polygon when computing a mesh.
-            symmetric:
+            symmetric: If True, creates a new :class:`Polygon` from the
+                "symmetric difference" (aka XOR) of the inputs.
 
         Returns:
             A new :class:`Polygon`.
