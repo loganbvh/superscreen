@@ -95,8 +95,7 @@ class Parameter(object):
                     "If the function takes an argument z, "
                     "it must be the third argument (x, y, z)."
                 )
-            else:
-                num_args = 3
+            num_args = 3
         defaults = argspec.defaults or []
         if len(defaults) != len(args) - num_args:
             raise ValueError(

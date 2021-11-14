@@ -329,7 +329,7 @@ class Polygon(object):
             return self.copy()
         first, *rest = others
         return Polygon(
-            name=name,
+            name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, "union"),
             mesh=self.mesh,
@@ -360,7 +360,7 @@ class Polygon(object):
             return self.copy()
         first, *rest = others
         return Polygon(
-            name=name,
+            name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, "intersection"),
             mesh=self.mesh,
@@ -397,7 +397,7 @@ class Polygon(object):
             return self.copy()
         first, *rest = others
         return Polygon(
-            name=name,
+            name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, operation),
             mesh=self.mesh,
