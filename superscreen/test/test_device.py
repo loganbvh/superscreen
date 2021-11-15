@@ -81,11 +81,6 @@ def test_polygon_join():
         == sc.Polygon.from_difference(items, name=name, layer=layer).polygon
     )
 
-    with pytest.raises(ValueError):
-        square1.layer = "layer"
-        square2.layer = "other_layer"
-        _ = square1.union(square2)
-
     square1.layer = square2.layer = None
     with pytest.raises(ValueError):
         _ = sc.Polygon.from_difference([square1, square1], name=name, layer=layer)
