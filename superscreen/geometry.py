@@ -70,11 +70,9 @@ def ellipse(
     theta = np.linspace(0, 2 * np.pi, points, endpoint=False)
     xs = a * np.cos(theta)
     ys = b * np.sin(theta)
-    coords = np.stack([xs, ys], axis=1)
+    coords = np.stack([xs, ys], axis=1) + np.array([[x0, y0]])
     if angle:
         coords = rotate(coords, angle)
-    coords[:, 0] += x0
-    coords[:, 1] += y0
     return coords
 
 
@@ -144,11 +142,9 @@ def box(
             -height / 2 * np.ones(points_per_side),
         ]
     )
-    coords = np.stack([xs, ys], axis=1)
+    coords = np.stack([xs, ys], axis=1) + np.array([[x0, y0]])
     if angle:
         coords = rotate(coords, angle)
-    coords[:, 0] += x0
-    coords[:, 1] += y0
     return coords
 
 
