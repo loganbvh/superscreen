@@ -1,4 +1,5 @@
 from copy import deepcopy
+import logging
 from typing import Optional, Union, Tuple, Iterable
 
 import numpy as np
@@ -9,6 +10,9 @@ from shapely import geometry as geo
 
 from ..geometry import close_curve
 from ..parameter import Parameter
+
+
+logger = logging.getLogger(__name__)
 
 
 class Layer(object):
@@ -284,8 +288,9 @@ class Polygon(object):
                 and other.layer is not None
                 and self.layer != other.layer
             ):
-                raise ValueError(
-                    "Cannot join with a polygon assigned to another layer."
+                logger.warn(
+                    f"Takking the {operation} of {self} and {other} even though "
+                    f"they are assigned to different layers."
                 )
         elif isinstance(other, valid_types):
             other_poly = geo.polygon.Polygon(other)
