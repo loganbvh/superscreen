@@ -34,7 +34,9 @@ lambda_str = "\u03bb"
 Lambda_str = "\u039b"
 
 
-def q_matrix(points: np.ndarray) -> np.ndarray:
+def q_matrix(
+    points: np.ndarray, dtype: Optional[Union[str, np.dtype]] = None
+) -> np.ndarray:
     """Computes the denominator matrix, q:
 
     .. math::
@@ -45,13 +47,16 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
     and Eq. 8 in [Kirtley-SST-2016]_.
 
     Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices
+        points: Shape (n, 2) array of x,y coordinates of vertices.
+        dtype: Output dtype.
 
     Returns:
         Shape (n, n) array, qij
     """
     # Euclidean distance between points
     distances = distance.cdist(points, points, metric="euclidean")
+    if dtype is not None:
+        distances = distances.astype(dtype, copy=False)
     q = np.zeros_like(distances)
     # Diagonals of distances are zero by definition, so q[i,i] will diverge
     nz = np.nonzero(distances)
@@ -60,7 +65,10 @@ def q_matrix(points: np.ndarray) -> np.ndarray:
     return q
 
 
-def C_vector(points: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+def C_vector(
+    points: np.ndarray,
+    dtype: Optional[Union[str, np.dtype]] = None,
+) -> np.ndarray:
     """Computes the edge vector, C:
 
     .. math::
@@ -73,32 +81,36 @@ def C_vector(points: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarra
     and Eq. 15 in [Kirtley-SST-2016]_.
 
     Args:
-        points: Shape (n, 2) array of x, y coordinates of vertices
-        mask: A shape (n, ) boolean mask for points, which determines which
-            coordinates are used to caluclate C.
+        points: Shape (n, 2) array of x, y coordinates of vertices.
+        dtype: Output dtype.
 
     Returns:
         Shape (n, ) array, Ci
     """
     x = points[:, 0]
     y = points[:, 1]
-    if mask is None:
-        mask = np.ones_like(x, dtype=bool)
-    x = x - x[mask].mean()
-    y = y - y[mask].mean()
-    a = np.ptp(x[mask]) / 2
-    b = np.ptp(y[mask]) / 2
+    x = x - x.mean()
+    y = y - y.mean()
+    a = np.ptp(x) / 2
+    b = np.ptp(y) / 2
     with np.errstate(divide="ignore"):
         C = sum(
             np.sqrt((a - p * x) ** (-2) + (b - q * y) ** (-2))
             for p, q in itertools.product((-1, 1), repeat=2)
         )
     C[np.isinf(C)] = 1e30
-    C[~mask] = 0
-    return C / (4 * np.pi)
+    C /= 4 * np.pi
+    if dtype is not None:
+        C = C.astype(dtype, copy=False)
+    return C
 
 
-def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
+def Q_matrix(
+    q: np.ndarray,
+    C: np.ndarray,
+    weights: np.ndarray,
+    dtype: Optional[Union[str, np.dtype]] = None,
+) -> np.ndarray:
     """Computes the kernel matrix, Q:
 
     .. math::
@@ -111,9 +123,10 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     and Eq. 11 in [Kirtley-SST-2016]_.
 
     Args:
-        q: Shape (n, n) matrix qij
-        C: Shape (n, ) vector Ci
-        weights: Shape (n, ) weight vector
+        q: Shape (n, n) matrix qij.
+        C: Shape (n, ) vector Ci.
+        weights: Shape (n, ) weight vector.
+        dtype: Output dtype.
 
     Returns:
         Shape (n, n) array, Qij
@@ -126,6 +139,8 @@ def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
     np.fill_diagonal(q, 0)
     Q = -q
     np.fill_diagonal(Q, (C + np.einsum("ij,j -> i", q, weights)) / weights)
+    if dtype is not None:
+        Q = Q.astype(dtype, copy=False)
     return Q
 
 

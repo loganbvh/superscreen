@@ -446,9 +446,10 @@ class Device(object):
             sparse=True,
         )
         logger.info("Calculating kernel matrix.")
-        q = solve.q_matrix(points)
-        C = solve.C_vector(points)
-        self.Q = solve.Q_matrix(q, C, self.weights)
+        solve_dtype = self.solve_dtype
+        q = solve.q_matrix(points, dtype=solve_dtype)
+        C = solve.C_vector(points, dtype=solve_dtype)
+        self.Q = solve.Q_matrix(q, C, self.weights, dtype=solve_dtype)
 
     def mutual_inductance_matrix(
         self,
