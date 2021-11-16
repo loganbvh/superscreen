@@ -515,6 +515,9 @@ class Device(object):
                 iterations=iterations,
             )[solution_slice]
             for n, solution in enumerate(solutions):
+                logger.info(
+                    f"Evaluating fluxoids for solution {n + 1}/{len(solutions)}."
+                )
                 for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
                     if (upper_only and i > j) or (lower_only and i < j):
                         continue
@@ -755,7 +758,8 @@ class Device(object):
                     fig.delaxes(ax)
         else:
             axes = axes[0]
-            axes.legend(handles, labels, bbox_to_anchor=(1, 1), loc="upper left")
+            if legend:
+                axes.legend(handles, labels, bbox_to_anchor=(1, 1), loc="upper left")
         return fig, axes
 
     def to_file(
