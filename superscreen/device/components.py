@@ -289,7 +289,7 @@ class Polygon(object):
                 and self.layer != other.layer
             ):
                 logger.warn(
-                    f"Takking the {operation} of {self} and {other} even though "
+                    f"Taking the {operation} of {self} and {other} even though "
                     f"they are assigned to different layers."
                 )
         elif isinstance(other, valid_types):

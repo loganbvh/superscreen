@@ -175,6 +175,8 @@ def device():
         device.layers["layer0"].Lambda = 0
     with pytest.raises(ValueError):
         device.compute_matrices()
+    with pytest.raises(ValueError):
+        device.solve_dtype = "int64"
 
     assert device.get_arrays() is None
 
