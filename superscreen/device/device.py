@@ -60,6 +60,7 @@ class Device(object):
         holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
+        solve_dtype: Union[str, np.dtype] = "float64",
     ):
         self.name = name
 
@@ -107,6 +108,7 @@ class Device(object):
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
+        self.solve_dtype = solve_dtype
 
         self.points = None
         self.triangles = None
@@ -119,6 +121,19 @@ class Device(object):
     def length_units(self) -> str:
         """Length units used for the device geometry."""
         return self._length_units
+
+    @property
+    def solve_dtype(self) -> np.dtype:
+        """Numpy dtype to use for floating point numbers."""
+        return self._solve_dtype
+
+    @solve_dtype.setter
+    def solve_dtype(self, dtype) -> None:
+        try:
+            _ = np.finfo(dtype)
+        except ValueError as e:
+            raise ValueError(f"Invalid float dtype {dtype}:") from e
+        self._solve_dtype = np.dtype(dtype)
 
     @property
     def layers(self) -> Dict[str, Layer]:
@@ -740,14 +755,13 @@ class Device(object):
                 if name in exclude:
                     continue
                 patch.set_facecolor(f"C{i}")
-                patch.set_edgecolor(f"C{j}")
-                j += 1
-                patch.set_linewidth(3)
                 patch.set_alpha(alpha)
                 ax.add_artist(patch)
-                labels.append(name)
-                handles.append(patch)
                 used_axes.add(ax)
+                if j == 0:
+                    labels.append(name)
+                    handles.append(patch)
+                j += 1
             if subplots:
                 ax.set_title(layer)
                 if legend:
@@ -795,7 +809,11 @@ class Device(object):
         # Serialize layers to JSON.
         # If Lambda or london_lambda is a Parameter, then we will
         # pickle it using dill.
-        layers = {"device_name": self.name, "length_units": self.length_units}
+        layers = {
+            "device_name": self.name,
+            "length_units": self.length_units,
+            "solve_dtype": str(self.solve_dtype),
+        }
         for name, layer in self.layers.items():
             layers[name] = {"z0": layer.z0, "thickness": layer.thickness}
             if isinstance(layer._Lambda, (int, float)):
@@ -875,6 +893,7 @@ class Device(object):
 
         device_name = layers_json.pop("device_name")
         length_units = layers_json.pop("length_units")
+        solve_dtype = layers_json.pop("solve_dtype", "float64")
         for name, layer_dict in layers_json.items():
             # Check whether either Lambda or london_lambda is a Parameter
             # that was pickled.
@@ -900,6 +919,7 @@ class Device(object):
             holes=holes,
             abstract_regions=abstract_regions,
             length_units=length_units,
+            solve_dtype=solve_dtype,
         )
 
         # Load the mesh if it exists

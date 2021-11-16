@@ -459,12 +459,14 @@ def solve(
     if directory is not None:
         os.makedirs(directory, exist_ok=True)
 
-    points = device.points
+    dtype = device.solve_dtype
+
+    points = device.points.astype(dtype, copy=False)
     triangles = device.triangles
-    weights = device.weights
+    weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2
     if sp.issparse(Del2):
-        Del2 = Del2.toarray()
+        Del2 = Del2.toarray().astype(dtype, copy=False)
 
     solutions = []
 
@@ -495,7 +497,7 @@ def solve(
         layer_fields[name] = (
             applied_field(device.points[:, 0], device.points[:, 1], layer.z0)
             * field_conversion_magnitude
-        )
+        ).astype(dtype, copy=False)
         # Check and cache penetration depth
         london_lambda = layer.london_lambda
         d = layer.thickness
@@ -512,7 +514,9 @@ def solve(
             )
         if isinstance(Lambda, (int, float)):
             Lambda = Constant(Lambda)
-        layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1])
+        layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1]).astype(
+            dtype, copy=False
+        )
 
     vortices_by_layer = defaultdict(list)
     for vortex in vortices:
@@ -548,22 +552,22 @@ def solve(
             check_inversion=check_inversion,
         )
         # Units: current_units
-        streams[name] = g
+        streams[name] = g.astype(dtype, copy=False)
         # Units: current_units / device.length_units
-        fields[name] = total_field
-        screening_fields[name] = screening_field
+        fields[name] = total_field.astype(dtype, copy=False)
+        screening_fields[name] = screening_field.astype(dtype, copy=False)
 
     solution = Solution(
         device=device,
         streams=streams,
         fields={
             # Units: field_units
-            layer: field / field_conversion_magnitude
+            layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
             for layer, field in fields.items()
         },
         screening_fields={
             # Units: field_units
-            layer: field / field_conversion_magnitude
+            layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
             for layer, field in screening_fields.items()
         },
         applied_field=applied_field,
@@ -583,10 +587,13 @@ def solve(
     layer_names = list(device.layers)
     nlayers = len(layer_names)
     if iterations and nlayers > 1:
-        tri_points = centroids(points, triangles)
-        tri_areas = areas(points, triangles)
+        tri_points = centroids(points, triangles).astype(dtype, copy=False)
+        tri_areas = areas(points, triangles).astype(dtype, copy=False)
         # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = distance.cdist(points, tri_points, metric="sqeuclidean")
+        rho2 = distance.cdist(points, tri_points, metric="sqeuclidean").astype(
+            dtype,
+            copy=False,
+        )
         # Cache kernel matrices.
         kernels = {}
         if cache_memory_cutoff is None:
@@ -611,7 +618,7 @@ def solve(
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
                 other_screening_fields = {
-                    name: np.zeros(points.shape[0], dtype=float) for name in layer_names
+                    name: np.zeros(points.shape[0], dtype=dtype) for name in layer_names
                 }
                 for layer, other_layer in itertools.product(
                     device.layers_list, repeat=2
@@ -634,7 +641,7 @@ def solve(
                     )
                     # Average stream function over all vertices in each triangle to
                     # estimate the stream function value at the centroid of the triangle.
-                    g = streams[other_layer.name][triangles].mean(axis=1)
+                    g = streams[other_layer.name][triangles].mean(axis=1, dtype=dtype)
                     dz = other_layer.z0 - layer.z0
                     key = frozenset((layer.name, other_layer.name))
                     # Get the cached kernel matrix,
@@ -643,7 +650,7 @@ def solve(
                     if q is None:
                         q = (2 * dz ** 2 - rho2) / (
                             4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
-                        )
+                        ).astype(dtype, copy=False)
                         if cache_kernels_to_disk:
                             fname = os.path.join(tempdir, "_".join(key))
                             np.save(fname, q)
@@ -656,7 +663,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     other_screening_fields[layer.name] += np.einsum(
-                        "ij,j -> i", q, tri_areas * g
+                        "ij,j -> i", q, tri_areas * g, dtype=dtype
                     )
                     del q, g
                 # Solve again with the screening fields from all layers.
@@ -666,7 +673,7 @@ def solve(
                     # Units: current_units / device.length_units
                     new_layer_fields[name] = (
                         layer_fields[name] + other_screening_fields[name]
-                    )
+                    ).astype(dtype, copy=False)
                 streams = {}
                 fields = {}
                 screening_fields = {}
@@ -688,22 +695,26 @@ def solve(
                         check_inversion=check_inversion,
                     )
                     # Units: current_units
-                    streams[name] = g
+                    streams[name] = g.astype(dtype, copy=False)
                     # Units: current_units / device.length_units
-                    fields[name] = total_field
-                    screening_fields[name] = screening_field
+                    fields[name] = total_field.astype(dtype, copy=False)
+                    screening_fields[name] = screening_field.astype(dtype, copy=False)
 
                 solution = Solution(
                     device=device,
                     streams=streams,
                     fields={
                         # Units: field_units
-                        layer: field / field_conversion_magnitude
+                        layer: (field / field_conversion_magnitude).astype(
+                            dtype, copy=False
+                        )
                         for layer, field in fields.items()
                     },
                     screening_fields={
                         # Units: field_units
-                        layer: field / field_conversion_magnitude
+                        layer: (field / field_conversion_magnitude).astype(
+                            dtype, copy=False
+                        )
                         for layer, field in screening_fields.items()
                     },
                     applied_field=applied_field,
