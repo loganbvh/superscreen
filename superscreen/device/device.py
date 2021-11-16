@@ -39,6 +39,7 @@ class Device(object):
         abstract_regions: ``Polygons`` representing abstract regions in a device.
             Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
+        solve_dtype: The float data type to use when solving the device.
     """
 
     ARRAY_NAMES = (
@@ -132,7 +133,7 @@ class Device(object):
         try:
             _ = np.finfo(dtype)
         except ValueError as e:
-            raise ValueError(f"Invalid float dtype {dtype}:") from e
+            raise ValueError(f"Invalid float dtype: {dtype}") from e
         self._solve_dtype = np.dtype(dtype)
 
     @property
