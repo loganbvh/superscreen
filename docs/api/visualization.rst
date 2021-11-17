@@ -32,6 +32,8 @@ Miscellaneous
 
 .. autofunction:: superscreen.visualization.plot_mutual_inductance
 
+.. autofunction:: superscreen.visualization.plot_polygon_flux
+
 
 Supporting Functions
 --------------------
