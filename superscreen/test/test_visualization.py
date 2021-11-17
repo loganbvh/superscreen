@@ -30,7 +30,7 @@ def device():
 
 
 @pytest.fixture(scope="module")
-def solution(device):
+def solutions(device):
 
     applied_field = sc.sources.ConstantField(1)
 
@@ -42,7 +42,28 @@ def solution(device):
         iterations=5,
     )
 
+    return solutions
+
+
+@pytest.fixture(scope="module")
+def solution(solutions):
     return solutions[-1]
+
+
+@pytest.mark.parametrize("diff", [False, True])
+@pytest.mark.parametrize("absolute", [False, True])
+@pytest.mark.parametrize("logy", [False, True])
+@pytest.mark.parametrize("units", [None, "Phi_0"])
+def test_plot_polygon_flux(solutions, diff, absolute, logy, units):
+    with non_gui_backend():
+        fig, ax = sc.plot_polygon_flux(
+            solutions,
+            diff=diff,
+            absolute=absolute,
+            units=units,
+            logy=logy,
+            grid=True,
+        )
 
 
 @pytest.mark.parametrize("layers", [None, "layer0"])
