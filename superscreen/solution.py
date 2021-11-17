@@ -586,8 +586,9 @@ class Solution(object):
         from .solve import convert_field
 
         device = self.device
+        dtype = device.solve_dtype
         ureg = device.ureg
-        points = device.points
+        points = device.points.astype(dtype, copy=False)
         triangles = device.triangles
 
         units = units or self.field_units
@@ -604,17 +605,19 @@ class Solution(object):
             positions = positions[:, :2]
         elif isinstance(zs, (int, float, np.generic)):
             # constant zs
-            zs = zs * np.ones(positions.shape[0], dtype=float)
+            zs = zs * np.ones(positions.shape[0], dtype=dtype)
         if not isinstance(zs, np.ndarray):
             raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
         if zs.ndim == 1:
             # We need zs to be shape (m, 1)
             zs = zs[:, np.newaxis]
 
-        tri_points = centroids(points, triangles)
-        tri_areas = areas(points, triangles)
+        tri_points = centroids(points, triangles).astype(dtype, copy=False)
+        tri_areas = areas(points, triangles).astype(dtype, copy=False)
         # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = distance.cdist(positions, tri_points, metric="sqeuclidean")
+        rho2 = distance.cdist(positions, tri_points, metric="sqeuclidean").astype(
+            dtype, copy=False
+        )
 
         Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
         if vector:
@@ -655,13 +658,15 @@ class Solution(object):
                         f"Cannot calculate fields in the same plane as layer {name}."
                     )
                 # g has units of [current]
-                g = self.streams[name][triangles].mean(axis=1)
+                g = self.streams[name][triangles].mean(axis=1, dtype=dtype)
                 # Q is the dipole kernel for the z component, Hz
                 # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
-                Q = (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                Q = (
+                    (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                ).astype(dtype, copy=False)
                 # tri_areas has units of [length]^2
                 # So here Hz is in units of [current] * [length]^(-1)
-                Hz = np.einsum("ij,j -> i", Q, tri_areas * g)
+                Hz = np.einsum("ij,j -> i", Q, tri_areas * g, dtype=dtype)
             if vector:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -669,16 +674,18 @@ class Solution(object):
                     )
                 # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
                 # Pairwise difference between all x positions
-                d = np.subtract.outer(positions[:, 0], tri_points[:, 0])
+                d = np.subtract.outer(positions[:, 0], tri_points[:, 0], dtype=dtype)
                 # Kernel for x component, Hx
                 Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
                 Hx = np.einsum("ij,j -> i", Q, tri_areas * g)
 
                 # Pairwise difference between all y positions
-                d = np.subtract.outer(positions[:, 1], tri_points[:, 1])
+                d = np.subtract.outer(positions[:, 1], tri_points[:, 1], dtype=dtype)
                 # Kernel for y component, Hy
-                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hy = np.einsum("ij,j -> i", Q, tri_areas * g)
+                Q = ((3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))).astype(
+                    dtype, copy=False
+                )
+                Hy = np.einsum("ij,j -> i", Q, tri_areas * g, dtype=dtype)
 
                 H = np.stack([Hx, Hy, Hz], axis=1)
             else:

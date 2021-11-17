@@ -1,3 +1,4 @@
+from collections import defaultdict
 import warnings
 import itertools
 from contextlib import contextmanager
@@ -881,6 +882,91 @@ def plot_mutual_inductance(
         ylabel = f"$M_{{ij, k}}$ [{units}]"
     ax.set_ylabel(ylabel)
     ax.set_xlabel("Iteration, $k$")
+    return fig, ax
+
+
+def plot_polygon_flux(
+    solutions: List[Solution],
+    diff: bool = False,
+    iteration_offset: int = 1,
+    absolute: bool = False,
+    units: Optional[str] = None,
+    ax: Optional[plt.Axes] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+    logy: bool = False,
+    grid: bool = True,
+    legend: bool = True,
+    **kwargs,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Plot the convergence vs. iteration of the flux through all polygons in a Device,
+    given by the output of :meth:`superscreen.solve()`
+
+    Args:
+        solutions: A list of ``Solutions``, one per solve iteration.
+        diff: If True, plots the difference in flux between subsequent iterations.
+        iteration_offset: The first iteration (index in ``solutions``) to consider when
+            calculating convergence.
+        absolute: If True (and diff is True), plots the absolute change in flux vs.
+            iteration, otherwise plots relative change.
+        units: The flux units to display if ``absolute`` is True.
+        ax: Matplotlib Axes instance on which to plot.
+        figsize: Matplotlib figure size to create if ``ax`` is None.
+        logy: If True, sets the y axis scaling to logarithmic.
+        grid: If True, turns on plot grid lines.
+        legend: If True, adds a legend to the plot.
+        kwargs: Passed to ``ax.plot()``.
+
+    Returns:
+        Matplotlib Figure and Axes.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+    i0 = int(iteration_offset)
+    iterations = np.arange(len(solutions))[i0:]
+    plot_kwargs = kwargs.copy()
+    device = solutions[0].device
+    polygon_names = list(device.polygons)
+    polygon_flux = defaultdict(list)
+    for i, solution in enumerate(solutions):
+        flux_dict = solution.polygon_flux(polygons=polygon_names, units=units)
+        for name, flux in flux_dict.items():
+            units = flux.units
+            polygon_flux[name].append(flux.magnitude)
+
+    for name, flux_vals in polygon_flux.items():
+        plot_kwargs["label"] = name
+        if diff:
+            xs = iterations[:-1]
+            ys = np.abs(np.diff(flux_vals[i0:]))
+            if not absolute:
+                ys = ys / np.abs(flux_vals[i0:-1])
+            ax.plot(xs, ys, **plot_kwargs)
+        else:
+            xs = iterations
+            ax.plot(xs, flux_vals[i0:], **plot_kwargs)
+    ax.set_xticks(xs)
+    if logy:
+        ax.set_yscale("log")
+    if grid:
+        ax.grid(True)
+    if legend:
+        ax.legend(loc=0)
+    if diff:
+        ylabel = "$\\Delta\\Phi_i$"
+        if absolute:
+            title = "$\\Delta\\Phi_i = |\\Phi_{i+1} - \\Phi_{i}|$"
+            ylabel = ylabel + f" [${units:~L}$]"
+        else:
+            title = (
+                "$\\Delta\\Phi_i = " "\\frac{|\\Phi_{i+1} - \\Phi_i|}{|\\Phi_{i+1}|}$"
+            )
+        ax.set_title(title)
+    else:
+        ylabel = f"$\\Phi_i$ [${units:~L}$]"
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("Iteration, $i$")
     return fig, ax
 
 
