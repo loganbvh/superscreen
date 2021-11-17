@@ -456,9 +456,9 @@ class Device(object):
         hole_polygon_mapping: Optional[Dict[str, np.ndarray]] = None,
         upper_only: bool = False,
         lower_only: bool = False,
-        iterations: int = 1,
         units: str = "pH",
         all_iterations: bool = False,
+        **solve_kwargs,
     ) -> Union[np.ndarray, List[np.ndarray]]:
         """Calculates the mutual inductance matrix :math:`\\mathbf{M}` for the Device.
 
@@ -478,11 +478,11 @@ class Device(object):
                 matrix. Must be False if lower_only is True.
             lower_only: If True, evaluate only the lower triangular mutual inductance
                 matrix. Must be False if upper_only is True.
-            iterations: The number of iterations used to solve the device. This value
-                is ignored if there is only a single layer in the device.
             units: The units in which to report the mutual inductance.
             all_iterations: Whether to return mutual inductance matrices for all
                 ``iterations + 1`` solutions, or just the final solution.
+            solve_kwargs: Keyword arguments passed to :func:`superscreen.solve.solve`,
+                e.g. ``iterations``.
 
         Returns:
             If all_iterations is False, returns a shape ``(n_holes, n_holes)`` mutual
@@ -511,6 +511,7 @@ class Device(object):
                     f"Hole '{hole_name}' is not completely contained "
                     f"within the given polygon."
                 )
+        iterations = solve_kwargs.get("iterations", 1)
         # The magnitude of this current is not important
         I_circ = self.ureg("1 mA")
         if all_iterations:
@@ -529,7 +530,7 @@ class Device(object):
             solutions = solve(
                 device=self,
                 circulating_currents={hole_name: str(I_circ)},
-                iterations=iterations,
+                **solve_kwargs,
             )[solution_slice]
             for n, solution in enumerate(solutions):
                 logger.info(
