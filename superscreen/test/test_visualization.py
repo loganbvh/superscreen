@@ -56,14 +56,20 @@ def solution(solutions):
 @pytest.mark.parametrize("units", [None, "Phi_0"])
 def test_plot_polygon_flux(solutions, diff, absolute, logy, units):
     with non_gui_backend():
+        if diff:
+            fig, ax = plt.subplots()
+        else:
+            ax = None
         fig, ax = sc.plot_polygon_flux(
             solutions,
+            ax=ax,
             diff=diff,
             absolute=absolute,
             units=units,
             logy=logy,
             grid=True,
         )
+    plt.close(fig)
 
 
 @pytest.mark.parametrize("layers", [None, "layer0"])
