@@ -762,7 +762,7 @@ class Device(object):
                 ax.add_artist(patch)
                 used_axes.add(ax)
                 if j == 0:
-                    labels.append(name)
+                    labels.append(layer)
                     handles.append(patch)
                 j += 1
             if subplots:
