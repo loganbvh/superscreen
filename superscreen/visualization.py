@@ -866,7 +866,7 @@ def plot_mutual_inductance(
     if grid:
         ax.grid(True)
     if legend:
-        ax.legend(loc=0)
+        ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     if diff:
         ylabel = "$\\Delta M_{{ij, k}}$"
         if absolute:
@@ -952,7 +952,7 @@ def plot_polygon_flux(
     if grid:
         ax.grid(True)
     if legend:
-        ax.legend(loc=0)
+        ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
     if diff:
         ylabel = "$\\Delta\\Phi_i$"
         if absolute:
