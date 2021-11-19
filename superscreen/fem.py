@@ -56,17 +56,14 @@ def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     Returns:
         Shape (m, ) array of triangle areas
     """
-    a = np.zeros(triangles.shape[0], dtype=float)
-    for i, t in enumerate(triangles):
-        xy = points[t]
-        # s1 = xy[2, :] - xy[1, :]
-        # s2 = xy[0, :] - xy[2, :]
-        # s3 = xy[1, :] - xy[0, :]
-        # which can be simplified to
-        # s = xy[[2, 0, 1]] - xy[[1, 2, 0]]  # 3D
-        s = xy[[2, 0]] - xy[[1, 2]]  # 2D
-        # a should be positive if triangles are CCW arranged
-        a[i] = la.det(s)
+    xy = points[triangles]
+    # s1 = xy[:, 2, :] - xy[:, 1, :]
+    # s2 = xy[:, 0, :] - xy[:, 2, :]
+    # s3 = xy[:, 1, :] - xy[:, 0, :]
+    # which can be simplified to
+    # s = xy[:, [2, 0, 1]] - xy[:, [1, 2, 0]]  # 3D
+    s = xy[:, [2, 0]] - xy[:, [1, 2]]  # 2D
+    a = np.linalg.det(s)
     return a * 0.5
 
 
@@ -304,9 +301,9 @@ def laplace_operator(
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
     if masses is None:
-        masses = mass_matrix(points, triangles, sparse=True)
-    if isinstance(masses, np.ndarray):
-        masses = sp.diags(masses, format="csc")
+        masses = mass_matrix(points, triangles, sparse=False)
+    if sp.issparse(masses):
+        masses = masses.diagonal()
     L = calculate_weights(points, triangles, weight_method, sparse=True)
     with warnings.catch_warnings():
         # scipy.sparse throws a warning here
@@ -315,7 +312,7 @@ def laplace_operator(
         w_sum = np.atleast_2d(L.sum(axis=1))
         L.setdiag(-w_sum)
         L = L.tocsr()
-    Del2 = (sp.linalg.inv(masses) @ L).tocsr()
+    Del2 = sp.diags(1 / masses, format="csr") @ L
     if not sparse:
         Del2 = Del2.toarray()
     return Del2
