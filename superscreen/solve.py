@@ -57,12 +57,10 @@ def q_matrix(
     distances = distance.cdist(points, points, metric="euclidean")
     if dtype is not None:
         distances = distances.astype(dtype, copy=False)
-    q = np.zeros_like(distances)
-    # Diagonals of distances are zero by definition, so q[i,i] will diverge
-    nz = np.nonzero(distances)
-    q[nz] = 1 / (4 * np.pi * distances[nz] ** 3)
+    with np.errstate(divide="ignore"):
+        q = 1 / (4 * np.pi * distances ** 3)
     np.fill_diagonal(q, np.inf)
-    return q
+    return q.astype(dtype, copy=False)
 
 
 def C_vector(

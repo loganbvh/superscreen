@@ -787,7 +787,7 @@ def plot_field_at_positions(
 def plot_mutual_inductance(
     M: Union[np.ndarray, List[np.ndarray]],
     diff: bool = False,
-    iteration_offset: int = 1,
+    iteration_offset: int = 0,
     absolute: bool = False,
     ax: Optional[plt.Axes] = None,
     figsize: Optional[Tuple[float, float]] = None,
@@ -847,18 +847,18 @@ def plot_mutual_inductance(
         fig = ax.figure
     n = M.shape[1]
     i0 = int(iteration_offset)
-    iterations = np.arange(M.shape[0])[i0:]
+    iterations = np.arange(M.shape[0])
     plot_kwargs = kwargs.copy()
     for i, j in itertools.product(range(n), repeat=2):
         plot_kwargs["label"] = f"$M_{{{i}{j}}}$"
         if diff:
-            xs = iterations[:-1]
+            xs = iterations[i0 + 1 :]
             ys = np.abs(np.diff(M[i0:, i, j]))
             if not absolute:
-                ys = ys / np.abs(M[i0:-1, i, j])
+                ys = ys / np.abs(M[i0 + 1 :, i, j])
             ax.plot(xs, ys, **plot_kwargs)
         else:
-            xs = iterations
+            xs = iterations[i0:]
             ax.plot(xs, M[i0:, i, j], **plot_kwargs)
     ax.set_xticks(xs)
     if logy:
@@ -870,12 +870,12 @@ def plot_mutual_inductance(
     if diff:
         ylabel = "$\\Delta M_{{ij, k}}$"
         if absolute:
-            title = "$\\Delta M_{{ij, k}} = |M_{{ij, k+1}} - M_{{ij, k}}|$"
+            title = "$\\Delta M_{{ij, k}} = |M_{{ij, k}} - M_{{ij, k-1}}|$"
             ylabel = ylabel + f" [{units}]"
         else:
             title = (
                 "$\\Delta M_{{ij, k}} = "
-                "\\frac{{|M_{{ij, k+1}} - M_{{ij, k}}|}}{{|M_{{ij, k+1}}|}}$"
+                "\\frac{{|M_{{ij, k}} - M_{{ij, k-1}}|}}{{|M_{{ij, k}}|}}$"
             )
         ax.set_title(title)
     else:
@@ -888,7 +888,7 @@ def plot_mutual_inductance(
 def plot_polygon_flux(
     solutions: List[Solution],
     diff: bool = False,
-    iteration_offset: int = 1,
+    iteration_offset: int = 0,
     absolute: bool = False,
     units: Optional[str] = None,
     ax: Optional[plt.Axes] = None,
@@ -924,7 +924,7 @@ def plot_polygon_flux(
     else:
         fig = ax.figure
     i0 = int(iteration_offset)
-    iterations = np.arange(len(solutions))[i0:]
+    iterations = np.arange(len(solutions))
     plot_kwargs = kwargs.copy()
     device = solutions[0].device
     polygon_names = list(device.polygons)
@@ -938,13 +938,13 @@ def plot_polygon_flux(
     for name, flux_vals in polygon_flux.items():
         plot_kwargs["label"] = name
         if diff:
-            xs = iterations[:-1]
+            xs = iterations[i0 + 1 :]
             ys = np.abs(np.diff(flux_vals[i0:]))
             if not absolute:
-                ys = ys / np.abs(flux_vals[i0:-1])
+                ys = ys / np.abs(flux_vals[i0 + 1 :])
             ax.plot(xs, ys, **plot_kwargs)
         else:
-            xs = iterations
+            xs = iterations[i0:]
             ax.plot(xs, flux_vals[i0:], **plot_kwargs)
     ax.set_xticks(xs)
     if logy:
@@ -956,12 +956,10 @@ def plot_polygon_flux(
     if diff:
         ylabel = "$\\Delta\\Phi_i$"
         if absolute:
-            title = "$\\Delta\\Phi_i = |\\Phi_{i+1} - \\Phi_{i}|$"
+            title = "$\\Delta\\Phi_i = |\\Phi_i - \\Phi_{i-1}|$"
             ylabel = ylabel + f" [${units:~L}$]"
         else:
-            title = (
-                "$\\Delta\\Phi_i = " "\\frac{|\\Phi_{i+1} - \\Phi_i|}{|\\Phi_{i+1}|}$"
-            )
+            title = "$\\Delta\\Phi_i = " "\\frac{|\\Phi_i - \\Phi_{i-1}|}{|\\Phi_{i}|}$"
         ax.set_title(title)
     else:
         ylabel = f"$\\Phi_i$ [${units:~L}$]"
