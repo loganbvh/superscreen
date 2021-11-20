@@ -230,6 +230,24 @@ class Device(object):
         points = np.unique(points, axis=0)
         return points
 
+    @property
+    def vertex_distances(self) -> np.ndarray:
+        """An array of the mesh vertex-to-vertex distances."""
+        if self.points is None:
+            return None
+        inv_distances = fem.weights_inv_euclidean(
+            self.points, self.triangles, sparse=True
+        )
+        distances = (1 / inv_distances[inv_distances.nonzero()].toarray()).squeeze()
+        return distances
+
+    @property
+    def triangle_areas(self) -> np.ndarray:
+        """An array of the mesh triangle areas."""
+        if self.points is None:
+            return None
+        return fem.areas(self.points, self.triangles)
+
     def get_arrays(
         self,
         copy_arrays: bool = False,

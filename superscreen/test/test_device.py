@@ -110,8 +110,9 @@ def test_polygon_join():
 
 
 def test_plot_polygon():
-    ax = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1)).plot()
-    assert isinstance(ax, plt.Axes)
+    with non_gui_backend():
+        ax = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1)).plot()
+        assert isinstance(ax, plt.Axes)
 
 
 @pytest.fixture(scope="module")
@@ -217,7 +218,11 @@ def device_with_mesh():
 
     device = sc.Device("device", layers=layers, films=films, holes=holes)
     assert device.abstract_regions == {}
+    assert device.vertex_distances is None
+    assert device.triangle_areas is None
     device.make_mesh(min_triangles=2500)
+    assert isinstance(device.vertex_distances, np.ndarray)
+    assert isinstance(device.triangle_areas, np.ndarray)
 
     print(device)
     assert device == device
@@ -286,13 +291,14 @@ def test_draw_device(device, legend, subplots):
     with pytest.raises(ValueError):
         _ = device.draw(layer_order="invalid")
 
-    fig, ax = plt.subplots()
-    _ = sc.Device(
-        "device",
-        layers=[sc.Layer("layer", Lambda=0, z0=0)],
-        films=[sc.Polygon("disk", layer="layer", points=sc.geometry.circle(1))],
-    ).draw(ax=ax)
-    plt.close("all")
+    with non_gui_backend():
+        fig, ax = plt.subplots()
+        _ = sc.Device(
+            "device",
+            layers=[sc.Layer("layer", Lambda=0, z0=0)],
+            films=[sc.Polygon("disk", layer="layer", points=sc.geometry.circle(1))],
+        ).draw(ax=ax)
+        plt.close("all")
 
 
 @pytest.mark.parametrize(
