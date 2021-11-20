@@ -860,7 +860,6 @@ def plot_mutual_inductance(
         else:
             xs = iterations[i0:]
             ax.plot(xs, M[i0:, i, j], **plot_kwargs)
-    ax.set_xticks(xs)
     if logy:
         ax.set_yscale("log")
     if grid:
@@ -946,7 +945,6 @@ def plot_polygon_flux(
         else:
             xs = iterations[i0:]
             ax.plot(xs, flux_vals[i0:], **plot_kwargs)
-    ax.set_xticks(xs)
     if logy:
         ax.set_yscale("log")
     if grid:
