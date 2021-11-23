@@ -101,15 +101,18 @@ class Parameter(object):
             raise ValueError(
                 "All arguments other than x, y, z must be keyword arguments."
             )
+        defaults_dict = dict(zip(args[num_args:], defaults))
         kwonlyargs = set(kwargs) - set(argspec.args[num_args:])
-        if kwonlyargs != set(argspec.kwonlyargs or []):
+        if not kwonlyargs.issubset(set(argspec.kwonlyargs or [])):
             raise ValueError(
                 f"Provided keyword-only arguments ({kwonlyargs}) "
                 f"do not match the function signature: {function_repr(func)}."
             )
+        defaults_dict.update(argspec.kwonlydefaults or {})
 
         self.func = func
-        self.kwargs = kwargs
+        self.kwargs = defaults_dict
+        self.kwargs.update(kwargs)
 
     def __call__(
         self,
