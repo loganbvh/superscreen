@@ -50,7 +50,7 @@ def device():
         holes=holes,
         abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_triangles=5000)
+    device.make_mesh(min_points=3000)
 
     return device
 

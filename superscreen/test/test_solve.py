@@ -38,7 +38,7 @@ def device():
         holes=holes,
         abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_triangles=10000, optimesh_steps=200)
+    device.make_mesh(min_points=5000, optimesh_steps=200)
 
     return device
 
@@ -96,7 +96,7 @@ def two_rings():
         abstract_regions=abstract_regions,
         length_units=length_units,
     )
-    device.make_mesh(min_triangles=8_000)
+    device.make_mesh(min_points=4000)
     return device
 
 

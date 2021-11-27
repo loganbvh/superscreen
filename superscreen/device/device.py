@@ -346,7 +346,7 @@ class Device(object):
         self,
         compute_matrices: bool = True,
         weight_method: str = "half_cotangent",
-        min_triangles: Optional[int] = None,
+        min_points: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
         optimesh_method: str = "cvt-block-diagonal",
         optimesh_tolerance: float = 1e-3,
@@ -360,8 +360,9 @@ class Device(object):
                 (weights, Q, Laplace operator) needed for Brandt simulations.
             weight_method: Meshing scheme: either "uniform", "half_cotangent",
                 or "inv_euclidian".
-            min_triangles: Minimum number of triangles in the mesh. If None, then
-                the number of triangles will be determined by meshpy_kwargs.
+            min_points: Minimum number of vertices in the mesh. If None, then
+                the number of vertices will be determined by meshpy_kwargs and the
+                number of vertices in the underlying polygons.
             optimesh_steps: Maximum number of optimesh steps. If None, then no
                 optimization is done.
             optimesh_method: Name of the optimization method to use.
@@ -380,16 +381,16 @@ class Device(object):
         # meshpy quality meshing default is 20 degrees
         min_angle = meshpy_kwargs.get("min_angle", 32.5)
         meshpy_kwargs["min_angle"] = min_angle
-        if min_triangles is None:
+        if min_points is None:
             mesh = triangle.build(mesh_info=mesh_info, **meshpy_kwargs)
             points = np.array(mesh.points)
             triangles = np.array(mesh.elements)
         else:
             max_vol = 1
-            num_triangles = 0
+            num_points = 0
             kwargs = meshpy_kwargs.copy()
             i = 1
-            while num_triangles < min_triangles:
+            while num_points < min_points:
                 kwargs["max_volume"] = max_vol
                 mesh = triangle.build(
                     mesh_info=mesh_info,
@@ -397,16 +398,16 @@ class Device(object):
                 )
                 points = np.array(mesh.points)
                 triangles = np.array(mesh.elements)
-                num_triangles = triangles.shape[0]
+                num_points = points.shape[0]
                 logger.debug(
                     f"Iteration {i}: Made mesh with {points.shape[0]} points and "
                     f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
-                    f"Target number of triangles: {min_triangles}."
+                    f"Target number of points: {min_points}."
                 )
                 max_vol *= 0.9
                 i += 1
         if optimesh_steps:
-            logger.info(f"Optimizing mesh with {triangles.shape[0]} triangles.")
+            logger.info(f"Optimizing mesh with {points.shape[0]} vertices.")
             try:
                 points, triangles = optimesh.optimize_points_cells(
                     points,
@@ -418,7 +419,7 @@ class Device(object):
                 )
             except np.linalg.LinAlgError as e:
                 err = (
-                    "LinAlgError encountered in optimesh. Try reducing min_triangles "
+                    "LinAlgError encountered in optimesh. Try reducing min_points "
                     "or increasing the number of points in the device's important polygons."
                 )
                 raise RuntimeError(err) from e
