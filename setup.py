@@ -25,7 +25,7 @@ PYTHON_VERSION = ">=3.6, <3.10"
 INSTALL_REQUIRES = [
     "backports-datetime-fromisoformat",
     "dill",
-    "ipython<=7.15",
+    "ipython",
     "jupyter",
     "matplotlib",
     "meshpy",
@@ -33,6 +33,7 @@ INSTALL_REQUIRES = [
     "optimesh",
     "pandas",
     "pint",
+    "pre-commit",
     "pytest",
     "pytest-cov",
     "ray[default]",

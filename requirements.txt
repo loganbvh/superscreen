@@ -1,6 +1,6 @@
 backports-datetime-fromisoformat
 dill
-ipython<=7.15
+ipython
 jupyter
 matplotlib
 meshpy
@@ -8,6 +8,7 @@ numpy
 optimesh
 pandas
 pint
+pre-commit
 pytest
 pytest-cov
 ray[default]
