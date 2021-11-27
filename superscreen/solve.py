@@ -20,7 +20,6 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.spatial import distance
 
-from .fem import areas, centroids
 from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
@@ -475,7 +474,6 @@ def solve(
     dtype = device.solve_dtype
 
     points = device.points.astype(dtype, copy=False)
-    triangles = device.triangles
     weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2
     if sp.issparse(Del2):
@@ -600,10 +598,7 @@ def solve(
     layer_names = list(device.layers)
     nlayers = len(layer_names)
     if iterations and nlayers > 1:
-        tri_points = centroids(points, triangles).astype(dtype, copy=False)
-        tri_areas = areas(points, triangles).astype(dtype, copy=False)
-        # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = distance.cdist(points, tri_points, metric="sqeuclidean").astype(
+        rho2 = distance.cdist(points, points, metric="sqeuclidean").astype(
             dtype,
             copy=False,
         )
@@ -654,7 +649,7 @@ def solve(
                     )
                     # Average stream function over all vertices in each triangle to
                     # estimate the stream function value at the centroid of the triangle.
-                    g = streams[other_layer.name][triangles].mean(axis=1, dtype=dtype)
+                    g = streams[other_layer.name]
                     dz = other_layer.z0 - layer.z0
                     key = frozenset((layer.name, other_layer.name))
                     # Get the cached kernel matrix,
@@ -676,7 +671,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     other_screening_fields[layer.name] += np.einsum(
-                        "ij,j -> i", q, tri_areas * g, dtype=dtype
+                        "ij,j -> i", q, weights * g, dtype=dtype
                     )
                     del q, g
                 # Solve again with the screening fields from all layers.

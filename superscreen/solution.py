@@ -15,7 +15,7 @@ from scipy.spatial import distance
 
 from .about import version_dict
 from .device import Device, Polygon
-from .fem import areas, centroids, in_polygon
+from .fem import in_polygon
 from .parameter import Constant
 
 from backports.datetime_fromisoformat import MonkeyPatch
@@ -366,10 +366,7 @@ class Solution(object):
             new_units = ureg(new_units)
 
         points = self.device.points
-        triangles = self.device.triangles
-
-        tri_areas = areas(points, triangles) * ureg(f"{self.device.length_units}") ** 2
-        tri_points = centroids(points, triangles)
+        areas = self.device.weights * ureg(f"{self.device.length_units}") ** 2
         fluxes = {}
         for name in polygons:
             if name in films:
@@ -378,10 +375,9 @@ class Solution(object):
                 poly = self.device.holes[name]
             else:
                 poly = self.device.abstract_regions[name]
-            ix = poly.contains_points(tri_points, index=True)
-            field = self.fields[poly.layer][triangles].mean(axis=1)
-            field = field[ix] * ureg(self.field_units)
-            area = tri_areas[ix]
+            ix = poly.contains_points(points, index=True)
+            field = self.fields[poly.layer][ix] * ureg(self.field_units)
+            area = areas[ix]
             # Convert field to B = mu0 * H
             field = convert_field(field, "mT", ureg=ureg)
             flux = np.einsum("i,i -> ", field, area).to(new_units)
@@ -590,6 +586,7 @@ class Solution(object):
         ureg = device.ureg
         points = device.points.astype(dtype, copy=False)
         triangles = device.triangles
+        areas = device.weights
 
         units = units or self.field_units
 
@@ -612,13 +609,9 @@ class Solution(object):
             # We need zs to be shape (m, 1)
             zs = zs[:, np.newaxis]
 
-        tri_points = centroids(points, triangles).astype(dtype, copy=False)
-        tri_areas = areas(points, triangles).astype(dtype, copy=False)
-        # Compute ||(x, y) - (xt, yt)||^2
-        rho2 = distance.cdist(positions, tri_points, metric="sqeuclidean").astype(
+        rho2 = distance.cdist(positions, points, metric="sqeuclidean").astype(
             dtype, copy=False
         )
-
         Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
         if vector:
             H_applied = np.stack(
@@ -658,7 +651,7 @@ class Solution(object):
                         f"Cannot calculate fields in the same plane as layer {name}."
                     )
                 # g has units of [current]
-                g = self.streams[name][triangles].mean(axis=1, dtype=dtype)
+                g = self.streams[name]
                 # Q is the dipole kernel for the z component, Hz
                 # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
                 Q = (
@@ -666,7 +659,7 @@ class Solution(object):
                 ).astype(dtype, copy=False)
                 # tri_areas has units of [length]^2
                 # So here Hz is in units of [current] * [length]^(-1)
-                Hz = np.einsum("ij,j -> i", Q, tri_areas * g, dtype=dtype)
+                Hz = np.einsum("ij,j -> i", Q, areas * g, dtype=dtype)
             if vector:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -674,18 +667,18 @@ class Solution(object):
                     )
                 # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
                 # Pairwise difference between all x positions
-                d = np.subtract.outer(positions[:, 0], tri_points[:, 0], dtype=dtype)
+                d = np.subtract.outer(positions[:, 0], points[:, 0], dtype=dtype)
                 # Kernel for x component, Hx
                 Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
-                Hx = np.einsum("ij,j -> i", Q, tri_areas * g)
+                Hx = np.einsum("ij,j -> i", Q, areas * g)
 
                 # Pairwise difference between all y positions
-                d = np.subtract.outer(positions[:, 1], tri_points[:, 1], dtype=dtype)
+                d = np.subtract.outer(positions[:, 1], points[:, 1], dtype=dtype)
                 # Kernel for y component, Hy
                 Q = ((3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))).astype(
                     dtype, copy=False
                 )
-                Hy = np.einsum("ij,j -> i", Q, tri_areas * g, dtype=dtype)
+                Hy = np.einsum("ij,j -> i", Q, areas * g, dtype=dtype)
 
                 H = np.stack([Hx, Hy, Hz], axis=1)
             else:
