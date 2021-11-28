@@ -647,8 +647,6 @@ def solve(
                         f"Calculating screening field at {layer.name} "
                         f"from {other_layer.name} ({i+1}/{iterations})."
                     )
-                    # Average stream function over all vertices in each triangle to
-                    # estimate the stream function value at the centroid of the triangle.
                     g = streams[other_layer.name]
                     dz = other_layer.z0 - layer.z0
                     key = frozenset((layer.name, other_layer.name))
@@ -656,8 +654,9 @@ def solve(
                     # or calculate it if it's not yet in the cache.
                     q = kernels.get(key, None)
                     if q is None:
-                        q = (2 * dz ** 2 - rho2) / (
-                            4 * np.pi * (dz ** 2 + rho2) ** (5 / 2)
+                        q = (
+                            (2 * dz ** 2 - rho2)
+                            / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
                         ).astype(dtype, copy=False)
                         if cache_kernels_to_disk:
                             fname = os.path.join(tempdir, "_".join(key))

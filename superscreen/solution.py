@@ -669,7 +669,9 @@ class Solution(object):
                 # Pairwise difference between all x positions
                 d = np.subtract.outer(positions[:, 0], points[:, 0], dtype=dtype)
                 # Kernel for x component, Hx
-                Q = (3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                Q = ((3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))).astype(
+                    dtype, copy=False
+                )
                 Hx = np.einsum("ij,j -> i", Q, areas * g)
 
                 # Pairwise difference between all y positions
