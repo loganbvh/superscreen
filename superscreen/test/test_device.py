@@ -220,9 +220,11 @@ def device_with_mesh():
     assert device.abstract_regions == {}
     assert device.vertex_distances is None
     assert device.triangle_areas is None
-    device.make_mesh(min_triangles=2500)
+    device.make_mesh(min_points=2000)
     assert isinstance(device.vertex_distances, np.ndarray)
     assert isinstance(device.triangle_areas, np.ndarray)
+    centroids = sc.fem.centroids(device.points, device.triangles)
+    assert centroids.shape[0] == device.triangles.shape[0]
 
     print(device)
     assert device == device
@@ -302,13 +304,13 @@ def test_draw_device(device, legend, subplots):
 
 
 @pytest.mark.parametrize(
-    ", ".join(["min_triangles", "optimesh_steps"]),
-    [(None, None), (None, 20), (2500, None), (2500, 20)],
+    ", ".join(["min_points", "optimesh_steps"]),
+    [(None, None), (None, 20), (1200, None), (1200, 20)],
 )
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
 )
-def test_make_mesh(device, min_triangles, optimesh_steps, weight_method):
+def test_make_mesh(device, min_points, optimesh_steps, weight_method):
     if weight_method == "invalid":
         context = pytest.raises(ValueError)
     else:
@@ -316,7 +318,7 @@ def test_make_mesh(device, min_triangles, optimesh_steps, weight_method):
 
     with context:
         device.make_mesh(
-            min_triangles=min_triangles,
+            min_points=min_points,
             optimesh_steps=optimesh_steps,
             weight_method=weight_method,
         )
@@ -326,8 +328,8 @@ def test_make_mesh(device, min_triangles, optimesh_steps, weight_method):
 
     assert device.points is not None
     assert device.triangles is not None
-    if min_triangles:
-        assert device.triangles.shape[0] >= min_triangles
+    if min_points:
+        assert device.points.shape[0] >= min_points
 
     assert isinstance(device.weights, np.ndarray)
     assert device.weights.shape == (device.points.shape[0],)

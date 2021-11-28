@@ -38,7 +38,7 @@ def device():
         holes=holes,
         abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_triangles=10000, optimesh_steps=200)
+    device.make_mesh(min_points=5000, optimesh_steps=200)
 
     return device
 
@@ -96,7 +96,7 @@ def two_rings():
         abstract_regions=abstract_regions,
         length_units=length_units,
     )
-    device.make_mesh(min_triangles=8_000)
+    device.make_mesh(min_points=4000)
     return device
 
 
@@ -203,7 +203,7 @@ def mutual_inductance_matrix(two_rings, iterations=3):
         all_iterations=True,
     )
     # Check that M is symmetric
-    assert np.isclose(M[-1][0, 1], M[-1][1, 0], rtol=2e-2)
+    assert np.isclose(M[-1][0, 1], M[-1][1, 0], rtol=5e-2)
     return M
 
 
@@ -230,9 +230,9 @@ def test_mutual_inductance_matrix(
     assert isinstance(M, pint.Quantity)
     assert isinstance(M.magnitude, np.ndarray)
     M2 = mutual_inductance_matrix[-1]
-    assert np.allclose(M, M2, rtol=2e-2)
+    assert np.allclose(M, M2, rtol=5e-2)
     # Check that M is symmetric
-    assert np.isclose(M[0, 1], M[1, 0], rtol=2e-2)
+    assert np.isclose(M[0, 1], M[1, 0], rtol=5e-2)
 
 
 def test_mutual_inductance_upper_lower(two_rings, iterations=1):

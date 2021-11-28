@@ -38,7 +38,7 @@ def device():
     ]
 
     device = sc.Device("device", layers=layers, films=films, holes=holes)
-    device.make_mesh(min_triangles=1500)
+    device.make_mesh(min_points=1000)
 
     return device
 
