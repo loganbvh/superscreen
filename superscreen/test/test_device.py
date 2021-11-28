@@ -303,7 +303,7 @@ def test_draw_device(device, legend, subplots):
 
 @pytest.mark.parametrize(
     ", ".join(["min_points", "optimesh_steps"]),
-    [(None, None), (None, 20), (2000, None), (2000, 20)],
+    [(None, None), (None, 20), (1200, None), (1200, 20)],
 )
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
