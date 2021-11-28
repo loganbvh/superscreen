@@ -25,15 +25,28 @@ Click the badge below to try `SuperScreen` interactively online via [Binder](htt
 
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD?filepath=docs%2Fnotebooks)
 
-(Note: Binder instances are [limited to 2 GB of memory](https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder), so you can only solve models with up to approximately
-10,000 triangles online.)
+(Note: Binder instances are [limited to 2 GB of memory](https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder), so you can only solve relatively small models online.)
 
 ## Install `SuperScreen`
 
 `SuperScreen` requires `python >=3.6, <3.10`. For more details, see the
 [documentation](https://superscreen.readthedocs.io/en/latest/).
 
+### Intalling via `pip`
+
+Coming soon...
+
 ### Installing from source
 
 - Clone or download this repository
 - `pip install -e .` in the superscreen directory
+
+## About `SuperScreen`
+
+### Authors
+
+Primary author and maintainer: [@loganbvh](https://github.com/loganbvh/).
+
+### Contributing
+
+Want to contribute to `superscreen`? Check out our [contribution guidelines](CONTRIBUTING.md).
