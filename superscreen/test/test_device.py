@@ -223,6 +223,8 @@ def device_with_mesh():
     device.make_mesh(min_points=2000)
     assert isinstance(device.vertex_distances, np.ndarray)
     assert isinstance(device.triangle_areas, np.ndarray)
+    centroids = sc.fem.centroids(device.points, device.triangles)
+    assert centroids.shape[0] == device.triangles.shape[0]
 
     print(device)
     assert device == device
