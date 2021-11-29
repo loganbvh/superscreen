@@ -29,6 +29,25 @@ Solution
 .. autoclass:: superscreen.solution.Solution
     :members:
 
+Fluxoid
+-------
+
+.. autoclass:: superscreen.solution.Fluxoid
+    :show-inheritance:
+
+.. autoclass:: superscreen.solution.Vortex
+    :show-inheritance:
+
+.. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
+
+.. autofunction:: superscreen.fluxoid.find_single_fluxoid_solution
+
+.. autofunction:: superscreen.fluxoid.find_fluxoid_solution
+
+
+IO
+--
+
 .. autofunction:: superscreen.io.save_solutions
 
 .. autofunction:: superscreen.io.load_solutions
@@ -38,22 +57,6 @@ Solution
 .. autofunction:: superscreen.io.zip_solution
 
 .. autofunction:: superscreen.io.unzip_solution
-
-.. autoclass:: superscreen.solution.Fluxoid
-    :show-inheritance:
-
-.. autoclass:: superscreen.solution.Vortex
-    :show-inheritance:
-
-
-Fluxoid
--------
-
-.. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
-
-.. autofunction:: superscreen.fluxoid.find_single_fluxoid_solution
-
-.. autofunction:: superscreen.fluxoid.find_fluxoid_solution
 
 
 Supporting Functions

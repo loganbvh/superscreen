@@ -5,7 +5,7 @@ Installation
 ************
 
 ``SuperScreen`` requires ``Python >=3.6, <3.10`` and can only be installed from source.
-In the future, the package will be added to `PyPi <https://pypi.org/>`_, the Python Package index,
+In the future, the package will be added to `PyPI <https://pypi.org/>`_, the Python Package index,
 making it ``pip``-installable.
 
 We recommend creating a new
@@ -24,22 +24,31 @@ After the environment has been created, run ``conda activate superscreen`` to ac
   - On **MacOS**, ensure that `Xcode command line tools <https://mac.install.guide/commandlinetools/>`_
     are installed before installing ``superscreen``.
 
-
-Install from source
+Install via ``pip``
 -------------------
 
-- `Clone <https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/cloning-a-repository-from-github/cloning-a-repository>`_
-  or download the `superscreen repository <https://github.com/loganbvh/superscreen>`_ on GitHub
-- From the base directory of the repository, run
-  
-   .. code-block:: bash
+From `PyPI <https://pypi.org/>`_, the Python Package Index:
 
-      pip install -e .
+.. code-block:: bash
 
-Install with pip
-----------------
+  # Coming soon...
 
-- Coming soon...
+From the `SuperScreen GitHub repository <https://github.com/loganbvh/superscreen/>`_:
+
+.. code-block:: bash
+
+  pip install git+https://github.com/loganbvh/superscreen.git
+
+Developer Installation
+----------------------
+
+To install an editable version of ``SuperScreen``, run:
+
+.. code-block:: bash
+
+  git clone https://github.com/loganbvh/superscreen.git
+  cd superscreen
+  pip install -e .
 
 
 Verify the installation

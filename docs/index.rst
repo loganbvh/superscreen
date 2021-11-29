@@ -61,7 +61,7 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
 
    Binder instances are `limited to 2 GB of memory
    <https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder>`_,
-   so you can only solve models with up to approximately 10,000 triangles online.
+   so you can only solve relatively small models online.
 
 .. toctree::
    :maxdepth: 2
@@ -85,8 +85,10 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
    :maxdepth: 2
    :caption: About SuperScreen
 
-   license.rst
-   references.rst
+   about/license.rst
+   about/contributing.rst
+   about/changelog.rst
+   about/references.rst
 
 .. Indices and tables
 .. ==================
