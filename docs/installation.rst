@@ -4,9 +4,9 @@
 Installation
 ************
 
-``SuperScreen`` requires ``Python >=3.6, <3.10`` and can only be installed from source.
-In the future, the package will be added to `PyPI <https://pypi.org/>`_, the Python Package index,
-making it ``pip``-installable.
+``SuperScreen`` requires ``Python >=3.6, <3.10`` and can be installed either from
+`PyPI <https://pypi.org/project/superscreen/>`_, the Python Package index,
+or from the ``SuperScreen`` `GitHub repository <https://github.com/loganbvh/superscreen>`_.
 
 We recommend creating a new
 `conda environment <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_
@@ -27,11 +27,11 @@ After the environment has been created, run ``conda activate superscreen`` to ac
 Install via ``pip``
 -------------------
 
-From `PyPI <https://pypi.org/>`_, the Python Package Index:
+From `PyPI <https://pypi.org/project/superscreen/>`_, the Python Package Index:
 
 .. code-block:: bash
 
-  # Coming soon...
+  pip install superscreen
 
 From the `SuperScreen GitHub repository <https://github.com/loganbvh/superscreen/>`_:
 

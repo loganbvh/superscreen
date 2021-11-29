@@ -33,10 +33,10 @@ Click the badge below to try `SuperScreen` interactively online via [Binder](htt
 
 ### Install via `pip`
 
-From [PyPI](https://pypi.org/), the Python Package Index:
+From [PyPI](https://pypi.org/project/superscreen/), the Python Package Index:
 
 ```bash
-# Coming soon...
+pip install superscreen
 ```
 
 From this [GitHub repository](https://github.com/loganbvh/superscreen/):

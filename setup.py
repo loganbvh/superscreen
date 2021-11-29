@@ -24,9 +24,7 @@ Click the badge below to try `SuperScreen` interactively online via [Binder](htt
 
 from setuptools import setup, find_packages
 
-DESCRIPTION = (
-    "SuperScreen: simulate Meissner screening in multiplanar superconducting devices."
-)
+DESCRIPTION = "SuperScreen: simulate Meissner screening in 2D superconducting devices."
 LONG_DESCRIPTION = __doc__
 
 NAME = "superscreen"
