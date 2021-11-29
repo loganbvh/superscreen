@@ -29,7 +29,7 @@ LONG_DESCRIPTION = __doc__
 
 NAME = "superscreen"
 AUTHOR = "Logan Bishop-Van Horn"
-AUTHOR_EMAIL = "logan.bvh@gmail.com, lbvh@stanford.edu"
+AUTHOR_EMAIL = "logan.bvh@gmail.com"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
 PYTHON_VERSION = ">=3.6, <3.10"
