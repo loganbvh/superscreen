@@ -14,6 +14,10 @@ SuperScreen
    :width: 300px
    :align: center
 
+.. image:: https://img.shields.io/pypi/v/superscreen
+   :target: https://pypi.org/project/superscreen/
+   :alt: PyPI
+
 .. image:: https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main
    :alt: GitHub Workflow Status (branch)
 
@@ -30,6 +34,9 @@ SuperScreen
 
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
+
+.. image:: https://zenodo.org/badge/376110557.svg
+   :target: https://zenodo.org/badge/latestdoi/376110557
 
 
 `SuperScreen <https://github.com/loganbvh/superscreen>`_ is an open-source Python package for simulating

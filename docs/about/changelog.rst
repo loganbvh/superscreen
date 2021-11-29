@@ -2,8 +2,8 @@
 Change Log
 **********
 
-View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_
-or `GitHub <https://github.com/loganbvh/superscreen/releases>`_.
+View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
+`GitHub <https://github.com/loganbvh/superscreen/releases>`_, or `Zenodo <https://zenodo.org/badge/latestdoi/376110557>`_.
 
 .. note::
 
