@@ -32,6 +32,8 @@ class Layer(object):
         z0: Vertical location of the layer.
     """
 
+    __slots__ = ("name", "thickness", "london_lambda", "z0", "_Lambda")
+
     def __init__(
         self,
         name: str,
@@ -119,6 +121,8 @@ class Polygon(object):
             coordinates or a shapely ``LineString``, ``LinearRing``, or ``Polygon``.
         mesh: Whether to include this polygon when computing a mesh.
     """
+
+    __slots__ = ("name", "layer", "_points", "mesh")
 
     def __init__(
         self,

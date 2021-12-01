@@ -693,9 +693,9 @@ class Solution(object):
                 with_units=with_units,
             )
         if return_sum:
-            fields = sum(fields.values()) + H_applied.squeeze()
+            fields = sum(fields.values()) + np.atleast_1d(H_applied).squeeze()
         else:
-            fields["applied_field"] = H_applied.squeeze()
+            fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
         return fields
 
     def to_file(

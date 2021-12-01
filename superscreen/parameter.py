@@ -80,6 +80,8 @@ class Parameter(object):
         kwargs: Keyword arguments for func.
     """
 
+    __slots__ = ("func", "kwargs")
+
     def __init__(self, func: Callable, **kwargs):
         argspec = inspect.getfullargspec(func)
         args = argspec.args
