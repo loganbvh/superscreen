@@ -121,6 +121,8 @@ def _dipole_distribution_comp(
     x = (x * length_units).to_base_units().magnitude
     y = (y * length_units).to_base_units().magnitude
     z = (z * length_units).to_base_units().magnitude
+    if len(z) == 1:
+        z = z * np.ones_like(x)
     B = _dipole_distribution(
         x,
         y,
