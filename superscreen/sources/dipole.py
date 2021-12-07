@@ -19,7 +19,7 @@ def _dipole_field(
     moment: Union[np.ndarray, Tuple[float, float, float]] = (0, 0, 0),
 ) -> np.ndarray:
     """Returns the 3D field from a single dipole with the given moment
-    (in units of the Bohr magneton) located at the position ``r0``, evaluated
+    (in units of amps * meters ** 2) located at the position ``r0``, evaluated
     at coordinates ``(x, y, z)``.
 
     Given :math:`\\vec{r}=(x, y, z) - \\vec{r}_0`, the magnetic field is:
@@ -34,15 +34,15 @@ def _dipole_field(
             }
 
     Args:
-        x: x-coordinate(s) at which to evaluate the field. Either a scalar
+        x: x-coordinate(s) (in meters) at which to evaluate the field.
+            Either a scalar or vector with shape ``(n, )``.
+        y: y-coordinate(s) (in meters) at which to evaluate the field.
+            Either a scalar or vector with shape ``(n, )``.
+        z: z-coordinate(s) (in meters) at which to evaluate the field. Either a scalar
             or vector with shape ``(n, )``.
-        y: y-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape ``(n, )``.
-        z: z-coordinate(s) at which to evaluate the field. Either a scalar
-            or vector with shape ``(n, )``.
-        r0: Coordinates ``(x0, y0, z0)`` of the dipole position,
+        r0: Coordinates ``(x0, y0, z0)`` (in meters) of the dipole position,
             shape ``(3,)`` or ``(1, 3)``.
-        moment: Dipole moment ``(mx, my, mz)`` in units of the Bohr magneton,
+        moment: Dipole moment ``(mx, my, mz)`` in units of amps * meters ** 2,
             shape ``(3,)`` or ``(1, 3)``.
 
     Returns:
@@ -73,20 +73,20 @@ def _dipole_distribution(
     dipole_moments: Union[np.ndarray, Tuple[float, float, float]],
 ) -> np.ndarray:
     """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}` from a
-    distribution of dipoles with given moments (in units of the Bohr magneton)
+    distribution of dipoles with given moments (in units of amps * meters ** 2)
     located at the given positions, evaluated at coordinates ``(x, y, z)``.
 
     Args:
-        x: x-coordinate(s) at which to evaluate the field. Either a scalar
+        x: x-coordinate(s) (in meters) at which to evaluate the field. Either a scalar
             or vector with shape ``(n, )``.
-        y: y-coordinate(s) at which to evaluate the field. Either a scalar
+        y: y-coordinate(s) (in meters) at which to evaluate the field. Either a scalar
             or vector with shape ``(n, )``.
-        z: z-coordinate(s) at which to evaluate the field. Either a scalar
+        z: z-coordinate(s) (in meters) at which to evaluate the field. Either a scalar
             or vector with shape ``(n, )``.
         dipole_positions: Coordinates ``(x0_i, y0_i, z0_i)`` of the position of
-            each dipole ``i``, shape ``(m, 3)``.
-        dipole_moments: Dipole moments ``(mx_i, my_i, mz_i)`` in units of the
-            Bohr magneton. If dipole_moments has shape ``(3, )`` or ``(1, 3)``,
+            each dipole ``i``, shape ``(m, 3)`` (in meters) .
+        dipole_moments: Dipole moments ``(mx_i, my_i, mz_i)`` in units of
+            amps * meters ** 2. If dipole_moments has shape ``(3, )`` or ``(1, 3)``,
             then all dipoles are assigned the same moment. Otherwise, dipole_moments
             must have shape ``(m, 3)``, i.e. the moment is specified for each dipole.
 
