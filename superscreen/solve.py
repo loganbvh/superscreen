@@ -283,9 +283,6 @@ def solve_layer(
         .magnitude
     )
 
-    if device.weights is None:
-        device.make_mesh(compute_matrices=True)
-
     if weights is None:
         weights = device.weights
     if Del2 is None:
@@ -471,8 +468,17 @@ def solve(
     if directory is not None:
         os.makedirs(directory, exist_ok=True)
 
-    dtype = device.solve_dtype
+    if device.points is None:
+        raise ValueError(
+            "The device does not have a mesh. Call device.make_mesh() to generate it."
+        )
+    if device.weights is None or device.Del2 is None:
+        raise ValueError(
+            "The device does not have a Laplace operator. "
+            "Call device.compute_matrices() to calculate it."
+        )
 
+    dtype = device.solve_dtype
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2

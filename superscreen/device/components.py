@@ -292,7 +292,7 @@ class Polygon(object):
                 and other.layer is not None
                 and self.layer != other.layer
             ):
-                logger.warn(
+                logger.warning(
                     f"Taking the {operation} of {self} and {other} even though "
                     f"they are assigned to different layers."
                 )
