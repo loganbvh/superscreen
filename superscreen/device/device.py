@@ -3,6 +3,7 @@ import json
 import logging
 from copy import deepcopy
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Optional, Union, List, Tuple, Dict, Any
 
 import dill
@@ -18,6 +19,7 @@ import optimesh
 
 from .. import solve
 from .. import fem
+from .. import geometry
 from ..parameter import Parameter
 from .components import Layer, Polygon
 
@@ -342,6 +344,125 @@ class Device(object):
         # Deep copy (copy all arrays and return references to copies)
         return self.copy(with_arrays=True, copy_arrays=True)
 
+    def _warn_if_mesh_exist(self, method: str) -> None:
+        if self.points is None and self.triangles is None:
+            return
+        message = (
+            f"Calling device.{method} on a device whose mesh already exists returns "
+            f"a new device with no mesh. Call new_device.make_mesh() to generate the mesh "
+            f"for the new device."
+        )
+        logger.warning(message)
+
+    def fliplr(self) -> "Device":
+        """Returns a new device with polygons flipped left-to-right,
+        i.e. about the y-axis.
+
+        Returns:
+            The flipped :class:`superscreen.device.device.Device`.
+        """
+        self._warn_if_mesh_exist("fliplr()")
+        device = self.copy(with_arrays=False)
+        for polygon in device.polygons.values():
+            polygon.points[:, 0] *= -1
+        return device
+
+    def flipud(self) -> "Device":
+        """Returns a new device with polygons flipped up-to-down,
+        i.e. about the x-axis.
+
+        Returns:
+            The flipped :class:`superscreen.device.device.Device`.
+        """
+        self._warn_if_mesh_exist("flipud()")
+        device = self.copy(with_arrays=False)
+        for polygon in device.polygons.values():
+            polygon.points[:, 1] *= -1
+        return device
+
+    def rotate(self, degrees: float) -> "Device":
+        """Returns a new device with polygons rotated a given amount
+        counterclockwise about the z-axis.
+
+        Args:
+            degrees: The amount by which to rotate the polygons.
+
+        Returns:
+            The rotated :class:`superscreen.device.device.Device`.
+        """
+        self._warn_if_mesh_exist("rotate()")
+        device = self.copy(with_arrays=False)
+        for polygon in device.polygons.values():
+            polygon.points = geometry.rotate(polygon.points, degrees)
+        return device
+
+    def mirror_layers(self, about_z: float = 0.0) -> "Device":
+        """Returns a new device with its layers mirrored about the plane
+        ``z = about_z``.
+
+        Args:
+            about_z: The z-position of the plane (parallel to the x-y plane)
+                about which to mirror the layers.
+
+        Returns:
+            The mirrored :class:`superscreen.device.device.Device`.
+        """
+        device = self.copy(with_arrays=True, copy_arrays=True)
+        for layer in device.layers.values():
+            layer.z0 = about_z - layer.z0
+        return device
+
+    def translate(
+        self,
+        dx: float,
+        dy: float,
+        dz: float = 0,
+        inplace: bool = False,
+    ) -> Optional["Device"]:
+        """Translates the device polygons, layers, and mesh in space by a given amount.
+
+        Args:
+            dx: Distance by which to translate along the x-axis.
+            dy: Distance by which to translate along the y-axis.
+            dz: Distance by which to translate layers along the z-axis.
+            inplace: If True, modifies the device (``self``) in-place and returns None,
+                otherwise, creates a new device, translates it, and returns it.
+
+        Returns:
+            The translated device, if ``inplace`` is False.
+        """
+        if inplace:
+            device = self
+        else:
+            self._warn_if_mesh_exist("translate(..., inplace=False)")
+            device = self.copy(with_arrays=True, copy_arrays=True)
+        dr = np.array([[dx, dy]])
+        for polygon in device.polygons.values():
+            polygon.points += dr
+        if device.points is not None:
+            device.points += dr
+        if dz:
+            for layer in device.layers.values():
+                layer.z0 += dz
+        if not inplace:
+            return device
+
+    @contextmanager
+    def translation(self, dx: float, dy: float, dz: float = 0) -> None:
+        """A context manager that temporarily translates a device in-place,
+        then returns it to its original position.
+
+        Args:
+            dx: Distance by which to translate polygons along the x-axis.
+            dy: Distance by which to translate polygons along the y-axis.
+            dz: Distance by which to translate layers along the z-axis.
+        """
+        try:
+            self.translate(dx, dy, dz=dz, inplace=True)
+            yield
+        finally:
+            self.translate(-dx, -dy, dz=-dz, inplace=True)
+
     def make_mesh(
         self,
         compute_matrices: bool = True,
@@ -358,8 +479,8 @@ class Device(object):
         Args:
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
-            weight_method: Meshing scheme: either "uniform", "half_cotangent",
-                or "inv_euclidian".
+            weight_method: Weight methods for computing the Laplace operator:
+                one of "uniform", "half_cotangent", or "inv_euclidian".
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.

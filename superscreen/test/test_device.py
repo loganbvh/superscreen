@@ -181,6 +181,15 @@ def device():
 
     assert device.get_arrays() is None
 
+    assert isinstance(device.fliplr(), sc.Device)
+    assert isinstance(device.flipud(), sc.Device)
+    assert isinstance(device.rotate(90), sc.Device)
+    dx = 1
+    dy = -1
+    dz = 1
+    assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
+    assert device.copy().translate(dx, dy, dz=dz, inplace=True) is None
+
     return device
 
 
@@ -253,6 +262,32 @@ def device_with_mesh():
         == device.copy(with_arrays=True)
         == device
     )
+
+    assert isinstance(device.fliplr(), sc.Device)
+    assert isinstance(device.flipud(), sc.Device)
+    assert isinstance(device.rotate(90), sc.Device)
+    dx = 1
+    dy = -1
+    dz = 1
+    assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
+    d = device.copy(with_arrays=True, copy_arrays=True)
+    assert d.translate(dx, dy, dz=dz, inplace=True) is None
+
+    for points in ("poly_points", "points"):
+        x0, y0 = getattr(device, points).mean(axis=0)
+        z0s = {layer.name: layer.z0 for layer in layers}
+        with device.translation(dx, dy, dz=dz):
+            x, y = getattr(device, points).mean(axis=0)
+            assert np.isclose(x, x0 + dx)
+            assert np.isclose(y, y0 + dy)
+            for layer in device.layers.values():
+                assert np.isclose(layer.z0, z0s[layer.name] + dz)
+        x, y = getattr(device, points).mean(axis=0)
+        assert np.isclose(x, x0)
+        assert np.isclose(y, y0)
+        for layer in device.layers.values():
+            assert np.isclose(layer.z0, z0s[layer.name])
+
     return device
 
 
