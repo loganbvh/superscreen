@@ -264,10 +264,18 @@ def device_with_mesh():
         == device
     )
 
-    assert isinstance(device.fliplr(), sc.Device)
-    assert isinstance(device.flipud(), sc.Device)
-    assert isinstance(device.rotate(90), sc.Device)
-    assert isinstance(device.mirror_layers(about_z=0), sc.Device)
+    d = device.fliplr()
+    assert isinstance(d, sc.Device)
+    assert d.points is None
+    d = device.flipud()
+    assert isinstance(d, sc.Device)
+    assert d.points is None
+    d = device.rotate(90)
+    assert isinstance(d, sc.Device)
+    assert d.points is None
+    d = device.mirror_layers(about_z=-1)
+    assert isinstance(d, sc.Device)
+    assert np.array_equal(d.points, device.points)
     dx = 1
     dy = -1
     dz = 1
