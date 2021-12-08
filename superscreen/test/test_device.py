@@ -184,6 +184,7 @@ def device():
     assert isinstance(device.fliplr(), sc.Device)
     assert isinstance(device.flipud(), sc.Device)
     assert isinstance(device.rotate(90), sc.Device)
+    assert isinstance(device.mirror_layers(about_z=0), sc.Device)
     dx = 1
     dy = -1
     dz = 1
@@ -266,6 +267,7 @@ def device_with_mesh():
     assert isinstance(device.fliplr(), sc.Device)
     assert isinstance(device.flipud(), sc.Device)
     assert isinstance(device.rotate(90), sc.Device)
+    assert isinstance(device.mirror_layers(about_z=0), sc.Device)
     dx = 1
     dy = -1
     dz = 1
