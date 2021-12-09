@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 from shapely import geometry as geo
 from shapely import affinity
+from shapely.validation import explain_validity
 
 from ..geometry import close_curve
 from ..parameter import Parameter
@@ -164,7 +165,11 @@ class Polygon(object):
         if points.interiors:
             raise ValueError("Expected a simply-connected polygon.")
         if not points.is_valid:
-            raise ValueError("The given points do not define a valid polygon.")
+            reason = explain_validity(points)
+            raise ValueError(
+                "The given points do not define a valid polygon for the following "
+                f"reason: {reason}."
+            )
         points = close_curve(np.array(points.exterior.coords))
         if points.ndim != 2 or points.shape[-1] != 2:
             raise ValueError(f"Expected shape (n, 2), but got {points.shape}.")
@@ -380,13 +385,17 @@ class Polygon(object):
                 f"Valid types are {(Polygon, ) + valid_types}, got {type(other)}."
             )
         joined = getattr(self.polygon, operation)(other_poly)
-        if (
-            not isinstance(joined, geo.polygon.Polygon)
-            or joined.is_empty
-            or not joined.is_valid
-        ):
+        reason = None
+        if not isinstance(joined, geo.polygon.Polygon):
+            reason = f"joined polygon has an unexpected type ({type(joined)})"
+        elif joined.is_empty:
+            reason = "joined polygon is empty"
+        elif not joined.is_valid:
+            reason = explain_validity(joined)
+        if reason is not None:
             raise ValueError(
-                f"The {operation} of the two polygons is not a valid polygon."
+                f"The {operation} of the two polygons is not a valid polygon "
+                f"for the following reason: {reason}."
             )
         return joined
 
