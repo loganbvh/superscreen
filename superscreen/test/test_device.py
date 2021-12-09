@@ -181,15 +181,16 @@ def device():
 
     assert device.get_arrays() is None
 
-    assert isinstance(device.fliplr(), sc.Device)
-    assert isinstance(device.flipud(), sc.Device)
+    assert isinstance(device.scale(xfact=-1), sc.Device)
+    assert isinstance(device.scale(yfact=-1), sc.Device)
     assert isinstance(device.rotate(90), sc.Device)
     assert isinstance(device.mirror_layers(about_z=0), sc.Device)
     dx = 1
     dy = -1
     dz = 1
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
-    assert device.copy().translate(dx, dy, dz=dz, inplace=True) is None
+    d = device.copy()
+    assert d.translate(dx, dy, dz=dz, inplace=True) is d
 
     return device
 
@@ -264,10 +265,10 @@ def device_with_mesh():
         == device
     )
 
-    d = device.fliplr()
+    d = device.scale(xfact=-1)
     assert isinstance(d, sc.Device)
     assert d.points is None
-    d = device.flipud()
+    d = device.scale(yfact=-1)
     assert isinstance(d, sc.Device)
     assert d.points is None
     d = device.rotate(90)
@@ -281,7 +282,7 @@ def device_with_mesh():
     dz = 1
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
     d = device.copy(with_arrays=True, copy_arrays=True)
-    assert d.translate(dx, dy, dz=dz, inplace=True) is None
+    assert d.translate(dx, dy, dz=dz, inplace=True) is d
 
     for points in ("poly_points", "points"):
         x0, y0 = getattr(device, points).mean(axis=0)

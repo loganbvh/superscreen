@@ -7,6 +7,7 @@ from matplotlib import path
 import matplotlib.pyplot as plt
 from scipy import interpolate
 from shapely import geometry as geo
+from shapely import affinity
 
 from ..geometry import close_curve
 from ..parameter import Parameter
@@ -254,6 +255,82 @@ class Polygon(object):
         if index:
             return np.where(boundary)[0]
         return boundary
+
+    def rotate(
+        self,
+        degrees: float,
+        origin: Union[str, Tuple[float, float]] = (0.0, 0.0),
+        inplace: bool = False,
+    ) -> "Polygon":
+        """Rotates the polygon counterclockwise by a given angle.
+
+        Args:
+            degrees: The amount by which to rotate the polygon.
+            origin: (x, y) coorindates about which to rotate, or the strings
+                "center" (for the bounding box center) or "centroid"
+                (for the polygon center of mass).
+            inplace: If True, modify the polygon in place. Otherwise, return
+                a modified copy.
+
+        Returns:
+            The rotated polygon.
+        """
+        polygon = self if inplace else self.copy()
+        polygon.points = affinity.rotate(
+            self.polygon, degrees, origin=origin, use_radians=False
+        )
+        return polygon
+
+    def translate(
+        self,
+        dx: float = 0.0,
+        dy: float = 0.0,
+        inplace: bool = False,
+    ) -> "Polygon":
+        """Translates the polygon by a given distance.
+
+        Args:
+            dx: Distance by which to translate along the x-axis.
+            dy: Distance by which to translate along the y-axis.
+            inplace: If True, modify the polygon in place. Otherwise, return
+                a modified copy.
+
+        Returns:
+            The translated polygon.
+        """
+        polygon = self if inplace else self.copy()
+        polygon.points = affinity.translate(self.polygon, xoff=dx, yoff=dy)
+        return polygon
+
+    def scale(
+        self,
+        xfact: float = 1.0,
+        yfact: float = 1.0,
+        origin: Union[str, Tuple[float, float]] = (0, 0),
+        inplace: bool = False,
+    ) -> "Polygon":
+        """Scales the polygon horizontally by ``xfact`` and vertically by ``yfact``.
+
+        Negative ``xfact`` (``yfact``) can be used to reflect the polygon horizontally
+        (vertically) about the ``origin``.
+
+        Args:
+            xfact: Distance by which to translate along the x-axis.
+            yfact: Distance by which to translate along the y-axis.
+            origin: (x, y) coorindates for the scaling origin, or the strings
+                "center" (for the bounding box center) or "centroid"
+                (for the polygon center of mass).
+            inplace: If True, modify the polygon in place. Otherwise, return
+                a modified copy.
+
+        Returns:
+            The scaled polygon.
+        """
+        polygon = self if inplace else self.copy()
+        polygon.points = affinity.scale(
+            self.polygon, xfact=xfact, yfact=yfact, origin=origin
+        )
+        return polygon
 
     def _join_via(
         self,
