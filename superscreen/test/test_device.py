@@ -181,6 +181,11 @@ def device():
 
     assert device.get_arrays() is None
 
+    with pytest.raises(TypeError):
+        device.scale(xfact=-1, origin="center")
+    with pytest.raises(TypeError):
+        device.rotate(90, origin="centroid")
+
     assert isinstance(device.scale(xfact=-1), sc.Device)
     assert isinstance(device.scale(yfact=-1), sc.Device)
     assert isinstance(device.rotate(90), sc.Device)
