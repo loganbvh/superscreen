@@ -19,7 +19,6 @@ import optimesh
 
 from .. import solve
 from .. import fem
-from .. import geometry
 from ..parameter import Parameter
 from .components import Layer, Polygon
 
@@ -354,46 +353,55 @@ class Device(object):
         )
         logger.warning(message)
 
-    def fliplr(self) -> "Device":
-        """Returns a new device with polygons flipped left-to-right,
-        i.e. about the y-axis.
+    def scale(
+        self, xfact: float = 1, yfact: float = 1, origin: Tuple[float, float] = (0, 0)
+    ) -> "Device":
+        """Returns a new device with polygons scaled horizontally and/or vertically.
+
+        Negative ``xfact`` (``yfact``) can be used to reflect the device horizontally
+        (vertically) about the ``origin``.
+
+        Args:
+            xfact: Factor by which to scale the device horizontally.
+            yfact: Factor by which to scale the device vertically.
+            origin: (x, y) coorindates of the origin.
 
         Returns:
-            The flipped :class:`superscreen.device.device.Device`.
+            The scaled :class:`superscreen.device.device.Device`.
         """
-        self._warn_if_mesh_exist("fliplr()")
+        if not (
+            isinstance(origin, tuple)
+            and len(origin) == 2
+            and all(isinstance(val, (int, float)) for val in origin)
+        ):
+            raise TypeError("Origin must be a tuple of floats (x, y).")
+        self._warn_if_mesh_exist("scale()")
         device = self.copy(with_arrays=False)
         for polygon in device.polygons.values():
-            polygon.points[:, 0] *= -1
+            polygon.scale(xfact=xfact, yfact=yfact, origin=origin, inplace=True)
         return device
 
-    def flipud(self) -> "Device":
-        """Returns a new device with polygons flipped up-to-down,
-        i.e. about the x-axis.
-
-        Returns:
-            The flipped :class:`superscreen.device.device.Device`.
-        """
-        self._warn_if_mesh_exist("flipud()")
-        device = self.copy(with_arrays=False)
-        for polygon in device.polygons.values():
-            polygon.points[:, 1] *= -1
-        return device
-
-    def rotate(self, degrees: float) -> "Device":
+    def rotate(self, degrees: float, origin: Tuple[float, float] = (0, 0)) -> "Device":
         """Returns a new device with polygons rotated a given amount
-        counterclockwise about the z-axis.
+        counterclockwise about specified origin.
 
         Args:
             degrees: The amount by which to rotate the polygons.
+            origin: (x, y) coorindates of the origin.
 
         Returns:
             The rotated :class:`superscreen.device.device.Device`.
         """
+        if not (
+            isinstance(origin, tuple)
+            and len(origin) == 2
+            and all(isinstance(val, (int, float)) for val in origin)
+        ):
+            raise TypeError("Origin must be a tuple of floats (x, y).")
         self._warn_if_mesh_exist("rotate()")
         device = self.copy(with_arrays=False)
         for polygon in device.polygons.values():
-            polygon.points = geometry.rotate(polygon.points, degrees)
+            polygon.rotate(degrees, origin=origin, inplace=True)
         return device
 
     def mirror_layers(self, about_z: float = 0.0) -> "Device":
@@ -418,7 +426,7 @@ class Device(object):
         dy: float,
         dz: float = 0,
         inplace: bool = False,
-    ) -> Optional["Device"]:
+    ) -> "Device":
         """Translates the device polygons, layers, and mesh in space by a given amount.
 
         Args:
@@ -429,23 +437,21 @@ class Device(object):
                 otherwise, creates a new device, translates it, and returns it.
 
         Returns:
-            The translated device, if ``inplace`` is False.
+            The translated device.
         """
         if inplace:
             device = self
         else:
             self._warn_if_mesh_exist("translate(..., inplace=False)")
             device = self.copy(with_arrays=True, copy_arrays=True)
-        dr = np.array([[dx, dy]])
         for polygon in device.polygons.values():
-            polygon.points += dr
+            polygon.translate(dx, dy, inplace=True)
         if device.points is not None:
-            device.points += dr
+            device.points += np.array([[dx, dy]])
         if dz:
             for layer in device.layers.values():
                 layer.z0 += dz
-        if not inplace:
-            return device
+        return device
 
     @contextmanager
     def translation(self, dx: float, dy: float, dz: float = 0) -> None:
