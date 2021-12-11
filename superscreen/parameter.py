@@ -37,7 +37,7 @@ def function_repr(
 
     if argspec.defaults:
         for i, val in enumerate(argspec.defaults[::-1]):
-            args[-(i + 1)] = args[-(i + 1)] + f"={val}"
+            args[-(i + 1)] = args[-(i + 1)] + f"={val!r}"
 
     if argspec.varargs:
         args.append("*" + argspec.varargs)
@@ -49,20 +49,20 @@ def function_repr(
     if argspec.kwonlydefaults:
         for i, name in enumerate(args):
             if name in argspec.kwonlydefaults:
-                args[i] = args[i] + f"={argspec.kwonlydefaults[name]}"
+                args[i] = args[i] + f"={argspec.kwonlydefaults[name]!r}"
     if argspec.varkw:
         args.append("**" + argspec.varkw)
 
     if argspec.annotations:
         for i, name in enumerate(args):
             if name in argspec.annotations:
-                args[i] = args[i] + f": {argspec.annotations[name].__name__}"
+                args[i] = args[i] + f": {argspec.annotations[name].__name__!r}"
 
     return func.__name__ + "(" + ", ".join(args) + ")"
 
 
 class Parameter(object):
-    """A callable object that computes a scalar parameter
+    """A callable object that computes a scalar or vector quantity
     as a function of position coordinates x, y (and optionally z).
 
     Addition, subtraction, multiplication, and division
@@ -89,7 +89,7 @@ class Parameter(object):
         if args[:num_args] != ["x", "y"]:
             raise ValueError(
                 "The first function arguments must be x and y, "
-                f"not {', '.join(args[:num_args])}."
+                f"not {', '.join(args[:num_args])!r}."
             )
         if "z" in args:
             if args.index("z") != num_args:
@@ -107,7 +107,7 @@ class Parameter(object):
         kwonlyargs = set(kwargs) - set(argspec.args[num_args:])
         if not kwonlyargs.issubset(set(argspec.kwonlyargs or [])):
             raise ValueError(
-                f"Provided keyword-only arguments ({kwonlyargs}) "
+                f"Provided keyword-only arguments ({kwonlyargs!r}) "
                 f"do not match the function signature: {function_repr(func)}."
             )
         defaults_dict.update(argspec.kwonlydefaults or {})
@@ -198,14 +198,14 @@ class Parameter(object):
 
 class CompositeParameter(Parameter):
     """A callable object that behaves like a Parameter
-    (i.e. it computes a scalar value as a function of
+    (i.e. it computes a scalar or vector quantity as a function of
     position coordinates x, y, z). A CompositeParameter object is created as
     a result of mathematical operations between Parameters, CompositeParameters,
     and/or real numbers.
 
     Addition, subtraction, multiplication, division, and exponentiation
     between Parameters, CompositeParameters and real numbers (ints and floats)
-    is supported. The result of any of these operations is a new
+    are supported. The result of any of these operations is a new
     CompositeParameter object.
 
     Args:
@@ -232,12 +232,12 @@ class CompositeParameter(Parameter):
         if not isinstance(left, valid_types):
             raise TypeError(
                 f"Left must be a number, Parameter, or CompositeParameter, "
-                f"not {type(left)}."
+                f"not {type(left)!r}."
             )
         if not isinstance(right, valid_types):
             raise TypeError(
                 f"Right must be a number, Parameter, or CompositeParameter, "
-                f"not {type(right)}."
+                f"not {type(right)!r}."
             )
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             raise TypeError(
@@ -248,8 +248,8 @@ class CompositeParameter(Parameter):
             operator_ = operators.get(operator_.strip(), None)
         if operator_ not in self.VALID_OPERATORS:
             raise ValueError(
-                f"Unknown operator, {operator}. "
-                f"Valid operators are {list(self.VALID_OPERATORS)}."
+                f"Unknown operator, {operator_!r}. "
+                f"Valid operators are {list(self.VALID_OPERATORS)!r}."
             )
         self.left = left
         self.right = right

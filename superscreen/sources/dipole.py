@@ -1,5 +1,5 @@
 import itertools
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 
 import numpy as np
 from scipy.constants import mu_0
@@ -11,7 +11,7 @@ from ..parameter import Parameter
 ureg = Device.ureg
 
 
-def _dipole_field(
+def dipole_field(
     x: Union[float, np.ndarray],
     y: Union[float, np.ndarray],
     z: Union[float, np.ndarray],
@@ -64,16 +64,19 @@ def _dipole_field(
     return mu_0 / (4 * np.pi) * B.squeeze()
 
 
-def _dipole_distribution(
+def dipole_distribution(
     x: Union[float, np.ndarray],
     y: Union[float, np.ndarray],
     z: Union[float, np.ndarray],
     *,
     dipole_positions: np.ndarray,
     dipole_moments: Union[np.ndarray, Tuple[float, float, float]],
+    component: Optional[str] = None,
+    length_units: str = "um",
+    moment_units: str = "mu_B",
 ) -> np.ndarray:
-    """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}` from a
-    distribution of dipoles with given moments (in units of amps * meters ** 2)
+    """Returns the 3D field :math:`\\vec{B}=\\mu_0\\vec{H}`, or one of its components,
+    from a distribution of dipoles with given moments (in units of the Bohr magneton)
     located at the given positions, evaluated at coordinates ``(x, y, z)``.
 
     Args:
@@ -89,12 +92,28 @@ def _dipole_distribution(
             amps * meters ** 2. If dipole_moments has shape ``(3, )`` or ``(1, 3)``,
             then all dipoles are assigned the same moment. Otherwise, dipole_moments
             must have shape ``(m, 3)``, i.e. the moment is specified for each dipole.
+        component: The component of the magnetic field to return: "x", "y", "z",
+            or None. If None, the vector magnetic field (shape ``(n, 3)``) is returned.
+        length_units: The units for the positions coordinates ``x``, ``y``, ``z``,
+            and ``dipole_positions``.
+        moment_units: The units for ``dipole_moments``, for example the Bohr magneton
+            "mu_B" or SI base units "A * m ** 2".
 
     Returns:
-        Magnetic field ``(Bx, By, Bz)`` in Tesla evaluated at ``(x, y, z)``:
-        An array with shape ``(3, )`` if ``x, y, z`` are scalars, or shape ``(n, 3)``
-        if ``x, y, z`` are vectors with shape ``(n, )``.
+        Magnetic field ``(Bx, By, Bz)`` (or one of its components) in Tesla evaluated
+        at ``(x, y, z)``: An array with shape ``(3, )`` if ``x, y, z`` are scalars,
+        or shape ``(n, 3)`` if ``x, y, z`` are vectors with shape ``(n, )``.
     """
+    index = Ellipsis if component is None else list("xyz").index(component)
+    length_units = ureg(length_units)
+    dipole_moments = (dipole_moments * ureg(moment_units)).to("A * m ** 2").magnitude
+    dipole_positions = (dipole_positions * length_units).to("m").magnitude
+    x = (x * length_units).to("m").magnitude
+    y = (y * length_units).to("m").magnitude
+    z = (z * length_units).to("m").magnitude
+    if len(z) == 1:
+        z = z * np.ones_like(x)
+
     dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
     if dipole_moments.shape[0] == 1:
         # Assign each dipole the same moment
@@ -105,30 +124,9 @@ def _dipole_distribution(
             f"1 or equal to the the number of dipole positions "
             f"({dipole_positions.shape[0]})."
         )
-    return sum(
-        _dipole_field(x, y, z, moment=moment, r0=r0)
+    B = sum(
+        dipole_field(x, y, z, moment=moment, r0=r0)
         for moment, r0 in zip(dipole_moments, dipole_positions)
-    )
-
-
-def _dipole_distribution_comp(
-    x, y, z, *, dipole_positions, dipole_moments, component, length_units
-):
-    index = "xyz".index(component)
-    length_units = ureg(length_units)
-    dipole_moments = (dipole_moments * ureg("mu_B")).to_base_units().magnitude
-    dipole_positions = (dipole_positions * length_units).to_base_units().magnitude
-    x = (x * length_units).to_base_units().magnitude
-    y = (y * length_units).to_base_units().magnitude
-    z = (z * length_units).to_base_units().magnitude
-    if len(z) == 1:
-        z = z * np.ones_like(x)
-    B = _dipole_distribution(
-        x,
-        y,
-        z,
-        dipole_positions=dipole_positions,
-        dipole_moments=dipole_moments,
     )
     return np.atleast_2d(B)[:, index]
 
@@ -137,8 +135,9 @@ def DipoleField(
     *,
     dipole_positions: Union[np.ndarray, Tuple[float, float, float]],
     dipole_moments: Union[np.ndarray, Tuple[float, float, float]],
-    component: str = "z",
+    component: Optional[str] = None,
     length_units: str = "um",
+    moment_units: str = "mu_B",
 ) -> Parameter:
     """Returns a Parameter that computes a given component of the field from
     a distribution of dipoles with given moments (in units of the Bohr magneton)
@@ -166,21 +165,26 @@ def DipoleField(
             Bohr magneton. If dipole_moments has shape ``(3, )`` or ``(1, 3)``, then
             all dipoles are assigned the same moment. Otherwise, dipole_moments
             must have shape ``(m, 3)``, i.e. the moment is specified for each dipole.
-        component: The component of the field to calculate: "x", "y", or "z".
-        length_units: The length units used for x, y, z.
+        component: The component of the field to calculate: "x", "y", "z", or None.
+            If None, then the vector field (shape ``(m, 3)``) is returned.
+        length_units: The units for the positions coordinates ``x``, ``y``, ``z``,
+            and ``dipole_positions``.
+        moment_units: The units for ``dipole_moments``, for example the Bohr magneton
+            "mu_B" or SI base units "A * m ** 2".
 
     Returns:
         A Parameter that computes a given component of the field
         :math:`\\mu_0\\vec{H}(x, y, z)` in Tesla for a given distribution of dipoles.
     """
-    component = component.lower()
-    if component not in "xyz":
-        raise ValueError(f"Component must be 'x', 'y', or 'z' (got '{component}').")
-    dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
+    if component not in (None, "x", "y", "z"):
+        raise ValueError(
+            f"Component must be 'x', 'y', 'z', or None (got {component!r})."
+        )
     return Parameter(
-        _dipole_distribution_comp,
+        dipole_distribution,
         dipole_positions=dipole_positions,
         dipole_moments=dipole_moments,
         component=component,
         length_units=length_units,
+        moment_units=moment_units,
     )

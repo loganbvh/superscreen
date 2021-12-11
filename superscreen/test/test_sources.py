@@ -51,7 +51,8 @@ def test_vortex_field(shape, vortex_position):
     "dipole_positions", [(0, 0, 0), np.array([[0, 0, 0]]), np.array([1, 5, 2])]
 )
 @pytest.mark.parametrize("shape", [(), (10,), (100,)])
-def test_dipole_field_single(shape, dipole_positions):
+@pytest.mark.parametrize("component", [None, "x", "y", "z"])
+def test_dipole_field_single(shape, dipole_positions, component):
     size = int(np.prod(shape))
     x = np.random.random(size).reshape(shape)
     y = np.random.random(size).reshape(shape)
@@ -63,13 +64,23 @@ def test_dipole_field_single(shape, dipole_positions):
     ]
 
     for moment in moments:
-        param = DipoleField(dipole_positions=dipole_positions, dipole_moments=moment)
+        param = DipoleField(
+            dipole_positions=dipole_positions,
+            dipole_moments=moment,
+            component=component,
+        )
         field = param(x, y, z)
         assert isinstance(param, Parameter)
         if shape == ():
-            assert isinstance(field, float)
+            if component is not None:
+                assert isinstance(field, float)
+            else:
+                assert field.shape == (3,)
         else:
-            assert field.shape == shape
+            if component is not None:
+                assert field.shape == shape
+            else:
+                assert field.shape == shape + (3,)
         assert np.isfinite(field).all()
 
     moments = np.array(
@@ -78,19 +89,13 @@ def test_dipole_field_single(shape, dipole_positions):
             [1, 0, 1],
         ]
     )
-    param = DipoleField(dipole_positions=dipole_positions, dipole_moments=moments)
+    param = DipoleField(
+        dipole_positions=dipole_positions,
+        dipole_moments=moments,
+        component=component,
+    )
     with pytest.raises(ValueError):
         field = param(x, y, z)
-
-    for comp in "xyz":
-        assert isinstance(
-            DipoleField(
-                dipole_positions=dipole_positions,
-                dipole_moments=moments,
-                component=comp,
-            ),
-            Parameter,
-        )
 
     with pytest.raises(ValueError):
         _ = DipoleField(
@@ -102,7 +107,8 @@ def test_dipole_field_single(shape, dipole_positions):
 
 @pytest.mark.parametrize("num_dipoles", [1, 5, 200])
 @pytest.mark.parametrize("shape", [(), (10,), (100,)])
-def test_dipole_field(shape, num_dipoles):
+@pytest.mark.parametrize("component", [None, "x", "y", "z"])
+def test_dipole_field(shape, num_dipoles, component):
     size = int(np.prod(shape))
     x = np.random.random(size).reshape(shape)
     y = np.random.random(size).reshape(shape)
@@ -116,13 +122,23 @@ def test_dipole_field(shape, num_dipoles):
     ]
 
     for moment in moments:
-        param = DipoleField(dipole_positions=dipole_positions, dipole_moments=moment)
+        param = DipoleField(
+            dipole_positions=dipole_positions,
+            dipole_moments=moment,
+            component=component,
+        )
         field = param(x, y, z)
         assert isinstance(param, Parameter)
         if shape == ():
-            assert isinstance(field, float)
+            if component is not None:
+                assert isinstance(field, float)
+            else:
+                assert field.shape == (3,)
         else:
-            assert field.shape == shape
+            if component is not None:
+                assert field.shape == shape
+            else:
+                assert field.shape == shape + (3,)
         assert np.isfinite(field).all()
 
     moments = np.array(
@@ -131,16 +147,30 @@ def test_dipole_field(shape, num_dipoles):
             [1, 0, 1],
         ]
     )
-    param = DipoleField(dipole_positions=dipole_positions, dipole_moments=moments)
+    param = DipoleField(
+        dipole_positions=dipole_positions,
+        dipole_moments=moments,
+        component=component,
+    )
     with pytest.raises(ValueError):
         field = param(x, y, z)
 
     moments = np.random.random(3 * num_dipoles).reshape((num_dipoles, 3))
-    param = DipoleField(dipole_positions=dipole_positions, dipole_moments=moments)
+    param = DipoleField(
+        dipole_positions=dipole_positions,
+        dipole_moments=moments,
+        component=component,
+    )
     if shape == ():
-        assert isinstance(field, float)
+        if component is not None:
+            assert isinstance(field, float)
+        else:
+            assert field.shape == (3,)
     else:
-        assert field.shape == shape
+        if component is not None:
+            assert field.shape == shape
+        else:
+            assert field.shape == shape + (3,)
     assert np.isfinite(field).all()
 
 
