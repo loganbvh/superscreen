@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 class Vortex(NamedTuple):
     """A vortex located at position ``(x, y)`` in ``layer`` containing
     a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
+
+    Args:
+        x: Vortex x-position.
+        y: Vortex y-position.
+        layer: The layer in which the vortex is pinned.
+        nPhi0: The number of flux quanta contained in the vortex.
     """
 
     x: float
@@ -50,6 +56,10 @@ class Fluxoid(NamedTuple):
             \\oint_{\\partial S}
             \\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}
         }_{\\text{supercurrent part}}
+
+    Args:
+        flux_part: :math:`\\int_S \\mu_0 H_z(\\vec{r})\\,\\mathrm{d}^2r`.
+        supercurrent_part: :math:`\\oint_{\\partial S}\\mu_0\\Lambda(\\vec{r})\\vec{J}(\\vec{r})\\cdot\\mathrm{d}\\vec{r}`.
     """
 
     flux_part: Union[float, pint.Quantity]
