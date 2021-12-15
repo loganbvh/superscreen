@@ -13,7 +13,7 @@ import ray
 import pint
 import numpy as np
 
-from . import solve
+from .solve import solve
 from .io import NullContextManager
 from .device import Device
 from .parameter import Parameter
@@ -219,7 +219,7 @@ def solve_many_serial(
             device_copy, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             device_copy.set_arrays(arrays)
-            _ = solve.solve(
+            _ = solve(
                 device=device_copy,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
@@ -323,7 +323,7 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     device.set_arrays(numpy_arrays)
     kwargs["device"] = device
 
-    _ = solve.solve(**kwargs)
+    _ = solve(**kwargs)
 
     if keep_only_final_solution:
         _cleanup(kwargs["directory"], kwargs["iterations"])
@@ -458,11 +458,7 @@ def solve_many_mp(
 
 
 @ray.remote
-def solve_single_ray(
-    *,
-    arrays,
-    **kwargs,
-):
+def solve_single_ray(*, arrays, **kwargs):
     """Solve a single setup (ray)."""
     keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     kwargs["device"].set_arrays(arrays)
@@ -471,7 +467,7 @@ def solve_single_ray(
     if log_level is not None:
         logging.basicConfig(level=log_level)
 
-    _ = solve.solve(**kwargs)
+    _ = solve(**kwargs)
 
     if keep_only_final_solution:
         _cleanup(kwargs["directory"], kwargs["iterations"])

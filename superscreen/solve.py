@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 lambda_str = "\u03bb"
 Lambda_str = "\u039b"
 
+logger = logging.getLogger(__name__)
+
 
 def q_matrix(
     points: np.ndarray, dtype: Optional[Union[str, np.dtype]] = None
@@ -267,7 +269,6 @@ def solve_layer(
     Returns:
         stream function, total field, film screening field
     """
-    logger = logging.getLogger(__name__)
 
     circulating_currents = circulating_currents or {}
     for name in circulating_currents:
@@ -462,8 +463,6 @@ def solve(
 
     if log_level is not None:
         logging.basicConfig(level=log_level)
-
-    logger = logging.getLogger(__name__)
 
     if directory is not None:
         os.makedirs(directory, exist_ok=True)
@@ -816,6 +815,7 @@ def solve_many(
             by the operating system.
         log_level: Logging level to use, if any.
         use_shared_memory: Whether to use shared memory if parallel_method is not None.
+        num_cpus: The number of processes to utilize.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of
@@ -838,6 +838,10 @@ def solve_many(
         raise ValueError(
             f"Unknown parallel method, {parallel_method}. "
             f"Valid methods are {list(parallel_methods)}."
+        )
+    if num_cpus is not None and parallel_method in (None, False, "serial"):
+        logger.warning(
+            f"Argument num_cpus is ignored when parallel_method = {parallel_method!r}."
         )
 
     solutions, paths = parallel_methods[parallel_method](
