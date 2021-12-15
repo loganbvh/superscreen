@@ -516,6 +516,8 @@ def solve_many_ray(
     initialized_ray = False
     if num_cpus is None:
         num_cpus = psutil.cpu_count(logical=False)
+    elif ray.is_initialized():
+        logger.warning("Ignoring num_cpus because ray is already initialized.")
     if not ray.is_initialized():
         num_cpus = min(len(models), num_cpus)
         logger.info(f"Initializing ray with {num_cpus} process(es).")

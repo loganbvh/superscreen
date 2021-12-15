@@ -841,7 +841,7 @@ def solve_many(
         )
     if num_cpus is not None and parallel_method in (None, False, "serial"):
         logger.warning(
-            f"Argument num_cpus is ignored when parallel_method = {parallel_method!r}."
+            f"Ignoring num_cpus because parallel_method = {parallel_method!r}."
         )
 
     solutions, paths = parallel_methods[parallel_method](
