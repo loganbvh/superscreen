@@ -264,10 +264,8 @@ def solve_many_serial(
 # Concurrency using multiprocessing
 #######################################################################################
 
-# See: http://thousandfold.net/cz/2014/05/01/
-# sharing-numpy-arrays-between-processes-using-multiprocessing-and-ctypes/
-# See: https://stackoverflow.com/questions/37705974/
-# why-are-multiprocessing-sharedctypes-assignments-so-slow
+# See: http://thousandfold.net/cz/2014/05/01/sharing-numpy-arrays-between-processes-using-multiprocessing-and-ctypes/
+# See: https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
 
 
 def shared_array_to_numpy(
