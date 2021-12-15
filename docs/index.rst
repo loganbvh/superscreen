@@ -80,6 +80,16 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
 
 .. toctree::
    :maxdepth: 2
+   :caption: Tutorials
+
+   notebooks/polygons.ipynb
+   ..notebooks/meshing.ipynb
+   notebooks/io.ipynb
+   notebooks/parallel.ipynb
+   notebooks/logo.ipynb
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference
 
    api/device.rst
