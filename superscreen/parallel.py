@@ -184,6 +184,7 @@ def solve_many_serial(
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
+    num_cpus: Optional[int] = None,
 ):
     """Solve many models in a single process."""
 
@@ -215,11 +216,11 @@ def solve_many_serial(
 
     with save_context as savedir:
         for i, model in enumerate(models):
-            device, applied_field, circulating_currents, vortices = model
+            device_copy, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
-            device.set_arrays(arrays)
+            device_copy.set_arrays(arrays)
             _ = solve.solve(
-                device=device,
+                device=device_copy,
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
                 vortices=vortices,
@@ -354,6 +355,7 @@ def solve_many_mp(
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
+    num_cpus: Optional[int] = None,
 ) -> List[str]:
     """Solve many models in parallel using multiprocessing."""
     models = create_models(
@@ -375,9 +377,10 @@ def solve_many_mp(
         shared_arrays = share_arrays(arrays)
     else:
         shared_arrays = arrays
-
-    nproc = min(len(models), psutil.cpu_count(logical=False))
-    solver = f"superscreen.solve_many:multiprocessing:{nproc}"
+    if num_cpus is None:
+        num_cpus = psutil.cpu_count(logical=False)
+    num_cpus = min(len(models), num_cpus)
+    solver = f"superscreen.solve_many:multiprocessing:{num_cpus}"
 
     solutions = None
     paths = None
@@ -390,14 +393,14 @@ def solve_many_mp(
     with save_context as savedir:
         kwargs = []
         for i, model in enumerate(models):
-            device, applied_field, circulating_currents, vortices = model
+            device_copy, applied_field, circulating_currents, vortices = model
             path = os.path.join(savedir, str(i))
             kwargs.append(
                 dict(
+                    device=device_copy,
                     directory=os.path.join(savedir, path),
                     return_solutions=return_solutions,
                     keep_only_final_solution=keep_only_final_solution,
-                    device=device,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
                     vortices=vortices,
@@ -417,10 +420,10 @@ def solve_many_mp(
             shared_mem_str = "without shared memory"
         logger.info(
             f"Solving {len(models)} models in parallel using multiprocessing with "
-            f"{nproc} process(es) {shared_mem_str}."
+            f"{num_cpus} process(es) {shared_mem_str}."
         )
         with mp.Pool(
-            processes=nproc, initializer=init, initargs=(shared_arrays,)
+            processes=num_cpus, initializer=init, initargs=(shared_arrays,)
         ) as pool:
             paths = pool.map(solve_single_mp, kwargs)
             pool.close()
@@ -438,7 +441,7 @@ def solve_many_mp(
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
-        f"Solved {len(models)} models in parallel using multiprocessing with {nproc} "
+        f"Solved {len(models)} models in parallel using multiprocessing with {num_cpus} "
         f"process(es) in {elapsed_seconds:.3f} seconds "
         f"({seconds_per_model:.3f} seconds per model)."
     )
@@ -500,6 +503,7 @@ def solve_many_ray(
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
+    num_cpus: Optional[int] = None,
 ):
     """Solve many models in parallel using ray."""
 
@@ -514,18 +518,19 @@ def solve_many_ray(
     )
 
     initialized_ray = False
-    nproc = psutil.cpu_count(logical=False)
+    if num_cpus is None:
+        num_cpus = psutil.cpu_count(logical=False)
     if not ray.is_initialized():
-        nproc = min(len(models), nproc)
-        logger.info(f"Initializing ray with {nproc} process(es).")
-        ray.init(num_cpus=nproc)
+        num_cpus = min(len(models), num_cpus)
+        logger.info(f"Initializing ray with {num_cpus} process(es).")
+        ray.init(num_cpus=num_cpus)
         initialized_ray = True
 
     ray_resources = ray.available_resources()
-    nproc = int(ray_resources["CPU"])
+    num_cpus = int(ray_resources["CPU"])
     logger.info(f"ray resources: {ray_resources}")
 
-    solver = f"superscreen.solve_many:ray:{nproc}"
+    solver = f"superscreen.solve_many:ray:{num_cpus}"
 
     t0 = time.time()
 
@@ -543,7 +548,7 @@ def solve_many_ray(
         shared_mem_str = "without shared memory"
     logger.info(
         f"Solving {len(models)} models in parallel using ray with "
-        f"{nproc} process(es) {shared_mem_str}."
+        f"{num_cpus} process(es) {shared_mem_str}."
     )
 
     solutions = None
@@ -593,7 +598,7 @@ def solve_many_ray(
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
-        f"Solved {len(models)} models in parallel using ray with {nproc} "
+        f"Solved {len(models)} models in parallel using ray with {num_cpus} "
         f"process(es) in {elapsed_seconds:.3f} seconds "
         f"({seconds_per_model:.3f} seconds per model)."
     )

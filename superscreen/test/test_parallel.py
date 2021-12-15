@@ -68,6 +68,7 @@ def test_ray_initialized(ray_initialized):
     ],
 )
 @pytest.mark.parametrize("keep_only_final_solution", [False, True])
+@pytest.mark.parametrize("num_cpus", [None, 2])
 def test_solve_many(
     device,
     vortices,
@@ -75,6 +76,7 @@ def test_solve_many(
     keep_only_final_solution,
     save,
     use_shared_memory,
+    num_cpus,
     ray_initialized,
 ):
 
@@ -98,6 +100,7 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
             use_shared_memory=use_shared_memory,
+            num_cpus=num_cpus,
         )
         solver = "superscreen.solve_many:serial:1"
         solutions, paths = solutions_serial, paths_serial
@@ -139,6 +142,7 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
             use_shared_memory=use_shared_memory,
+            num_cpus=num_cpus,
         )
         ncpu = min(len(circulating_currents), os.cpu_count())
         solver = f"superscreen.solve_many:multiprocessing:{ncpu}"
@@ -181,6 +185,7 @@ def test_solve_many(
             keep_only_final_solution=keep_only_final_solution,
             directory=directory,
             use_shared_memory=use_shared_memory,
+            num_cpus=num_cpus,
         )
         solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray

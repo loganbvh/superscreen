@@ -772,6 +772,7 @@ def solve_many(
     cache_memory_cutoff: float = np.inf,
     log_level: int = logging.INFO,
     use_shared_memory: bool = True,
+    num_cpus: Optional[int] = None,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -857,6 +858,7 @@ def solve_many(
         cache_memory_cutoff=cache_memory_cutoff,
         log_level=log_level,
         use_shared_memory=use_shared_memory,
+        num_cpus=num_cpus,
     )
 
     return solutions, paths
