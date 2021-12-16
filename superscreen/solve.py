@@ -742,6 +742,8 @@ def solve(
                     solutions.append(solution)
                 else:
                     del solution
+        if cache_kernels_to_disk:
+            context.cleanup()
     if return_solutions:
         return solutions
 
