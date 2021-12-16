@@ -256,6 +256,7 @@ def solve_many_serial(
 
     if directory is None:
         paths = None
+        save_context.cleanup()
 
     return solutions, paths
 
@@ -446,6 +447,7 @@ def solve_many_mp(
 
     if directory is None:
         paths = None
+        save_context.cleanup()
 
     return solutions, paths
 
@@ -604,5 +606,6 @@ def solve_many_ray(
 
     if directory is None:
         paths = None
+        save_context.cleanup()
 
     return solutions, paths

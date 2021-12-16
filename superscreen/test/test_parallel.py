@@ -127,6 +127,7 @@ def test_solve_many(
             assert solutions is None
 
     if save:
+        save_context.cleanup()
         save_context = tempfile.TemporaryDirectory()
     else:
         save_context = sc.io.NullContextManager()
@@ -170,6 +171,7 @@ def test_solve_many(
             assert solutions is None
 
     if save:
+        save_context.cleanup()
         save_context = tempfile.TemporaryDirectory()
     else:
         save_context = sc.io.NullContextManager()
@@ -210,6 +212,9 @@ def test_solve_many(
                 assert all(s.solver == solver for s in solutions[0])
         else:
             assert solutions is None
+
+    if save:
+        save_context.cleanup()
 
     if return_solutions:
         if keep_only_final_solution:
