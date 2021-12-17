@@ -7,7 +7,6 @@ from contextlib import contextmanager
 from typing import Optional, Union, List, Tuple, Dict, Any
 
 import dill
-import pint
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
@@ -19,13 +18,12 @@ import optimesh
 
 from .. import solve
 from .. import fem
+from ..units import ureg
 from ..parameter import Parameter
 from .components import Layer, Polygon
 
 
 logger = logging.getLogger(__name__)
-
-ureg = pint.UnitRegistry()
 
 
 class Device(object):
