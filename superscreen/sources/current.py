@@ -13,6 +13,7 @@ def biot_savart_2d(
     x: Union[float, np.ndarray],
     y: Union[float, np.ndarray],
     z: Union[float, np.ndarray],
+    *,
     positions: np.ndarray,
     current_densities: np.ndarray,
     z0: float = 0,
@@ -77,6 +78,7 @@ def SheetCurrentField(
     *,
     sheet_positions: np.ndarray,
     current_densities: np.ndarray,
+    z0: float,
     length_units: str = "um",
     current_units: str = "uA",
 ) -> Parameter:
@@ -101,6 +103,7 @@ def SheetCurrentField(
         biot_savart_2d,
         positions=sheet_positions,
         current_densities=current_densities,
+        z0=z0,
         length_units=length_units,
         current_units=current_units,
     )
