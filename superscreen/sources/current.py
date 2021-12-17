@@ -70,13 +70,9 @@ def biot_savart_2d(
     triangles = Delaunay(positions).simplices
     areas = mass_matrix(positions, triangles, sparse=False)
     # Evaluate the Biot-Savart integral.
-    return (
-        mu_0
-        / (4 * np.pi)
-        * (areas * (Jx * dy - Jy * dx) / (dx ** 2 + dy ** 2 + dz ** 2) ** (3 / 2)).sum(
-            axis=1
-        )
-    )
+    return (mu_0 / (4 * np.pi)) * (
+        areas * (Jx * dy - Jy * dx) / (dx ** 2 + dy ** 2 + dz ** 2) ** (3 / 2)
+    ).sum(axis=1)
 
 
 def SheetCurrentField(
