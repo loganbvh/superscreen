@@ -45,10 +45,8 @@ def biot_savart_2d(
         Magnetic field ``Bz`` in tesla evaluated at ``(x, y, z)``, shape ``(n, )``
     """
     # Convert everything to base units: meters and amps / meter.
-    to_meter = ureg(length_units).to("meter").magnitude
-    to_amp_per_meter = (
-        ureg(f"{current_units} / {length_units}").to("amp / meter").magnitude
-    )
+    to_meter = ureg(length_units).to("m").magnitude
+    to_amp_per_meter = ureg(f"{current_units} / {length_units}").to("A / m").magnitude
     x, y, z = np.atleast_1d(x, y, z)
     if z.shape[0] == 1:
         z = z * np.ones_like(x)
