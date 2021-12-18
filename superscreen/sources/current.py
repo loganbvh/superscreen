@@ -67,7 +67,7 @@ def biot_savart_2d(
     dz = np.subtract.outer(z, z0 * np.ones_like(x0))
     # Triangulate the current sheet to assign an effective area to each vertex.
     triangles = Delaunay(positions).simplices
-    areas = mass_matrix(positions, triangles, sparse=False)
+    areas = mass_matrix(positions, triangles)
     # Evaluate the Biot-Savart integral.
     return (mu_0 / (4 * np.pi)) * (
         areas * (Jx * dy - Jy * dx) / (dx ** 2 + dy ** 2 + dz ** 2) ** (3 / 2)
@@ -85,11 +85,24 @@ def SheetCurrentField(
     """Returns a Parameter that computes the z-component of the field from
     a 2D sheet of current parameterized by the given positions and current densities.
 
+    The :math:`z`-component of the field from a 2D sheet of current :math:`S` lying in
+    the plane :math:`z=z_0`  with spatially varying current density
+    :math:`\\vec{J}=(J_x, J_y)` is given by:
+
+    .. math::
+
+        \\mu_0H_z(\\vec{r})=\\frac{\\mu_0}{2\\pi}\\int_S
+        \\frac{J_x(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{y}
+        - J_y(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{x}}
+        {|\\vec{r}-\\vec{r}'|^3}\\,\\mathrm{d}^2r',
+
+    where :math:`\\vec{r}=(x, y, z)` and :math:`\\vec{r}'=(x', y', z_0)`.
+
     Args:
         sheet_positions: Coordinates ``(x0, y0)`` (in meters) of the current sheet,
             shape ``(m, 2)``.
         current_densities: 2D current density ``(Jx, Jy)`` in units of amps / meter,
-            shape``(m, 2)``.
+            shape ``(m, 2)``.
         z0: Vertical (z) position of the current sheet.
         length_units: The units for all coordinates.
         current_units: The units for current values. The ``current_densities`` are
