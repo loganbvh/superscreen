@@ -1,2 +1,3 @@
-from .components import Layer, Polygon  # noqa: E402
-from .device import Device  # noqa: E402
+from .components import Layer, Polygon
+from .device import Device
+from .mesh import generate_mesh, optimize_mesh

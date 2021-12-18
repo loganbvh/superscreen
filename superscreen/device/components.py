@@ -12,6 +12,7 @@ from shapely.validation import explain_validity
 
 from ..geometry import close_curve
 from ..parameter import Parameter
+from .mesh import generate_mesh, optimize_mesh
 
 
 logger = logging.getLogger(__name__)
@@ -260,6 +261,60 @@ class Polygon(object):
         if index:
             return np.where(boundary)[0]
         return boundary
+
+    def make_mesh(
+        self,
+        min_points: Optional[int] = None,
+        optimesh_steps: Optional[int] = None,
+        optimesh_method: str = "cvt-block-diagonal",
+        optimesh_tolerance: float = 1e-3,
+        optimesh_verbose: bool = False,
+        **meshpy_kwargs,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Returns the vertices and triangles of a Delaunay mesh covering the Polygon.
+
+        Args:
+            min_points: Minimum number of vertices in the mesh. If None, then
+                the number of vertices will be determined by meshpy_kwargs and the
+                number of vertices in the underlying polygons.
+            optimesh_steps: Maximum number of optimesh steps. If None, then no
+                optimization is done.
+            optimesh_method: Name of the optimization method to use.
+            optimesh_tolerance: Optimesh quality tolerance.
+            optimesh_verbose: Whether to use verbose mode in optimesh.
+            **meshpy_kwargs: Passed to meshpy.triangle.build().
+
+        Returns:
+            Mesh vertex coordinates and triangle indices
+        """
+        points, triangles = generate_mesh(
+            self.points,
+            min_points=min_points,
+            convex_hull=False,
+            **meshpy_kwargs,
+        )
+        if optimesh_steps:
+            logger.debug(f"Optimizing mesh with {points.shape[0]} vertices.")
+            try:
+                points, triangles = optimize_mesh(
+                    points,
+                    triangles,
+                    optimesh_steps,
+                    method=optimesh_method,
+                    tolerance=optimesh_tolerance,
+                    verbose=optimesh_verbose,
+                )
+            except np.linalg.LinAlgError as e:
+                err = (
+                    "LinAlgError encountered in optimesh. Try reducing min_points "
+                    "or increasing the number of points in the Polygon."
+                )
+                raise RuntimeError(err) from e
+        logger.debug(
+            f"Finished generating mesh with {points.shape[0]} points and "
+            f"{triangles.shape[0]} triangles."
+        )
+        return points, triangles
 
     def rotate(
         self,

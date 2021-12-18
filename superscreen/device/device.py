@@ -12,15 +12,13 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.patches import PathPatch
 import scipy.sparse as sp
-from scipy import spatial
-from meshpy import triangle
-import optimesh
 
 from .. import solve
 from .. import fem
 from ..units import ureg
 from ..parameter import Parameter
 from .components import Layer, Polygon
+from .mesh import generate_mesh, optimize_mesh
 
 
 logger = logging.getLogger(__name__)
@@ -496,50 +494,22 @@ class Device(object):
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         logger.info("Generating mesh...")
-        # Mesh the entire convex hull of poly_points
         poly_points = self.poly_points
-        hull = spatial.ConvexHull(poly_points)
-        mesh_info = triangle.MeshInfo()
-        mesh_info.set_points(poly_points)
-        mesh_info.set_facets(hull.simplices)
-        # Optimal angle is 60 degrees,
-        # meshpy quality meshing default is 20 degrees
-        min_angle = meshpy_kwargs.get("min_angle", 32.5)
-        meshpy_kwargs["min_angle"] = min_angle
-        if min_points is None:
-            mesh = triangle.build(mesh_info=mesh_info, **meshpy_kwargs)
-            points = np.array(mesh.points)
-            triangles = np.array(mesh.elements)
-        else:
-            max_vol = 1
-            num_points = 0
-            kwargs = meshpy_kwargs.copy()
-            i = 1
-            while num_points < min_points:
-                kwargs["max_volume"] = max_vol
-                mesh = triangle.build(
-                    mesh_info=mesh_info,
-                    **kwargs,
-                )
-                points = np.array(mesh.points)
-                triangles = np.array(mesh.elements)
-                num_points = points.shape[0]
-                logger.debug(
-                    f"Iteration {i}: Made mesh with {points.shape[0]} points and "
-                    f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
-                    f"Target number of points: {min_points}."
-                )
-                max_vol *= 0.9
-                i += 1
+        points, triangles = generate_mesh(
+            poly_points,
+            min_points=min_points,
+            convex_hull=True,
+            **meshpy_kwargs,
+        )
         if optimesh_steps:
             logger.info(f"Optimizing mesh with {points.shape[0]} vertices.")
             try:
-                points, triangles = optimesh.optimize_points_cells(
+                points, triangles = optimize_mesh(
                     points,
                     triangles,
-                    optimesh_method,
-                    optimesh_tolerance,
                     optimesh_steps,
+                    method=optimesh_method,
+                    tolerance=optimesh_tolerance,
                     verbose=optimesh_verbose,
                 )
             except np.linalg.LinAlgError as e:
@@ -579,7 +549,7 @@ class Device(object):
             )
 
         logger.info("Calculating weight matrix.")
-        self.weights = fem.mass_matrix(points, triangles, sparse=False)
+        self.weights = fem.mass_matrix(points, triangles)
 
         logger.info("Calculating Laplace operator.")
         self.Del2 = fem.laplace_operator(

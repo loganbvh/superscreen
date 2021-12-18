@@ -9,6 +9,7 @@ from .fluxoid import (
 from .io import save_solutions, load_solutions, iload_solutions
 from .parameter import Parameter, Constant
 from .solution import Solution, Fluxoid, Vortex
+from .units import ureg
 from .version import __version__, __version_info__
 from .visualization import (
     auto_grid,
