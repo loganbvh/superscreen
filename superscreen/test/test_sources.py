@@ -30,8 +30,7 @@ def test_vortex_field(shape, vortex_position):
     y = np.random.random(size).reshape(shape)
     z = np.random.random(size).reshape(shape)
 
-    x0, y0, z0 = vortex_position
-    param = sc.sources.VortexField(x0=x0, y0=y0, z0=z0)
+    param = sc.sources.VortexField(r0=vortex_position)
     field = param(x, y, z)
     assert isinstance(param, sc.Parameter)
     if shape == ():
@@ -187,16 +186,16 @@ def test_pearl_vortex_field(shape, vortex_position):
         or (y - y0).max() > ys.max()
     ):
         with pytest.raises(ValueError):
-            param = sc.sources.PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)
+            param = sc.sources.PearlVortexField(r0=vortex_position, xs=xs, ys=ys)
             field = param(x, y, z)
         return
 
     if shape != ():
         with pytest.raises(ValueError):
-            param = sc.sources.PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=ys)
+            param = sc.sources.PearlVortexField(r0=vortex_position, xs=xs, ys=ys)
             field = param(x, y, z)
         z = np.atleast_1d(z)[0] * np.ones(shape)
-    param = sc.sources.PearlVortexField(x0=x0, y0=y0, z0=z0, xs=xs, ys=xs)
+    param = sc.sources.PearlVortexField(r0=vortex_position, xs=xs, ys=xs)
     field = param(x, y, z)
     assert isinstance(param, sc.Parameter)
     if shape == ():

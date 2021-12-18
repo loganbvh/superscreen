@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -9,9 +9,8 @@ def monopole(
     x: Union[float, np.ndarray],
     y: Union[float, np.ndarray],
     z: Union[float, np.ndarray],
-    x0: float = 0,
-    y0: float = 0,
-    z0: float = 0,
+    *,
+    r0: Tuple[float, float, float] = (0, 0, 0),
     nPhi0: Union[int, float] = 1,
 ) -> Union[float, np.ndarray]:
     """Field :math:`\\mu_0H_z` from an isolated (monopole)
@@ -24,12 +23,13 @@ def monopole(
 
     Args:
         x, y, z: Position coordinates.
-        x0, y0, z0: Monopole position
+        r0 Monopole position
         nPhi0: Number of flux quanta contained in the monopole.
 
     Returns:
         The field at the given coordinates in units of ``Phi_0 / (length_units)**2``.
     """
+    x0, y0, z0 = r0
     xp = x - x0
     yp = y - y0
     zp = z - z0
@@ -38,7 +38,7 @@ def monopole(
 
 
 def MonopoleField(
-    x0: float = 0, y0: float = 0, z0: float = 0, nPhi0: Union[int, float] = 1
+    r0: Tuple[float, float, float] = (0, 0, 0), nPhi0: Union[int, float] = 1
 ) -> Parameter:
     """Returns a Parameter that computes the z-component of the field from a monopole
     (monopole) located at position ``(x0, y0, z0)`` containing a total of
@@ -50,14 +50,14 @@ def MonopoleField(
             \\frac{(\\vec{r}-\\vec{r}_0)\\cdot\\hat{z}}{|(\\vec{r}-\\vec{r}_0)|^3}
 
     Args:
-        x0, y0, z0: Coordinates of the monopole position.
+        r0: Coordinates of the monopole position.
         nPhi0: Number of flux quanta contained in the monopole.
 
     Returns:
         A Parameter that returns the out-of-plane field in units of
         ``Phi_0 / (length_units)**2``.
     """
-    return Parameter(monopole, x0=x0, y0=y0, z0=z0, nPhi0=nPhi0)
+    return Parameter(monopole, r0=r0, nPhi0=nPhi0)
 
 
 VortexField = MonopoleField
@@ -71,9 +71,7 @@ def pearl_vortex(
     xs: np.ndarray,
     ys: np.ndarray,
     Lambda: float = 0,
-    x0: float = 0,
-    y0: float = 0,
-    z0: float = 0,
+    r0: Tuple[float, float, float] = (0, 0, 0),
     nPhi0: Union[int, float] = 1,
 ) -> Union[float, np.ndarray]:
     """The z-component of the field from a Pearl vortex.
@@ -105,7 +103,7 @@ def pearl_vortex(
 
     Args:
         x, y, z: The coordinates at which to calculcate the field.
-        x0, y0, z0: Coordinates of the Pearl vortex position.
+        r0: Coordinates of the Pearl vortex position.
         Lambda: The effective penetration depth of the film in which the vortex lies.
             ``Lambda`` is equal to half the Pearl length.
         nPhi0: Number of flux quanta contained in the monopole.
@@ -119,6 +117,7 @@ def pearl_vortex(
 
     from scipy.interpolate import LinearNDInterpolator
 
+    x0, y0, z0 = r0
     x, y, z = np.atleast_1d(x, y, z)
     if not np.allclose(z, z[0]):
         raise ValueError("All elements of the vector z must be equal.")
@@ -160,9 +159,7 @@ def pearl_vortex(
 
 def PearlVortexField(
     *,
-    x0: float = 0,
-    y0: float = 0,
-    z0: float = 0,
+    r0: Tuple[float, float, float] = (0, 0, 0),
     Lambda: float = 0,
     nPhi0: Union[int, float] = 1,
     xs: np.ndarray,
@@ -195,7 +192,7 @@ def PearlVortexField(
     .. seealso:: References: [Pearl-APL-1964]_, [Tafuri-PRL-2004]_.
 
     Args:
-        x0, y0, z0: Coordinates of the Pearl vortex position.
+        r0: Coordinates of the Pearl vortex position.
         Lambda: The effective penetration depth of the film in which the vortex lies.
             ``Lambda`` is equal to half the Pearl length.
         nPhi0: Number of flux quanta contained in the monopole.
@@ -211,8 +208,6 @@ def PearlVortexField(
         xs=xs,
         ys=ys,
         Lambda=Lambda,
-        x0=x0,
-        y0=y0,
-        z0=z0,
+        r0=r0,
         nPhi0=nPhi0,
     )
