@@ -4,11 +4,8 @@ from typing import Union, Tuple, Optional
 import numpy as np
 from scipy.constants import mu_0
 
-from ..device import Device
+from ..units import ureg
 from ..parameter import Parameter
-
-
-ureg = Device.ureg
 
 
 def dipole_field(

@@ -238,7 +238,7 @@ def calculate_weights(
 def mass_matrix(
     points: np.ndarray,
     triangles: np.ndarray,
-    sparse: bool = True,
+    sparse: bool = False,
 ) -> Union[np.ndarray, sp.csc_matrix]:
     """The mass matrix defines an effective area for each vertex.
 
@@ -301,7 +301,7 @@ def laplace_operator(
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
     if masses is None:
-        masses = mass_matrix(points, triangles, sparse=False)
+        masses = mass_matrix(points, triangles)
     if sp.issparse(masses):
         masses = masses.diagonal()
     L = calculate_weights(points, triangles, weight_method, sparse=True)

@@ -108,6 +108,13 @@ def test_polygon_join():
         square1.name = None
         sc.Device._validate_polygons([square1], "label")
 
+    for min_points, optimesh_steps in [(None, None), (500, None), (500, 10)]:
+        points, triangles = square1.make_mesh(
+            min_points=min_points, optimesh_steps=optimesh_steps
+        )
+        if min_points:
+            assert points.shape[0] > min_points
+
 
 def test_plot_polygon():
     with non_gui_backend():

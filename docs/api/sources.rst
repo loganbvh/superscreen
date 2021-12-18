@@ -29,3 +29,8 @@ DipoleField
 -----------
 
 .. autofunction:: superscreen.sources.DipoleField
+
+SheetCurrentField
+-----------------
+
+.. autofunction:: superscreen.sources.SheetCurrentField

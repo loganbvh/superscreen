@@ -35,6 +35,13 @@ Polygon
 .. autoclass:: superscreen.device.components.Polygon
     :members:
 
+Meshing
+-------
+
+.. autofunction:: superscreen.device.mesh.generate_mesh
+
+.. autofunction:: superscreen.device.mesh.optimize_mesh
+
 Parameters
 ----------
 
