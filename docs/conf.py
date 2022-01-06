@@ -71,8 +71,6 @@ autodoc_member_order = "bysource"
 
 autodoc_typehints = "description"
 
-napoleon_use_param = True
-
 nbsphinx_execute = "always"
 
 nbsphinx_execute_arguments = [

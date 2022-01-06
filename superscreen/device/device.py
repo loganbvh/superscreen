@@ -25,19 +25,6 @@ logger = logging.getLogger(__name__)
 
 
 class Device(object):
-    """An object representing a device composed of multiple layers of
-    thin film superconductor.
-
-    Args:
-        name: Name of the device.
-        layers: ``Layers`` making up the device.
-        films: ``Polygons`` representing regions of superconductor.
-        holes: ``Holes`` representing holes in superconducting films.
-        abstract_regions: ``Polygons`` representing abstract regions in a device.
-            Abstract regions will be meshed, and one can calculate the flux through them.
-        length_units: Distance units for the coordinate system.
-        solve_dtype: The float data type to use when solving the device.
-    """
 
     ARRAY_NAMES = (
         "points",
@@ -60,6 +47,19 @@ class Device(object):
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float64",
     ):
+        """An object representing a device composed of multiple layers of
+        thin film superconductor.
+
+        Args:
+            name: Name of the device.
+            layers: ``Layers`` making up the device.
+            films: ``Polygons`` representing regions of superconductor.
+            holes: ``Holes`` representing holes in superconducting films.
+            abstract_regions: ``Polygons`` representing abstract regions in a device.
+                Abstract regions will be meshed, and one can calculate the flux through them.
+            length_units: Distance units for the coordinate system.
+            solve_dtype: The float data type to use when solving the device.
+        """
         self.name = name
 
         self._films_list = []
