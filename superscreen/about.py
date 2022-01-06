@@ -16,11 +16,16 @@ import superscreen
 
 
 def _blas_info() -> str:
-    # Taken from: https://github.com/qutip/qutip/blob/
-    # 88919ce50880dadbc1a817a3e6059c82c23a83f9/qutip/utilities.py#L395
+    # https://github.com/qutip/qutip/blob/3ff3f42d2cd950c99af8936b12d9221ed79de5e3/
+    # qutip/utilities.py#L335-L355
     config = numpy.__config__
-    blas_info = config.blas_opt_info
-    _has_lib_key = "libraries" in blas_info.keys()
+    if hasattr(config, "blas_ilp64_opt_info"):
+        blas_info = config.blas_ilp64_opt_info
+    elif hasattr(config, "blas_opt_info"):
+        blas_info = config.blas_opt_info
+    else:
+        blas_info = {}
+    _has_lib_key = "libraries" in blas_info
     blas = None
     if hasattr(config, "mkl_info") or (
         _has_lib_key and any("mkl" in lib for lib in blas_info["libraries"])
