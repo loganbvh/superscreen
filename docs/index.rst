@@ -84,7 +84,6 @@ Better yet, click the badge below to try ``SuperScreen`` interactively online vi
 
    notebooks/polygons.ipynb
    notebooks/field-sources.ipynb
-   notebooks/meshing.ipynb
    notebooks/io.ipynb
    notebooks/parallel.ipynb
    notebooks/logo.ipynb

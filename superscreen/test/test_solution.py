@@ -400,7 +400,7 @@ def test_fluxoid_simply_connected(
             ) < 5e-2
         else:
             # No vortices - fluxoid should be zero.
-            assert abs(total_fluxoid) / abs(flux_part) < 2e-2
+            assert abs(total_fluxoid) / abs(flux_part) < 5e-2
 
 
 @pytest.mark.parametrize("units, with_units", [("uA / um", False), (None, True)])
