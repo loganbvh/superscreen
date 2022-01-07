@@ -3,7 +3,17 @@ import json
 import logging
 import zipfile
 from datetime import datetime
-from typing import Optional, Union, Callable, Dict, Tuple, List, Any, NamedTuple
+from typing import (
+    Optional,
+    Union,
+    Callable,
+    Dict,
+    Tuple,
+    List,
+    Any,
+    NamedTuple,
+    Sequence,
+)
 
 import dill
 import pint
@@ -887,28 +897,150 @@ class Solution(object):
     def __eq__(self, other) -> bool:
         return self.equals(other, require_same_timestamp=True)
 
-    def plot_streams(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+    def plot_streams(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        units: Optional[str] = None,
+        max_cols: int = 3,
+        cmap: str = "magma",
+        levels: int = 101,
+        colorbar: bool = True,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
         """Alias for :func:`superscreen.visualization.plot_streams`."""
         from .visualization import plot_streams
 
-        return plot_streams(self, **kwargs)
+        return plot_streams(
+            self,
+            layers=layers,
+            units=units,
+            max_cols=max_cols,
+            cmap=cmap,
+            levels=levels,
+            colorbar=colorbar,
+            **kwargs,
+        )
 
-    def plot_currents(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+    def plot_currents(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        max_cols: int = 3,
+        cmap: str = "inferno",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        streamplot: bool = True,
+        min_stream_amp: float = 0.025,
+        cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
         """Alias for :func:`superscreen.visualization.plot_currents`."""
         from .visualization import plot_currents
 
-        return plot_currents(self, **kwargs)
+        return plot_currents(
+            self,
+            layers=layers,
+            units=units,
+            grid_shape=grid_shape,
+            grid_method=grid_method,
+            max_cols=max_cols,
+            cmap=cmap,
+            colorbar=colorbar,
+            auto_range_cutoff=auto_range_cutoff,
+            share_color_scale=share_color_scale,
+            symmetric_color_scale=symmetric_color_scale,
+            vmin=vmin,
+            vmax=vmax,
+            streamplot=streamplot,
+            min_stream_amp=min_stream_amp,
+            cross_section_coords=cross_section_coords,
+            **kwargs,
+        )
 
-    def plot_fields(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+    def plot_fields(
+        self,
+        layers: Optional[Union[List[str], str]] = None,
+        dataset: str = "fields",
+        normalize: bool = False,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        max_cols: int = 3,
+        cmap: str = "cividis",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
+        **kwargs,
+    ) -> Tuple[plt.Figure, np.ndarray]:
         """Alias for :func:`superscreen.visualization.plot_fields`."""
         from .visualization import plot_fields
 
-        return plot_fields(self, **kwargs)
+        return plot_fields(
+            self,
+            layers=layers,
+            dataset=dataset,
+            normalize=normalize,
+            units=units,
+            grid_shape=grid_shape,
+            grid_method=grid_method,
+            max_cols=max_cols,
+            cmap=cmap,
+            colorbar=colorbar,
+            auto_range_cutoff=auto_range_cutoff,
+            share_color_scale=share_color_scale,
+            symmetric_color_scale=symmetric_color_scale,
+            vmin=vmin,
+            vmax=vmax,
+            cross_section_coords=cross_section_coords,
+            **kwargs,
+        )
 
     def plot_field_at_positions(
-        self, positions: np.ndarray, **kwargs
+        self,
+        positions: np.ndarray,
+        zs: Optional[Union[float, np.ndarray]] = None,
+        vector: bool = False,
+        units: Optional[str] = None,
+        grid_shape: Union[int, Tuple[int, int]] = (200, 200),
+        grid_method: str = "cubic",
+        cmap: str = "cividis",
+        colorbar: bool = True,
+        auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+        share_color_scale: bool = False,
+        symmetric_color_scale: bool = False,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        cross_section_coords: Optional[Union[float, List[float]]] = None,
+        **kwargs,
     ) -> Tuple[plt.Figure, np.ndarray]:
         """Alias for :func:`superscreen.visualization.plot_field_at_positions`."""
         from .visualization import plot_field_at_positions
 
-        return plot_field_at_positions(self, positions, **kwargs)
+        return plot_field_at_positions(
+            self,
+            positions,
+            zs=zs,
+            vector=vector,
+            units=units,
+            grid_shape=grid_shape,
+            grid_method=grid_method,
+            cmap=cmap,
+            colorbar=colorbar,
+            auto_range_cutoff=auto_range_cutoff,
+            share_color_scale=share_color_scale,
+            symmetric_color_scale=symmetric_color_scale,
+            vmin=vmin,
+            vmax=vmax,
+            cross_section_coords=cross_section_coords,
+            **kwargs,
+        )
