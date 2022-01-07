@@ -11,7 +11,6 @@ from typing import (
     List,
     Dict,
     Any,
-    TYPE_CHECKING,
 )
 
 import pint
@@ -24,9 +23,7 @@ from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
-
-if TYPE_CHECKING:
-    from .device import Device
+from .device import Device
 
 
 lambda_str = "\u03bb"
@@ -235,7 +232,7 @@ def field_conversion_factor(
 
 def solve_layer(
     *,
-    device: "Device",
+    device: Device,
     layer: str,
     applied_field: Union[Callable, np.ndarray],
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
@@ -401,7 +398,7 @@ def solve_layer(
 
 
 def solve(
-    device: "Device",
+    device: Device,
     *,
     applied_field: Optional[Callable] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
@@ -749,7 +746,7 @@ def solve(
 
 
 def solve_many(
-    device: "Device",
+    device: Device,
     *,
     parallel_method: Optional[str] = None,
     applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,

@@ -13,7 +13,6 @@ from matplotlib.path import Path
 from matplotlib.patches import PathPatch
 import scipy.sparse as sp
 
-from .. import solve
 from .. import fem
 from ..units import ureg
 from ..parameter import Parameter
@@ -25,6 +24,19 @@ logger = logging.getLogger(__name__)
 
 
 class Device(object):
+    """An object representing a device composed of multiple layers of
+    thin film superconductor.
+
+    Args:
+        name: Name of the device.
+        layers: ``Layers`` making up the device.
+        films: ``Polygons`` representing regions of superconductor.
+        holes: ``Holes`` representing holes in superconducting films.
+        abstract_regions: ``Polygons`` representing abstract regions in a device.
+            Abstract regions will be meshed, and one can calculate the flux through them.
+        length_units: Distance units for the coordinate system.
+        solve_dtype: The float data type to use when solving the device.
+    """
 
     ARRAY_NAMES = (
         "points",
@@ -47,19 +59,6 @@ class Device(object):
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float64",
     ):
-        """An object representing a device composed of multiple layers of
-        thin film superconductor.
-
-        Args:
-            name: Name of the device.
-            layers: ``Layers`` making up the device.
-            films: ``Polygons`` representing regions of superconductor.
-            holes: ``Holes`` representing holes in superconducting films.
-            abstract_regions: ``Polygons`` representing abstract regions in a device.
-                Abstract regions will be meshed, and one can calculate the flux through them.
-            length_units: Distance units for the coordinate system.
-            solve_dtype: The float data type to use when solving the device.
-        """
         self.name = name
 
         self._films_list = []
@@ -539,6 +538,8 @@ class Device(object):
                 or "inv_euclidian".
         """
 
+        from ..solve import C_vector, q_matrix, Q_matrix
+
         points = self.points
         triangles = self.triangles
 
@@ -561,9 +562,9 @@ class Device(object):
         )
         logger.info("Calculating kernel matrix.")
         solve_dtype = self.solve_dtype
-        q = solve.q_matrix(points, dtype=solve_dtype)
-        C = solve.C_vector(points, dtype=solve_dtype)
-        self.Q = solve.Q_matrix(q, C, self.weights, dtype=solve_dtype)
+        q = q_matrix(points, dtype=solve_dtype)
+        C = C_vector(points, dtype=solve_dtype)
+        self.Q = Q_matrix(q, C, self.weights, dtype=solve_dtype)
 
     def mutual_inductance_matrix(
         self,
