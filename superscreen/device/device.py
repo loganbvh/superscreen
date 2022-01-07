@@ -13,7 +13,6 @@ from matplotlib.path import Path
 from matplotlib.patches import PathPatch
 import scipy.sparse as sp
 
-from .. import solve
 from .. import fem
 from ..units import ureg
 from ..parameter import Parameter
@@ -539,6 +538,8 @@ class Device(object):
                 or "inv_euclidian".
         """
 
+        from ..solve import C_vector, q_matrix, Q_matrix
+
         points = self.points
         triangles = self.triangles
 
@@ -561,9 +562,9 @@ class Device(object):
         )
         logger.info("Calculating kernel matrix.")
         solve_dtype = self.solve_dtype
-        q = solve.q_matrix(points, dtype=solve_dtype)
-        C = solve.C_vector(points, dtype=solve_dtype)
-        self.Q = solve.Q_matrix(q, C, self.weights, dtype=solve_dtype)
+        q = q_matrix(points, dtype=solve_dtype)
+        C = C_vector(points, dtype=solve_dtype)
+        self.Q = Q_matrix(q, C, self.weights, dtype=solve_dtype)
 
     def mutual_inductance_matrix(
         self,

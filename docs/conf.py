@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = "SuperScreen"
-copyright = "2021, Logan Bishop-Van Horn"
+copyright = "2021-2022, Logan Bishop-Van Horn"
 author = "Logan Bishop-Van Horn"
 
 
@@ -31,8 +31,8 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
-    "sphinx_autodoc_typehints",
     "sphinx.ext.mathjax",
+    "sphinx_autodoc_typehints",
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     "sphinx_rtd_theme",
