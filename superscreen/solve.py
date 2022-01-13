@@ -17,6 +17,7 @@ import pint
 import psutil
 import numpy as np
 import scipy.sparse as sp
+import scipy.linalg as la
 from scipy.spatial import distance
 
 from .io import NullContextManager
@@ -361,13 +362,9 @@ def solve_layer(
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d]
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        # In some simple benchmarking on an Intel Mac with numpy=1.20.3 and scipy=1.6.3
-        # I have found numpy.linalg.inv to be a bit faster than scipy.linalg.inv,
-        # but I may want to revisit this in the future.
-        # See also: https://docs.scipy.org/doc/scipy/reference/tutorial/
-        # linalg.html#scipy-linalg-vs-numpy-linalg
-        K = np.linalg.inv(A)
-        gf = -K @ h
+        lu, piv = la.lu_factor(-A)
+        gf = la.lu_solve((lu, piv), h)
+
         g[ix1d] = gf
         if check_inversion:
             # Validate solution
@@ -377,8 +374,11 @@ def solve_layer(
                     f"Unable to solve for stream function in {layer} ({name}), "
                     f"maximum error {np.abs(hsim - h).max():.3e}."
                 )
-
+        K = None  # Matrix inverse of A
         for vortex in film_to_vortices[name]:
+            if K is None:
+                # Compute K only once if needed
+                K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
             # in the film-specific subarray
             j_film = np.argmin(
