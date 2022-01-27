@@ -380,7 +380,7 @@ def solve_layer(
                 # Compute K only once if needed
                 K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
-            # in the film-specific subarray
+            # in the film-specific sub-mesh
             j_film = np.argmin(
                 np.sum(np.square(points[ix1d] - [[vortex.x, vortex.y]]), axis=1)
             )
@@ -889,5 +889,5 @@ def _patch_docstring(func):
 from .parallel import solve_many_serial, solve_many_mp, solve_many_ray  # noqa: E402
 
 
-for func in [solve_many_serial, solve_many_mp, solve_many_ray]:
+for func in (solve_many_serial, solve_many_mp, solve_many_ray):
     _patch_docstring(func)
