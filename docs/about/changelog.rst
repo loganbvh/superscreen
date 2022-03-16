@@ -22,7 +22,8 @@ Release date: 2022-03-15
 Changes
 =======
 
-- Remove support for Python 3.6.
+- Remove support for Python 3.6, which has reached `end-of-life <https://www.python.org/downloads/release/python-3615/>`_
+  (`#69 <https://github.com/loganbvh/superscreen/pull/69>`_).
 
 Version 0.3.0
 -------------
