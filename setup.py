@@ -15,11 +15,10 @@ The documentation for `SuperScreen` can be found at [superscreen.readthedocs.io]
 
 ## Try `SuperScreen`
 
-Click the badge below to try `SuperScreen` interactively online via [Binder](https://mybinder.org/):
+Click the badge below and navigate to `docs/notebooks/` to try `SuperScreen` interactively online via [Binder](https://mybinder.org/):
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD?filepath=docs%2Fnotebooks)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD)
 
-(Note: Binder instances are [limited to 2 GB of memory](https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder), so you can only solve relatively small models online.)
 """
 
 from setuptools import setup, find_packages
