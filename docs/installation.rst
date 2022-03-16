@@ -11,7 +11,7 @@ or from the ``SuperScreen`` `GitHub repository <https://github.com/loganbvh/supe
 We recommend creating a new
 `conda environment <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_
 for ``SuperScreen`` to avoid dependency conflicts with other packages. To create a new conda environment called
-``superscreen``, run ``conda create --name superscreen python=3.x``, where ``x`` is one of ``{6, 7, 8, 9}``.
+``superscreen``, run ``conda create --name superscreen python=3.x``, where ``x`` is one of ``{7, 8, 9}``.
 After the environment has been created, run ``conda activate superscreen`` to activate it.
 
 

@@ -17,7 +17,7 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 Version 0.4.0
 -------------
 
-Release date: 2022-03-16
+Release date: 2022-03-15
 
 Changes
 =======
