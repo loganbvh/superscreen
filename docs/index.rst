@@ -56,19 +56,13 @@ Click :ref:`here <background>` to read more about the way ``SuperScreen`` solves
 models of superconducting devices.
 
 For quick demonstration of ``SuperScreen``, see the :ref:`quickstart notebook </notebooks/quickstart.ipynb>`.
-Better yet, click the badge below to try ``SuperScreen`` interactively online via `Binder <https://mybinder.org/>`_:
+Better yet, click the badge below and navigate to ``docs/notebooks/`` to try ``SuperScreen``
+interactively online via `Binder <https://mybinder.org/>`_:
 
 
 .. image:: https://mybinder.org/badge_logo.svg
-   :target: https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD?filepath=docs%2Fnotebooks
-   :align: center
-
-
-.. note::
-
-   Binder instances are `limited to 2 GB of memory
-   <https://mybinder.readthedocs.io/en/latest/about/about.html#how-much-memory-am-i-given-when-using-binder>`_,
-   so you can only solve relatively small models online.
+ :target: https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD
+   
 
 .. toctree::
    :maxdepth: 2
