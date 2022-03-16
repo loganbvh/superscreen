@@ -577,7 +577,7 @@ def plot_currents(
     for layer, jc in current_densities.items():
         jc = jx, jy = (jc * old_units).to(units).magnitude
         jcs[layer] = jc
-        Js[layer] = np.sqrt(jx ** 2 + jy ** 2)
+        Js[layer] = np.sqrt(jx**2 + jy**2)
     clabel = "$|\\,\\vec{J}\\,|$" + f" [${units:~L}$]"
     clim_dict = setup_color_limits(
         Js,

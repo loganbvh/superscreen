@@ -24,16 +24,16 @@ def test_function_repr():
 
 
 def func_2d(x, y, sigma=1):
-    return np.exp(-(x ** 2 + y ** 2) / (2 * sigma ** 2))
+    return np.exp(-(x**2 + y**2) / (2 * sigma**2))
 
 
 def func_3d(x, y, z, sigma=1):
-    return np.exp(-(x ** 2 + y ** 2 + z ** 2) / (2 * sigma ** 2))
+    return np.exp(-(x**2 + y**2 + z**2) / (2 * sigma**2))
 
 
 def test_parameter_against_func():
     def func(x, y, sigma=1):
-        return np.exp(-(x ** 2 + y ** 2) / (2 * sigma ** 2))
+        return np.exp(-(x**2 + y**2) / (2 * sigma**2))
 
     param = sc.Parameter(func, sigma=2)
     print(param)
@@ -46,7 +46,7 @@ def test_parameter_against_func():
     assert param != sc.Parameter(func, sigma=1)
 
     def func2(x, y, sigma=1):
-        return np.exp(-np.abs(x + y) / (2 * sigma ** 2))
+        return np.exp(-np.abs(x + y) / (2 * sigma**2))
 
     assert param != sc.Parameter(func2, sigma=1)
 
@@ -64,11 +64,11 @@ def test_parameter_math(func, args):
     param2 = sc.Parameter(func, sigma=0.1)
     print(param1, param2)
 
-    assert np.array_equal((param1 ** 2)(*args), func(*args, sigma=10) ** 2)
+    assert np.array_equal((param1**2)(*args), func(*args, sigma=10) ** 2)
     assert np.array_equal((2 * param1)(*args), 2 * func(*args, sigma=10))
     assert np.array_equal((1 + param1)(*args), 1 + func(*args, sigma=10))
     assert np.array_equal((1 - param1)(*args), 1 - func(*args, sigma=10))
-    assert np.array_equal((2 ** param1)(*args), 2 ** func(*args, sigma=10))
+    assert np.array_equal((2**param1)(*args), 2 ** func(*args, sigma=10))
     assert np.array_equal((1 / (10 + param1))(*args), 1 / (10 + func(*args, sigma=10)))
 
     with pytest.raises(ValueError):
@@ -98,7 +98,7 @@ def test_parameter_math(func, args):
     )
 
     assert np.array_equal(
-        (param1 ** param2)(*args),
+        (param1**param2)(*args),
         func(*args, sigma=10) ** func(*args, sigma=0.1),
     )
 
@@ -110,9 +110,9 @@ def test_parameter_math(func, args):
     assert p3 == p3
 
     assert (param1 * param2) == (param1 * param2)
-    assert (param1 ** 2) != param1
-    assert (param1 ** 2) != param1 * param2
-    print(param1 ** 2)
+    assert (param1**2) != param1
+    assert (param1**2) != param1 * param2
+    print(param1**2)
     print(param1 * param2 + param1)
     print(param1 * (param2 + param1))
     print(2 * param2, param1 / 5)

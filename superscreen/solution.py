@@ -671,7 +671,7 @@ class Solution(object):
                 # Q is the dipole kernel for the z component, Hz
                 # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
                 Q = (
-                    (2 * dz ** 2 - rho2) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                    (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
                 ).astype(dtype, copy=False)
                 # tri_areas has units of [length]^2
                 # So here Hz is in units of [current] * [length]^(-1)
@@ -685,7 +685,7 @@ class Solution(object):
                 # Pairwise difference between all x positions
                 d = np.subtract.outer(positions[:, 0], points[:, 0], dtype=dtype)
                 # Kernel for x component, Hx
-                Q = ((3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))).astype(
+                Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
                     dtype, copy=False
                 )
                 Hx = np.einsum("ij,j -> i", Q, areas * g)
@@ -693,7 +693,7 @@ class Solution(object):
                 # Pairwise difference between all y positions
                 d = np.subtract.outer(positions[:, 1], points[:, 1], dtype=dtype)
                 # Kernel for y component, Hy
-                Q = ((3 * dz * d) / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))).astype(
+                Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
                     dtype, copy=False
                 )
                 Hy = np.einsum("ij,j -> i", Q, areas * g, dtype=dtype)

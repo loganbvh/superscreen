@@ -57,7 +57,7 @@ def q_matrix(
     if dtype is not None:
         distances = distances.astype(dtype, copy=False)
     with np.errstate(divide="ignore"):
-        q = 1 / (4 * np.pi * distances ** 3)
+        q = 1 / (4 * np.pi * distances**3)
     np.fill_diagonal(q, np.inf)
     return q.astype(dtype, copy=False)
 
@@ -657,8 +657,8 @@ def solve(
                     q = kernels.get(key, None)
                     if q is None:
                         q = (
-                            (2 * dz ** 2 - rho2)
-                            / (4 * np.pi * (dz ** 2 + rho2) ** (5 / 2))
+                            (2 * dz**2 - rho2)
+                            / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
                         ).astype(dtype, copy=False)
                         if cache_kernels_to_disk:
                             fname = os.path.join(tempdir, "_".join(key))
