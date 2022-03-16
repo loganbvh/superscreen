@@ -57,7 +57,7 @@ def dipole_field(
     m_dot_r = np.einsum("j,ij -> i", moment, r)[:, np.newaxis]
     # \frac{3\hat{r}(\hat{r}\cdot\vec{m}) - \vec{m}}{|\vec{r}|^3} =
     # \frac{3\vec{r}(\vec{r}\cdot\vec{m})}{|\vec{r}|^5} - \frac{\vec{m}}{|\vec{r}|^3}
-    B = 3 * r * m_dot_r / norm_r ** 5 - moment / norm_r ** 3
+    B = 3 * r * m_dot_r / norm_r**5 - moment / norm_r**3
     return mu_0 / (4 * np.pi) * B.squeeze()
 
 

@@ -151,7 +151,7 @@ def device():
     assert np.array_equal(
         films[0].contains_points([[0, 0], [2, 1]], index=True), np.array([0, 1])
     )
-    assert np.isclose(films[0].area, np.pi * 5 ** 2, rtol=1e-3)
+    assert np.isclose(films[0].area, np.pi * 5**2, rtol=1e-3)
     assert np.isclose(films[1].area, np.pi * 3 * 2, rtol=1e-3)
 
     abstract_regions = [

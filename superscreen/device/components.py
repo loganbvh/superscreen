@@ -69,7 +69,7 @@ class Layer(object):
         """Effective penetration depth of the superconductor."""
         if self._Lambda is not None:
             return self._Lambda
-        return self.london_lambda ** 2 / self.thickness
+        return self.london_lambda**2 / self.thickness
 
     @Lambda.setter
     def Lambda(self, value: Union[float, Parameter]) -> None:

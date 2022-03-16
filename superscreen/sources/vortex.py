@@ -33,7 +33,7 @@ def monopole(
     xp = x - x0
     yp = y - y0
     zp = z - z0
-    Hz0 = zp / (xp ** 2 + yp ** 2 + zp ** 2) ** (3 / 2) / (2 * np.pi)
+    Hz0 = zp / (xp**2 + yp**2 + zp**2) ** (3 / 2) / (2 * np.pi)
     return nPhi0 * Hz0
 
 
@@ -145,7 +145,7 @@ def pearl_vortex(
     ky = np.linspace(-kmaxy, kmaxy, ys.shape[0])
     X, Y = np.meshgrid(xs, ys)
     KX, KY = np.meshgrid(kx, ky)
-    K = np.sqrt(KX ** 2 + KY ** 2)
+    K = np.sqrt(KX**2 + KY**2)
     Lambda_Pearl = 2 * Lambda
     # Fourier transform of mu_0 * H_z(x, y, z)
     hzk = nPhi0 * np.exp(-K * z) / (1 + K * Lambda_Pearl)

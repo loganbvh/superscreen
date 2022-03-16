@@ -8,10 +8,6 @@ import pytest
 
 import superscreen as sc
 
-from backports.datetime_fromisoformat import MonkeyPatch
-
-MonkeyPatch.patch_fromisoformat()
-
 
 @pytest.fixture(scope="module")
 def device():
