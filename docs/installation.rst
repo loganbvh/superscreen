@@ -4,7 +4,7 @@
 Installation
 ************
 
-``SuperScreen`` requires ``Python >=3.6, <3.10`` and can be installed either from
+``SuperScreen`` requires ``Python >=3.7, <3.10`` and can be installed either from
 `PyPI <https://pypi.org/project/superscreen/>`_, the Python Package index,
 or from the ``SuperScreen`` `GitHub repository <https://github.com/loganbvh/superscreen>`_.
 

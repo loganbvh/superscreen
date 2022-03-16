@@ -14,6 +14,15 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
       The public API SHOULD NOT be considered stable.
     - Version 1.0.0 defines the public API.
 
+Version 0.4.0
+-------------
+
+Release date: 2022-03-15
+
+Changes
+=======
+
+- Remove support for Python 3.6.
 
 Version 0.3.0
 -------------

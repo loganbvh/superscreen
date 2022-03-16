@@ -28,10 +28,6 @@ from .device import Device, Polygon
 from .fem import in_polygon
 from .parameter import Constant
 
-from backports.datetime_fromisoformat import MonkeyPatch
-
-MonkeyPatch.patch_fromisoformat()
-
 
 logger = logging.getLogger(__name__)
 

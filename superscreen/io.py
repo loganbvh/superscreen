@@ -9,10 +9,6 @@ import numpy as np
 
 from .solution import Solution
 
-from backports.datetime_fromisoformat import MonkeyPatch
-
-MonkeyPatch.patch_fromisoformat()
-
 
 class NullContextManager(object):
     """Does nothing."""
