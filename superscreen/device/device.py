@@ -44,6 +44,8 @@ class Device(object):
         "weights",
         "Del2",
         "Q",
+        "gradx",
+        "grady",
     )
 
     ureg = ureg
@@ -113,6 +115,8 @@ class Device(object):
         self.weights = None
         self.Del2 = None
         self.Q = None
+        self.gradx = None
+        self.grady = None
 
     @property
     def length_units(self) -> str:
@@ -286,7 +290,7 @@ class Device(object):
         """
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("Del2",):
+        for name in ("Del2", "gradx", "grady"):
             valid_types[name] = valid_types[name] + (sp.spmatrix,)
         for name, array in arrays.items():
             if name not in self.ARRAY_NAMES:
@@ -527,6 +531,8 @@ class Device(object):
         self.weights = None
         self.Del2 = None
         self.Q = None
+        self.gradx = None
+        self.grady = None
         if compute_matrices:
             self.compute_matrices(weight_method=weight_method)
 
@@ -565,6 +571,8 @@ class Device(object):
         q = q_matrix(points, dtype=solve_dtype)
         C = C_vector(points, dtype=solve_dtype)
         self.Q = Q_matrix(q, C, self.weights, dtype=solve_dtype)
+        logger.info("Calculating gradient matrix.")
+        self.gradx, self.grady = fem.gradient_vertices(points, triangles)
 
     def mutual_inductance_matrix(
         self,

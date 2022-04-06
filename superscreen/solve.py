@@ -235,12 +235,13 @@ def solve_layer(
     *,
     device: Device,
     layer: str,
-    applied_field: Union[Callable, np.ndarray],
+    applied_field: np.ndarray,
+    weights: np.ndarray,
+    Del2: np.ndarray,
+    grad: np.ndarray,
+    Lambda: np.ndarray,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
-    weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
-    Del2: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
-    Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -249,17 +250,16 @@ def solve_layer(
     Args:
         device: The Device to simulate.
         layer: Name of the layer to analyze.
-        applied_field: A callable that computes the applied magnetic field
-            as a function of x, y coordinates, or a vector of applied fields.
+        applied_field: The applied magnetic field evaluated at the mesh vertices.
+        weights: The Device's weight vector.
+        Del2: The Device's Laplacian operator.
+        grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
+        Lambda: An array defining the layer's effective penetration depth, Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
         vortices: A list of Vortex objects located in films in this layer.
-        weights: The Device's weight vector.
-        Del2: The Device's Laplacian operator.
-        Lambda: A Parameter, array, or scalar defining the layer's effective penetration
-            depth, Lambda(x, y).
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
@@ -282,32 +282,14 @@ def solve_layer(
         .magnitude
     )
 
-    if weights is None:
-        weights = device.weights
-    if Del2 is None:
-        Del2 = device.Del2
-    if sp.issparse(Del2):
-        Del2 = Del2.toarray()
-
     Q = device.Q
     points = device.points
-    if Lambda is None:
-        Lambda = device.layers[layer].Lambda
 
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
-    if callable(applied_field):
-        # Units: current_units / device.length_units.
-        Hz_applied = applied_field(points[:, 0], points[:, 1])
-    else:
-        Hz_applied = applied_field
-
-    if isinstance(Lambda, (int, float)):
-        # Make Lambda a callable
-        Lambda = Constant(Lambda)
-    if callable(Lambda):
-        Lambda = Lambda(points[:, 0], points[:, 1])
+    # Units: current_units / device.length_units.
+    Hz_applied = applied_field
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -316,6 +298,8 @@ def solve_layer(
         ix = hole.contains_points(points)
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
+
+    grad_Lambda = grad @ Lambda
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -339,8 +323,15 @@ def solve_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
+        # grad_Lambda has shape (points.shape[0], 2)
+        # grad has shale (points.shape[0], 2, points.shape[0])
         Ha_eff += -current * np.sum(
-            Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix], axis=1
+            (
+                Q[:, ix] * weights[ix]
+                - Lambda[ix] * Del2[:, ix]
+                - np.einsum("jk, ijk -> ik", grad_Lambda[ix, :].T, grad[:, :, ix])
+            ),
+            axis=1,
         )
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
@@ -360,7 +351,15 @@ def solve_layer(
         # Form the linear system for the film:
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d]
+        A = (
+            Q[ix2d] * weights[ix1d]
+            - Lambda[ix1d] * Del2[ix2d]
+            - np.einsum(
+                "ij, ijk -> ik",
+                grad_Lambda[ix1d, :],
+                grad[np.ix_(ix1d, [True, True], ix1d)],
+            )
+        )
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
@@ -478,8 +477,15 @@ def solve(
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2
+    gradx = device.gradx
+    grady = device.grady
     if sp.issparse(Del2):
         Del2 = Del2.toarray().astype(dtype, copy=False)
+    if sp.issparse(gradx):
+        gradx = gradx.toarray().astype(dtype, copy=False)
+    if sp.issparse(grady):
+        grady = grady.toarray().astype(dtype, copy=False)
+    grad = np.stack([gradx, grady], axis=1)
 
     solutions = []
 
@@ -560,6 +566,7 @@ def solve(
             vortices=vortices_by_layer[name],
             weights=weights,
             Del2=Del2,
+            grad=grad,
             Lambda=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
@@ -697,6 +704,7 @@ def solve(
                         applied_field=new_layer_fields[name],
                         weights=weights,
                         Del2=Del2,
+                        grad=grad,
                         Lambda=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
                         vortices=vortices_by_layer[name],

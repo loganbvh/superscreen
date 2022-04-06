@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 import warnings
 
 import numpy as np
@@ -316,3 +316,96 @@ def laplace_operator(
     if not sparse:
         Del2 = Del2.toarray()
     return Del2
+
+
+def gradient_triangles(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    triangle_areas: Optional[np.ndarray] = None,
+) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+    """Returns the triangle gradient operators ``Gx`` and ``Gy``.
+
+    Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
+    defined at the mesh vertices, ``Gx`` and ``Gy`` are shape ``(m, n)`` matrices
+    such that ``Gx @ f`` and ``Gy @ f`` compute the gradients of ``f`` along
+    x and y, evaluated at the triangle centroids.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        triangles: Shape (m, 3) array of triangle indices
+        triangle_areas: Shape (m, ) array of triangle areas
+
+    Returns:
+        x and y gradient matrices, both of which have shape ``(m, n)``
+    """
+    if triangle_areas is None:
+        triangle_areas = areas(points, triangles)
+    xy = points[triangles]
+    edges = np.roll(xy, 2, -2) - np.roll(xy, 1, -2)
+    # Rotate edges clockwise by 90 degrees:
+    # +x --> -y, +y --> +x
+    edges_rot = np.empty_like(edges)
+    edges_rot[:, :, 0] = +edges[:, :, 1]
+    edges_rot[:, :, 1] = -edges[:, :, 0]
+
+    tri_data = edges_rot / (2 * triangle_areas[:, np.newaxis, np.newaxis])
+    shape = (triangles.shape[0], points.shape[0])
+    tri_data = tri_data.reshape(-1, 2).T
+    # [0, 0, 0, 1, 1, 1, ...]
+    ii = np.array([[i] * 3 for i in range(len(triangles))]).ravel()
+    # [t[0,0], t[0,1], t[0,2], t[1,0], t[1,1], t[1,2], ...]
+    jj = triangles.ravel()
+    Gx = sp.csr_matrix(
+        (tri_data[0], (ii, jj)),
+        shape=shape,
+        dtype=float,
+    )
+    Gy = sp.csr_matrix(
+        (tri_data[1], (ii, jj)),
+        shape=shape,
+        dtype=float,
+    )
+    return Gx, Gy
+
+
+def gradient_vertices(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    triangle_areas: Optional[np.ndarray] = None,
+) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+    """Returns the vertex gradient operators ``gx`` and ``gy``.
+
+    Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
+    defined at the mesh vertices, ``gx`` and ``gy`` are shape ``(n, n)`` matrices
+    such that ``gx @ f`` and ``gy @ f`` compute the gradients of ``f`` along
+    x and y, evaluated at the vertices.
+
+    The vertex gradient operators are calculated by averaging the the triangle
+    gradient operators over all triangles adjacent to each vertex.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        triangles: Shape (m, 3) array of triangle indices
+        triangle_areas: Shape (m, ) array of triangle areas
+
+    Returns:
+        x and y gradient matrices, both of which have shape ``(n, n)``
+    """
+    if triangle_areas is None:
+        triangle_areas = areas(points, triangles)
+    V = points.shape[0]
+    Gx, Gy = gradient_triangles(points, triangles, triangle_areas=triangle_areas)
+    # Use numpy arrays for fast slicing even though the operators are sparse.
+    Gx = Gx.toarray()
+    Gy = Gy.toarray()
+    gx = np.zeros((V, V), dtype=float)
+    gy = np.zeros((V, V), dtype=float)
+    # This loop is difficult to vectorize because different vertices
+    # have different numbers of adjacent triangles.
+    for i in range(V):
+        adjacent_triangles, _ = np.where(np.isin(triangles, i))
+        A = triangle_areas[adjacent_triangles]
+        A /= np.sum(A)
+        gx[i, :] = np.einsum("i, ij -> j", A, Gx[adjacent_triangles, :])
+        gy[i, :] = np.einsum("i, ij -> j", A, Gy[adjacent_triangles, :])
+    return sp.csr_matrix(gx), sp.csr_matrix(gy)
