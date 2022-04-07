@@ -179,11 +179,6 @@ def test_invalid_vortex_args(device):
 
 
 def test_mutual_inductance_errors(two_rings):
-    with pytest.raises(ValueError):
-        _ = two_rings.mutual_inductance_matrix(
-            upper_only=True,
-            lower_only=True,
-        )
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
@@ -233,21 +228,6 @@ def test_mutual_inductance_matrix(
     assert np.allclose(M, M2, rtol=5e-2)
     # Check that M is symmetric
     assert np.isclose(M[0, 1], M[1, 0], rtol=5e-2)
-
-
-def test_mutual_inductance_upper_lower(two_rings, iterations=1):
-
-    M = two_rings.mutual_inductance_matrix(
-        iterations=iterations,
-        upper_only=True,
-    ).magnitude
-    assert np.array_equal(M, np.triu(M))
-
-    M = two_rings.mutual_inductance_matrix(
-        iterations=iterations,
-        lower_only=True,
-    ).magnitude
-    assert np.array_equal(M, np.tril(M))
 
 
 def test_plot_mutual_inductance(mutual_inductance_matrix):

@@ -244,7 +244,7 @@ def solve_layer(
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
     Args:
@@ -265,7 +265,7 @@ def solve_layer(
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
-        stream function, total field, film screening field
+        stream function, current density, total field, film screening field
     """
 
     circulating_currents = circulating_currents or {}
@@ -291,6 +291,8 @@ def solve_layer(
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
 
+    inhomogeneous = np.diff(Lambda).any()
+
     # Identify holes in the superconductor
     hole_indices = {}
     in_hole = np.zeros(points.shape[0], dtype=bool)
@@ -299,7 +301,8 @@ def solve_layer(
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
 
-    grad_Lambda = grad @ Lambda
+    if inhomogeneous:
+        grad_Lambda = grad @ Lambda
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -323,14 +326,16 @@ def solve_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
-        # grad_Lambda has shape (points.shape[0], 2)
-        # grad has shale (points.shape[0], 2, points.shape[0])
+        if inhomogeneous:
+            # grad_Lambda has shape (points.shape[0], 2)
+            # grad has shale (points.shape[0], 2, points.shape[0])
+            grad_Lambda_term = -np.einsum(
+                "jk, ijk -> ik", grad_Lambda[ix, :].T, grad[:, :, ix]
+            )
+        else:
+            grad_Lambda_term = 0
         Ha_eff += -current * np.sum(
-            (
-                Q[:, ix] * weights[ix]
-                - Lambda[ix] * Del2[:, ix]
-                - np.einsum("jk, ijk -> ik", grad_Lambda[ix, :].T, grad[:, :, ix])
-            ),
+            (Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix] + grad_Lambda_term),
             axis=1,
         )
     film_to_vortices = defaultdict(list)
@@ -351,15 +356,15 @@ def solve_layer(
         # Form the linear system for the film:
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = (
-            Q[ix2d] * weights[ix1d]
-            - Lambda[ix1d] * Del2[ix2d]
-            - np.einsum(
+        if inhomogeneous:
+            grad_Lambda_term = -np.einsum(
                 "ij, ijk -> ik",
                 grad_Lambda[ix1d, :],
                 grad[np.ix_(ix1d, [True, True], ix1d)],
             )
-        )
+        else:
+            grad_Lambda_term = 0
+        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] + grad_Lambda_term
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
@@ -389,11 +394,15 @@ def solve_layer(
             )
             # Eq. 28 in [Brandt]
             g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+    # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
+    Gx = grad[:, 0, :]
+    Gy = grad[:, 1, :]
+    J = np.stack([Gy @ g, -Gx @ g], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
     # Equivalent to screening_field = np.einsum("ij,j -> i", Q, weights * g)
     screening_field = Q @ (weights * g)
     total_field = Hz_applied + screening_field
-    return g, total_field, screening_field
+    return g, J, total_field, screening_field
 
 
 def solve(
@@ -490,6 +499,7 @@ def solve(
     solutions = []
 
     streams = {}
+    currents = {}
     fields = {}
     screening_fields = {}
 
@@ -558,7 +568,7 @@ def solve(
     for name, layer in device.layers.items():
         logger.info(f"Calculating {name} response to applied field.")
 
-        g, total_field, screening_field = solve_layer(
+        g, J, total_field, screening_field = solve_layer(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
@@ -573,6 +583,8 @@ def solve(
         )
         # Units: current_units
         streams[name] = g.astype(dtype, copy=False)
+        # Units: currents_units / device.length_units
+        currents[name] = J.astype(dtype, copy=False)
         # Units: current_units / device.length_units
         fields[name] = total_field.astype(dtype, copy=False)
         screening_fields[name] = screening_field.astype(dtype, copy=False)
@@ -580,6 +592,7 @@ def solve(
     solution = Solution(
         device=device,
         streams=streams,
+        current_densities=currents,
         fields={
             # Units: field_units
             layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
@@ -698,7 +711,7 @@ def solve(
                         f"Calculating {name} response to applied field and "
                         f"screening field from other layers ({i+1}/{iterations})."
                     )
-                    g, total_field, screening_field = solve_layer(
+                    g, J, total_field, screening_field = solve_layer(
                         device=device,
                         layer=name,
                         applied_field=new_layer_fields[name],
@@ -714,12 +727,15 @@ def solve(
                     # Units: current_units
                     streams[name] = g.astype(dtype, copy=False)
                     # Units: current_units / device.length_units
+                    currents[name] = J.astype(dtype, copy=False)
+                    # Units: current_units / device.length_units
                     fields[name] = total_field.astype(dtype, copy=False)
                     screening_fields[name] = screening_field.astype(dtype, copy=False)
 
                 solution = Solution(
                     device=device,
                     streams=streams,
+                    current_densities=currents,
                     fields={
                         # Units: field_units
                         layer: (field / field_conversion_magnitude).astype(

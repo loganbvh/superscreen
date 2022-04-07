@@ -79,6 +79,7 @@ class Solution(object):
     Args:
         device: The ``Device`` that was solved
         streams: A dict of ``{layer_name: stream_function}``
+        current_densities: A dict of ``{layer_name: current_density}``
         fields: A dict of ``{layer_name: total_field}``
         screening_fields: A dict of ``{layer_name: screening_field}``
         applied_field: The function defining the applied field
@@ -94,6 +95,7 @@ class Solution(object):
         *,
         device: Device,
         streams: Dict[str, np.ndarray],
+        current_densities: Dict[str, np.ndarray],
         fields: Dict[str, np.ndarray],
         screening_fields: Dict[str, np.ndarray],
         applied_field: Callable,
@@ -107,6 +109,7 @@ class Solution(object):
     ):
         self.device = device.copy(with_arrays=True, copy_arrays=False)
         self.streams = streams
+        self.current_densities = current_densities
         self.fields = fields
         self.applied_field = applied_field
         self.screening_fields = screening_fields
@@ -161,7 +164,7 @@ class Solution(object):
 
         Args:
             dataset: Name of the dataset to interpolate
-                (one of "streams", "fields", or "screening_fields", "current_density").
+                (one of "streams", "fields", or "screening_fields", "current_densities").
             layers: Name(s) of the layer(s) for which to interpolate results.
             grid_shape: Shape of the desired rectangular grid. If a single integer
                 N is given, then the grid will be square, shape = (N, N).
@@ -171,10 +174,10 @@ class Solution(object):
         Returns:
             x grid, y grid, dict of interpolated data for each layer
         """
-        valid_data = ("streams", "fields", "screening_fields", "current_density")
+        valid_data = ("streams", "fields", "screening_fields", "current_densities")
         if dataset not in valid_data:
             raise ValueError(f"Expected one of {', '.join(valid_data)}, not {dataset}.")
-        if dataset == "current_density":
+        if dataset == "current_densities":
             return self.grid_current_density(
                 layers=layers,
                 grid_shape=grid_shape,
@@ -752,6 +755,7 @@ class Solution(object):
             save_npz(
                 os.path.join(directory, path),
                 streams=self.streams[layer],
+                current_densities=self.current_densities[layer],
                 fields=self.fields[layer],
                 screening_fields=self.screening_fields[layer],
             )
@@ -814,6 +818,7 @@ class Solution(object):
 
         # Load arrays
         streams = {}
+        current_densities = {}
         fields = {}
         screening_fields = {}
         array_paths = info.pop("arrays")
@@ -821,6 +826,7 @@ class Solution(object):
             layer = path.replace("_arrays.npz", "")
             with np.load(os.path.join(directory, path)) as arrays:
                 streams[layer] = arrays["streams"]
+                current_densities[layer] = arrays["current_densities"]
                 fields[layer] = arrays["fields"]
                 screening_fields[layer] = arrays["screening_fields"]
 
@@ -836,6 +842,7 @@ class Solution(object):
         solution = cls(
             device=device,
             streams=streams,
+            current_densities=current_densities,
             fields=fields,
             screening_fields=screening_fields,
             applied_field=applied_field,
@@ -883,6 +890,9 @@ class Solution(object):
         # Then check the arrays, which will take longer
         for name, array in self.streams.items():
             if not np.allclose(array, other.streams[name]):
+                return False
+        for name, array in self.current_densities.items():
+            if not np.allclose(array, other.current_densities[name]):
                 return False
         for name, array in self.fields.items():
             if not np.allclose(array, other.fields[name]):
