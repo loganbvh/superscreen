@@ -519,3 +519,21 @@ def test_gradient_vertices(device_with_mesh, poly_degree):
     assert_consistent_polynomial(y, dfx_dy, 0 * poly_coeffs)
     assert_consistent_polynomial(x, dfy_dx, 0 * poly_coeffs)
     assert_consistent_polynomial(y, dfy_dy, poly_coeffs)
+
+    grad = np.stack([Gx.toarray(), Gy.toarray()], axis=1)
+
+    dfx = grad @ fx
+    dfx_dx = dfx[:, 0]
+    dfx_dy = dfx[:, 1]
+
+    dfy = grad @ fy
+    dfy_dx = dfy[:, 0]
+    dfy_dy = dfy[:, 1]
+
+    for array in [dfx_dx, dfx_dy, dfy_dx, dfy_dy]:
+        assert array.shape == (points.shape[0],)
+
+    assert_consistent_polynomial(x, dfx_dx, poly_coeffs)
+    assert_consistent_polynomial(y, dfx_dy, 0 * poly_coeffs)
+    assert_consistent_polynomial(x, dfy_dx, 0 * poly_coeffs)
+    assert_consistent_polynomial(y, dfy_dy, poly_coeffs)
