@@ -301,7 +301,10 @@ def solve_layer(
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
 
+    inhomogeneous = True
+
     if inhomogeneous:
+        # Shape (2, points.shape[0])
         grad_Lambda = grad @ Lambda
 
     # Set the boundary conditions for all holes:
@@ -327,10 +330,10 @@ def solve_layer(
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
         if inhomogeneous:
-            # grad_Lambda has shape (points.shape[0], 2)
-            # grad has shale (points.shape[0], 2, points.shape[0])
+            # grad_Lambda has shape (2, points.shape[0])
+            # grad has shape (2, points.shape[0], points.shape[0])
             grad_Lambda_term = -np.einsum(
-                "jk, ijk -> ik", grad_Lambda[ix, :].T, grad[:, :, ix]
+                "ik, ijk -> jk", grad_Lambda[:, ix], grad[:, :, ix]
             )
         else:
             grad_Lambda_term = 0
@@ -358,9 +361,9 @@ def solve_layer(
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         if inhomogeneous:
             grad_Lambda_term = -np.einsum(
-                "ij, ijk -> ik",
-                grad_Lambda[ix1d, :],
-                grad[np.ix_(ix1d, [True, True], ix1d)],
+                "ik, ijk -> jk",
+                grad_Lambda[:, ix1d],
+                grad[np.ix_([True, True], ix1d, ix1d)],
             )
         else:
             grad_Lambda_term = 0
@@ -395,8 +398,8 @@ def solve_layer(
             # Eq. 28 in [Brandt]
             g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
-    Gx = grad[:, 0, :]
-    Gy = grad[:, 1, :]
+    Gx = grad[0]
+    Gy = grad[1]
     J = np.stack([Gy @ g, -Gx @ g], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
     # Equivalent to screening_field = np.einsum("ij,j -> i", Q, weights * g)
@@ -494,7 +497,7 @@ def solve(
         gradx = gradx.toarray().astype(dtype, copy=False)
     if sp.issparse(grady):
         grady = grady.toarray().astype(dtype, copy=False)
-    grad = np.stack([gradx, grady], axis=1)
+    grad = np.stack([gradx, grady], axis=0)
 
     solutions = []
 
