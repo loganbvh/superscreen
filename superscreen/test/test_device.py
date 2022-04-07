@@ -1,6 +1,7 @@
 import copy
 import pickle
 import tempfile
+import contextlib
 
 import pytest
 import numpy as np
@@ -385,7 +386,7 @@ def test_make_mesh(device, min_points, optimesh_steps, weight_method):
     if weight_method == "invalid":
         context = pytest.raises(ValueError)
     else:
-        context = sc.io.NullContextManager()
+        context = contextlib.nullcontext()
 
     with context:
         device.make_mesh(

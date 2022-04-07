@@ -2,6 +2,7 @@ import os
 import logging
 import tempfile
 import itertools
+import contextlib
 from collections import defaultdict
 from typing import (
     Union,
@@ -20,7 +21,6 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
-from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -546,6 +546,8 @@ def solve(
         layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1]).astype(
             dtype, copy=False
         )
+        if np.any(layer_Lambdas[name] < 0):
+            raise ValueError(f"Negative Lambda in layer '{name}'.")
 
     vortices_by_layer = defaultdict(list)
     for vortex in vortices:
@@ -643,7 +645,7 @@ def solve(
         else:
             # Cache kernels in memory (much faster than saving to/loading from disk).
             cache_kernels_to_disk = False
-            context = NullContextManager()
+            context = contextlib.nullcontext()
         with context as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer

@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
-from contextlib import contextmanager
+import contextlib
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +12,7 @@ import pytest
 import superscreen as sc
 
 
-@contextmanager
+@contextlib.contextmanager
 def make_tempdir(**kwargs):
     tmp = tempfile.mkdtemp(**kwargs)
     try:
@@ -359,7 +359,7 @@ def test_fluxoid_simply_connected(
         # The polygon goes outside of the film -> raise ValueError
         context = pytest.raises(ValueError)
     else:
-        context = sc.io.NullContextManager()
+        context = contextlib.nullcontext()
 
     with context:
         fluxoid_dict = solution1.polygon_fluxoid(

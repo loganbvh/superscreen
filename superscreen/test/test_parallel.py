@@ -1,5 +1,6 @@
 import os
 import tempfile
+import contextlib
 
 import pytest
 import ray
@@ -87,7 +88,7 @@ def test_solve_many(
     if save:
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = sc.io.NullContextManager()
+        save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_serial, paths_serial = sc.solve_many(
             device=device,
@@ -130,7 +131,7 @@ def test_solve_many(
         save_context.cleanup()
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = sc.io.NullContextManager()
+        save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_mp, paths_mp = sc.solve_many(
             device=device,
@@ -174,7 +175,7 @@ def test_solve_many(
         save_context.cleanup()
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = sc.io.NullContextManager()
+        save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_ray, paths_ray = sc.solve_many(
             device=device,
