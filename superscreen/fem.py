@@ -340,8 +340,9 @@ def gradient_triangles(
     """
     if triangle_areas is None:
         triangle_areas = areas(points, triangles)
+    # Shape (triangles.shape[0], 3, 2)
     xy = points[triangles]
-    edges = np.roll(xy, 2, -2) - np.roll(xy, 1, -2)
+    edges = np.roll(xy, 2, axis=1) - np.roll(xy, 1, axis=1)
     # Rotate edges clockwise by 90 degrees:
     # +x --> -y, +y --> +x
     edges_rot = np.empty_like(edges)
@@ -349,19 +350,19 @@ def gradient_triangles(
     edges_rot[:, :, 1] = -edges[:, :, 0]
 
     tri_data = edges_rot / (2 * triangle_areas[:, np.newaxis, np.newaxis])
-    shape = (triangles.shape[0], points.shape[0])
     tri_data = tri_data.reshape(-1, 2).T
-    # [0, 0, 0, 1, 1, 1, ...]
-    ii = np.array([[i] * 3 for i in range(len(triangles))]).ravel()
-    # [t[0,0], t[0,1], t[0,2], t[1,0], t[1,1], t[1,2], ...]
-    jj = triangles.ravel()
+    shape = (triangles.shape[0], points.shape[0])
+    # Row indices: [0, 0, 0, 1, 1, 1, ...]
+    row_ind = np.array([[i] * 3 for i in range(len(triangles))]).ravel()
+    # Column indices: [t[0,0], t[0,1], t[0,2], t[1,0], t[1,1], t[1,2], ...]
+    col_ind = triangles.ravel()
     Gx = sp.csr_matrix(
-        (tri_data[0], (ii, jj)),
+        (tri_data[0], (row_ind, col_ind)),
         shape=shape,
         dtype=float,
     )
     Gy = sp.csr_matrix(
-        (tri_data[1], (ii, jj)),
+        (tri_data[1], (row_ind, col_ind)),
         shape=shape,
         dtype=float,
     )
@@ -393,16 +394,16 @@ def gradient_vertices(
     """
     if triangle_areas is None:
         triangle_areas = areas(points, triangles)
-    V = points.shape[0]
+    n = points.shape[0]
     Gx, Gy = gradient_triangles(points, triangles, triangle_areas=triangle_areas)
     # Use numpy arrays for fast slicing even though the operators are sparse.
     Gx = Gx.toarray()
     Gy = Gy.toarray()
-    gx = np.zeros((V, V), dtype=float)
-    gy = np.zeros((V, V), dtype=float)
+    gx = np.zeros((n, n), dtype=float)
+    gy = np.zeros((n, n), dtype=float)
     # This loop is difficult to vectorize because different vertices
     # have different numbers of adjacent triangles.
-    for i in range(V):
+    for i in range(n):
         adjacent_triangles, _ = np.where(np.isin(triangles, i))
         A = triangle_areas[adjacent_triangles]
         A /= np.sum(A)
