@@ -239,11 +239,24 @@ def device_with_mesh():
         sc.Polygon("ring_hole", layer="layer1", points=sc.geometry.circle(2)),
     ]
 
-    device = sc.Device("device", layers=layers, films=films, holes=holes)
-    assert device.abstract_regions == {}
+    abstract_regions = [
+        sc.Polygon(
+            "bounding_box",
+            layer="layer0",
+            points=sc.geometry.box(12),
+        )
+    ]
+
+    device = sc.Device(
+        "device",
+        layers=layers,
+        films=films,
+        holes=holes,
+        abstract_regions=abstract_regions,
+    )
     assert device.vertex_distances is None
     assert device.triangle_areas is None
-    device.make_mesh(min_points=2000)
+    device.make_mesh(min_points=3000)
     assert isinstance(device.vertex_distances, np.ndarray)
     assert isinstance(device.triangle_areas, np.ndarray)
     centroids = sc.fem.centroids(device.points, device.triangles)
@@ -431,3 +444,78 @@ def test_copy_arrays(device_with_mesh, dense):
             assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
         else:
             assert np.array_equal(val, copied_arrays[key])
+
+
+def poly_derivative(coeffs):
+    """Given polynomial coefficients (c0, c1, c2, ...) specifying a polynomial
+    y = c0 * x**0 + c1 * x**1 + c2 * x**2 + ..., returns the coefficients of the first
+    derivative of y: (c1, 2 * c2, ...)
+    """
+    return tuple(c * (n + 1) for n, c in enumerate(coeffs[1:])) + (0,)
+
+
+def assert_consistent_polynomial(xs, ys, coeffs, rtol=1e-3, atol=5e-3):
+    deg = len(coeffs) - 1
+    fit_coeffs = np.polyfit(xs, ys, deg)[::-1]
+    poly_coeffs = np.array(poly_derivative(coeffs))
+    assert np.allclose(fit_coeffs, poly_coeffs, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("poly_degree", [0, 1, 2])
+def test_gradient_triangles(device_with_mesh, poly_degree):
+    points = device_with_mesh.points
+    triangles = device_with_mesh.triangles
+
+    x, y = points[:, 0], points[:, 1]
+    centroids = sc.fem.centroids(points, triangles)
+    xt, yt = centroids[:, 0], centroids[:, 1]
+
+    Gx, Gy = sc.fem.gradient_triangles(points, triangles)
+
+    rng = np.random.default_rng(seed=poly_degree)
+    poly_coeffs = 2 * (rng.random(size=poly_degree + 1) - 0.5)
+
+    fx = sum(c * x**n for n, c in enumerate(poly_coeffs))
+    fy = sum(c * y**n for n, c in enumerate(poly_coeffs))
+
+    dfx_dx = Gx @ fx
+    dfx_dy = Gy @ fx
+    dfy_dx = Gx @ fy
+    dfy_dy = Gy @ fy
+
+    for array in [dfx_dx, dfx_dy, dfy_dx, dfy_dy]:
+        assert array.shape == (triangles.shape[0],)
+
+    assert_consistent_polynomial(xt, dfx_dx, poly_coeffs)
+    assert_consistent_polynomial(yt, dfx_dy, 0 * poly_coeffs)
+    assert_consistent_polynomial(xt, dfy_dx, 0 * poly_coeffs)
+    assert_consistent_polynomial(yt, dfy_dy, poly_coeffs)
+
+
+@pytest.mark.parametrize("poly_degree", [0, 1, 2])
+def test_gradient_vertices(device_with_mesh, poly_degree):
+    points = device_with_mesh.points
+    triangles = device_with_mesh.triangles
+
+    x, y = points[:, 0], points[:, 1]
+
+    Gx, Gy = sc.fem.gradient_vertices(points, triangles)
+
+    rng = np.random.default_rng(seed=poly_degree)
+    poly_coeffs = 2 * (rng.random(size=poly_degree + 1) - 0.5)
+
+    fx = sum(c * x**n for n, c in enumerate(poly_coeffs))
+    fy = sum(c * y**n for n, c in enumerate(poly_coeffs))
+
+    dfx_dx = Gx @ fx
+    dfx_dy = Gy @ fx
+    dfy_dx = Gx @ fy
+    dfy_dy = Gy @ fy
+
+    for array in [dfx_dx, dfx_dy, dfy_dx, dfy_dy]:
+        assert array.shape == (points.shape[0],)
+
+    assert_consistent_polynomial(x, dfx_dx, poly_coeffs)
+    assert_consistent_polynomial(y, dfx_dy, 0 * poly_coeffs)
+    assert_consistent_polynomial(x, dfy_dx, 0 * poly_coeffs)
+    assert_consistent_polynomial(y, dfy_dy, poly_coeffs)
