@@ -538,3 +538,24 @@ def test_gradient_vertices(device_with_mesh, poly_degree):
     assert_consistent_polynomial(y, dfx_dy, 0 * poly_coeffs)
     assert_consistent_polynomial(x, dfy_dx, 0 * poly_coeffs)
     assert_consistent_polynomial(y, dfy_dy, poly_coeffs)
+
+    poly_coeffs2 = 2 * (rng.random(size=poly_degree + 2) - 0.5)
+    gx = sum(c * x**n for n, c in enumerate(poly_coeffs2))
+    gy = sum(c * y**n for n, c in enumerate(poly_coeffs2))
+
+    ix1d = np.arange(1000, dtype=int)
+    ix3d = np.ix_([True, True], ix1d, ix1d)
+
+    for f, g in [(fx, gx), (fx, gy), (fy, gx), (fy, gy)]:
+        assert grad.shape == (2, points.shape[0], points.shape[0])
+        df = grad[ix3d] @ f[ix1d]
+        assert df.shape == (2, ix1d.shape[0])
+        dg = grad[ix3d] @ g[ix1d]
+        assert dg.shape == (2, ix1d.shape[0])
+        df_dot_dg1 = np.einsum("ij, ij -> j", df, dg)
+        assert df_dot_dg1.shape == (ix1d.shape[0],)
+        df_dot_grad = np.einsum("ij, ijk -> jk", df, grad[ix3d])
+        assert df_dot_grad.shape == (ix1d.shape[0], ix1d.shape[0])
+        df_dot_dg2 = df_dot_grad @ g[ix1d]
+        assert df_dot_dg2.shape == (ix1d.shape[0],)
+        assert np.allclose(df_dot_dg1, df_dot_dg2)

@@ -50,8 +50,8 @@ def two_rings():
     outer_radius = 5
 
     layers = [
-        sc.Layer("layer0", Lambda=0.5, z0=0),
-        sc.Layer("layer1", Lambda=0.5, z0=1),
+        sc.Layer("layer0", Lambda=0, z0=0),
+        sc.Layer("layer1", Lambda=0, z0=1),
     ]
 
     films = [

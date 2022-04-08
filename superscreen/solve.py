@@ -291,8 +291,6 @@ def solve_layer(
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
 
-    inhomogeneous = np.diff(Lambda).any()
-
     # Identify holes in the superconductor
     hole_indices = {}
     in_hole = np.zeros(points.shape[0], dtype=bool)
@@ -300,12 +298,6 @@ def solve_layer(
         ix = hole.contains_points(points)
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
-
-    inhomogeneous = True
-
-    if inhomogeneous:
-        # Shape (2, points.shape[0])
-        grad_Lambda = grad @ Lambda
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -324,19 +316,23 @@ def solve_layer(
             current = current.to(current_units).magnitude
 
         ix = hole_indices[name]
+        ix3d = np.ix_([True, True], np.ones(g.shape[0], dtype=bool), ix)
         g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
-        if inhomogeneous:
-            # grad_Lambda has shape (2, points.shape[0])
-            # grad has shape (2, points.shape[0], points.shape[0])
-            grad_Lambda_term = -np.einsum(
-                "ik, ijk -> jk", grad_Lambda[:, ix], grad[:, :, ix]
-            )
-        else:
-            grad_Lambda_term = 0
+
+        # grad_Lambda has shape (2, points.shape[0])
+        # grad has shape (2, points.shape[0], points.shape[0])
+        # grad_Lambda_term.shape should be (points.shape[0], ix.shape[0])
+        grad_Lambda = grad[ix3d] @ Lambda[ix]
+        grad_Lambda_term = -np.einsum(
+            "ij, ijk -> jk",
+            grad_Lambda,
+            grad[ix3d],
+        )
+
         Ha_eff += -current * np.sum(
             (Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix] + grad_Lambda_term),
             axis=1,
@@ -355,18 +351,18 @@ def solve_layer(
         ix1d = np.logical_and(film.contains_points(points), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
+        ix3d = np.ix_([True, True], ix1d, ix1d)
 
         # Form the linear system for the film:
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        if inhomogeneous:
-            grad_Lambda_term = -np.einsum(
-                "ik, ijk -> jk",
-                grad_Lambda[:, ix1d],
-                grad[np.ix_([True, True], ix1d, ix1d)],
-            )
-        else:
-            grad_Lambda_term = 0
+        grad_Lambda = grad[ix3d] @ Lambda[ix1d]
+        grad_Lambda_term = -np.einsum(
+            "ij, ijk -> jk",
+            grad_Lambda,
+            grad[ix3d],
+        )
+
         A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] + grad_Lambda_term
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
