@@ -222,17 +222,15 @@ def calculate_weights(
     method = method.lower()
     if method == "uniform":
         # Uniform weights are just the adjacency matrix.
-        weights = adjacency_matrix(triangles, sparse=sparse).astype(float)
-    elif method == "inv_euclidean":
-        weights = weights_inv_euclidean(points, triangles, sparse=sparse)
-    elif method == "half_cotangent":
-        weights = weights_half_cotangent(points, triangles, sparse=sparse)
-    else:
-        raise ValueError(
-            f"Unknown method ({method}). "
-            f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
-        )
-    return weights
+        return adjacency_matrix(triangles, sparse=sparse).astype(float)
+    if method == "inv_euclidean":
+        return weights_inv_euclidean(points, triangles, sparse=sparse)
+    if method == "half_cotangent":
+        return weights_half_cotangent(points, triangles, sparse=sparse)
+    raise ValueError(
+        f"Unknown method ({method}). "
+        f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
+    )
 
 
 def mass_matrix(
@@ -405,8 +403,15 @@ def gradient_vertices(
     # have different numbers of adjacent triangles.
     for i in range(n):
         adjacent_triangles, _ = np.where(np.isin(triangles, i))
-        A = triangle_areas[adjacent_triangles]
-        A /= np.sum(A)
-        gx[i, :] = np.einsum("i, ij -> j", A, Gx[adjacent_triangles, :])
-        gy[i, :] = np.einsum("i, ij -> j", A, Gy[adjacent_triangles, :])
+        t = adjacent_triangles
+        # Weight each triangle adjacent to vertex i by its angle at the vertex.
+        vec1 = points[triangles[t, 1]] - points[triangles[t, 0]]
+        vec2 = points[triangles[t, 2]] - points[triangles[t, 0]]
+        weights = np.arccos(
+            np.sum(vec1 * vec2, axis=1)
+            / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
+        )
+        weights /= weights.sum()
+        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
+        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])
     return sp.csr_matrix(gx), sp.csr_matrix(gy)
