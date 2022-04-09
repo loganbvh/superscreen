@@ -399,7 +399,7 @@ class Solution(object):
             area = areas[ix]
             # Convert field to B = mu0 * H
             field = convert_field(field, "mT", ureg=ureg)
-            flux = np.einsum("i,i -> ", field, area).to(new_units)
+            flux = np.einsum("i, i -> ", field, area).to(new_units)
             if with_units:
                 fluxes[name] = flux
             else:
@@ -677,7 +677,7 @@ class Solution(object):
                 ).astype(dtype, copy=False)
                 # tri_areas has units of [length]^2
                 # So here Hz is in units of [current] * [length]^(-1)
-                Hz = np.einsum("ij,j -> i", Q, areas * g, dtype=dtype)
+                Hz = np.einsum("ij, j -> i", Q, areas * g, dtype=dtype)
             if vector:
                 if np.any(dz == 0):
                     raise ValueError(
@@ -690,7 +690,7 @@ class Solution(object):
                 Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
                     dtype, copy=False
                 )
-                Hx = np.einsum("ij,j -> i", Q, areas * g)
+                Hx = np.einsum("ij, j -> i", Q, areas * g)
 
                 # Pairwise difference between all y positions
                 d = np.subtract.outer(positions[:, 1], points[:, 1], dtype=dtype)
@@ -698,7 +698,7 @@ class Solution(object):
                 Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
                     dtype, copy=False
                 )
-                Hy = np.einsum("ij,j -> i", Q, areas * g, dtype=dtype)
+                Hy = np.einsum("ij, j -> i", Q, areas * g, dtype=dtype)
 
                 H = np.stack([Hx, Hy, Hz], axis=1)
             else:
