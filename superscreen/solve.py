@@ -160,7 +160,7 @@ def Q_matrix(
     q = q.copy()
     np.fill_diagonal(q, 0)
     Q = -q
-    np.fill_diagonal(Q, (C + np.einsum("ij,j -> i", q, weights)) / weights)
+    np.fill_diagonal(Q, (C + np.einsum("ij, j -> i", q, weights)) / weights)
     if dtype is not None:
         Q = Q.astype(dtype, copy=False)
     return Q
@@ -367,7 +367,7 @@ def solve_layer(
             grad_Lambda = 0
 
         Ha_eff += -current * np.sum(
-            (Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix] - grad_Lambda),
+            (Q[:, ix] * weights[ix].T - Lambda[ix].T * Del2[:, ix] - grad_Lambda),
             axis=1,
         )
     film_to_vortices = defaultdict(list)
@@ -384,24 +384,20 @@ def solve_layer(
         ix1d = np.logical_and(film.contains_points(points), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
-        # ix3d = np.ix_([True, True], ix1d, ix1d)
 
         # # Form the linear system for the film:
-        # # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
+        # # gf = -K @ h, where K = inv(Q * w - Lambda * Del2 - grad_Lambda_term) = inv(A)
         # # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-
         if inhomogeneous:
             grad_Lambda = grad_Lambda_term[ix2d]
         else:
             grad_Lambda = 0
-
         A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] - grad_Lambda
-
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
-
         g[ix1d] = gf
+
         if check_inversion:
             # Validate solution
             hsim = -A @ gf
@@ -432,7 +428,7 @@ def solve_layer(
     J = np.stack([Gy @ g, -Gx @ g], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
     screening_field = Q @ (weights[:, 0] * g)
-    # Equivalent to the following, but much faster
+    # Above is equivalent to the following, but much faster
     # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
     total_field = Hz_applied + screening_field
     return g, J, total_field, screening_field
@@ -737,7 +733,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     other_screening_fields[layer.name] += np.einsum(
-                        "ij,j -> i", q, weights * g, dtype=dtype
+                        "ij, j -> i", q, weights * g, dtype=dtype
                     )
                     del q, g
                 # Solve again with the screening fields from all layers.
