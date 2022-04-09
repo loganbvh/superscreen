@@ -503,11 +503,10 @@ class Solution(object):
             Lambda = device.layers[layer].Lambda
             if not callable(Lambda):
                 Lambda = Constant(Lambda)
-            Lambda_poly = Lambda(points[:, 0], points[:, 1])[1:]
+            Lambda_poly = Lambda(points[:, 0], points[:, 1])[:-1]
             # \oint_{poly}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
-            int_J = np.trapz(
-                Lambda_poly * np.sum(J_poly * np.diff(points, axis=0), axis=1)
-            )
+            dl = np.diff(points, axis=0)
+            int_J = np.trapz(Lambda_poly * np.sum(J_poly * dl, axis=1))
             int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
             supercurrent_part = (ureg("mu_0") * int_J).to(units)
             if not with_units:

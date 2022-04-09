@@ -411,6 +411,8 @@ def gradient_vertices(
             np.sum(vec1 * vec2, axis=1)
             / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
         )
+        assert (weights > 0).all()
+        # weights = triangle_areas[t]
         weights /= weights.sum()
         gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
         gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])

@@ -33,6 +33,31 @@ Lambda_str = "\u039b"
 logger = logging.getLogger(__name__)
 
 
+class LambdaInfo(object):
+    def __init__(
+        self,
+        *,
+        layer: str,
+        Lambda: np.ndarray,
+        london_lambda: Optional[np.ndarray] = None,
+        thickness: Optional[float] = None,
+    ):
+        self.layer = layer
+        self.Lambda = Lambda
+        self.london_lambda = london_lambda
+        self.thickness = thickness
+        self.inhomogeneous = np.diff(self.Lambda).any()
+        if self.inhomogeneous:
+            if self.london_lambda is None or self.thickness is None:
+                raise ValueError(
+                    f"Layer '{layer}': Inhomogeneous penetration depth must be "
+                    f"defined in terms of london_lambda and thickness."
+                )
+            assert np.array_equal(self.Lambda, self.london_lambda**2 / self.thickness)
+        if np.any(self.Lambda < 0):
+            raise ValueError(f"Negative Lambda in layer '{layer}'.")
+
+
 def q_matrix(
     points: np.ndarray, dtype: Optional[Union[str, np.dtype]] = None
 ) -> np.ndarray:
@@ -239,7 +264,7 @@ def solve_layer(
     weights: np.ndarray,
     Del2: np.ndarray,
     grad: np.ndarray,
-    Lambda: np.ndarray,
+    Lambda_info: LambdaInfo,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
@@ -254,7 +279,7 @@ def solve_layer(
         weights: The Device's weight vector.
         Del2: The Device's Laplacian operator.
         grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
-        Lambda: An array defining the layer's effective penetration depth, Lambda(x, y).
+        Lambda_info: A LambdaInfo instance defining Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
@@ -284,12 +309,26 @@ def solve_layer(
 
     Q = device.Q
     points = device.points
+    if weights.ndim == 1:
+        # Shape (n, ) --> (n, 1)
+        weights = weights[:, np.newaxis]
 
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
+
+    inhomogeneous = Lambda_info.inhomogeneous
+    # Shape (n, ) --> (n, 1)
+    Lambda = Lambda_info.Lambda[:, np.newaxis]
+    if inhomogeneous:
+        london_lambda = Lambda_info.london_lambda
+        d = Lambda_info.thickness
+
+        grad_Lambda_term = (2 / d) * np.einsum(
+            "j, ij, ijk -> jk", london_lambda, (grad @ london_lambda), grad
+        )
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -316,25 +355,19 @@ def solve_layer(
             current = current.to(current_units).magnitude
 
         ix = hole_indices[name]
-        ix3d = np.ix_([True, True], np.ones(g.shape[0], dtype=bool), ix)
         g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
 
-        # grad_Lambda has shape (2, points.shape[0])
-        # grad has shape (2, points.shape[0], points.shape[0])
-        # grad_Lambda_term.shape should be (points.shape[0], ix.shape[0])
-        grad_Lambda = grad[ix3d] @ Lambda[ix]
-        grad_Lambda_term = -np.einsum(
-            "ij, ijk -> jk",
-            grad_Lambda,
-            grad[ix3d],
-        )
+        if inhomogeneous:
+            grad_Lambda = grad_Lambda_term[:, ix]
+        else:
+            grad_Lambda = 0
 
         Ha_eff += -current * np.sum(
-            (Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix] + grad_Lambda_term),
+            (Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix] - grad_Lambda),
             axis=1,
         )
     film_to_vortices = defaultdict(list)
@@ -351,19 +384,19 @@ def solve_layer(
         ix1d = np.logical_and(film.contains_points(points), np.logical_not(in_hole))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
-        ix3d = np.ix_([True, True], ix1d, ix1d)
+        # ix3d = np.ix_([True, True], ix1d, ix1d)
 
-        # Form the linear system for the film:
-        # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
-        # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        grad_Lambda = grad[ix3d] @ Lambda[ix1d]
-        grad_Lambda_term = -np.einsum(
-            "ij, ijk -> jk",
-            grad_Lambda,
-            grad[ix3d],
-        )
+        # # Form the linear system for the film:
+        # # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
+        # # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
 
-        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] + grad_Lambda_term
+        if inhomogeneous:
+            grad_Lambda = grad_Lambda_term[ix2d]
+        else:
+            grad_Lambda = 0
+
+        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] - grad_Lambda
+
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
@@ -398,8 +431,9 @@ def solve_layer(
     Gy = grad[1]
     J = np.stack([Gy @ g, -Gx @ g], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    # Equivalent to screening_field = np.einsum("ij,j -> i", Q, weights * g)
-    screening_field = Q @ (weights * g)
+    screening_field = Q @ (weights[:, 0] * g)
+    # Equivalent to the following, but much faster
+    # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
     total_field = Hz_applied + screening_field
     return g, J, total_field, screening_field
 
@@ -542,11 +576,21 @@ def solve(
             )
         if isinstance(Lambda, (int, float)):
             Lambda = Constant(Lambda)
-        layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1]).astype(
+        Lambda = Lambda(device.points[:, 0], device.points[:, 1]).astype(
             dtype, copy=False
         )
-        if np.any(layer_Lambdas[name] < 0):
-            raise ValueError(f"Negative Lambda in layer '{name}'.")
+        if london_lambda is not None:
+            if isinstance(london_lambda, (int, float)):
+                london_lambda = Constant(london_lambda)
+            london_lambda = london_lambda(
+                device.points[:, 0], device.points[:, 1]
+            ).astype(dtype, copy=False)
+        layer_Lambdas[name] = LambdaInfo(
+            layer=name,
+            Lambda=Lambda,
+            london_lambda=london_lambda,
+            thickness=layer.thickness,
+        )
 
     vortices_by_layer = defaultdict(list)
     for vortex in vortices:
@@ -578,7 +622,7 @@ def solve(
             weights=weights,
             Del2=Del2,
             grad=grad,
-            Lambda=layer_Lambdas[name],
+            Lambda_info=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
         )
@@ -719,7 +763,7 @@ def solve(
                         weights=weights,
                         Del2=Del2,
                         grad=grad,
-                        Lambda=layer_Lambdas[name],
+                        Lambda_info=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
                         vortices=vortices_by_layer[name],
                         current_units=current_units,
