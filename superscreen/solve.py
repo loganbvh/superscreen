@@ -392,7 +392,7 @@ def solve_layer(
             grad_Lambda = grad_Lambda_term[ix2d]
         else:
             grad_Lambda = 0
-        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d] - grad_Lambda
+        A = Q[ix2d] * weights[ix1d].T - Lambda[ix1d].T * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)

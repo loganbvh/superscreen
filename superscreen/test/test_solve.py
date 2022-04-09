@@ -14,7 +14,7 @@ import superscreen.geometry as geo
 def device():
 
     layers = [
-        sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
+        sc.Layer("layer1", london_lambda=0.5, thickness=0.05, z0=0.5),
     ]
 
     films = [
@@ -102,7 +102,8 @@ def two_rings():
 
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
-def test_current_value(device, return_solutions, save, tmp_path):
+@pytest.mark.parametrize("inhomogeneous", [False, True])
+def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
 
     applied_field = sc.sources.ConstantField(0)
 
@@ -113,15 +114,27 @@ def test_current_value(device, return_solutions, save, tmp_path):
     # https://docs.pytest.org/en/stable/tmpdir.html
     directory = str(tmp_path) if save else None
 
-    solutions = sc.solve(
-        device=device,
-        applied_field=applied_field,
-        circulating_currents=circulating_currents,
-        field_units="mT",
-        iterations=1,
-        return_solutions=return_solutions,
-        directory=directory,
-    )
+    old_lambda = device.layers["layer1"].london_lambda
+    try:
+        if inhomogeneous:
+
+            def linear(x, y, offset=0):
+                return offset + (y - y.min()) + (x - x.min())
+
+            device.layers["layer1"].london_lambda = sc.Parameter(
+                linear, offset=old_lambda
+            )
+        solutions = sc.solve(
+            device=device,
+            applied_field=applied_field,
+            circulating_currents=circulating_currents,
+            field_units="mT",
+            iterations=1,
+            return_solutions=return_solutions,
+            directory=directory,
+        )
+    finally:
+        device.layers["layer1"].london_lambda = old_lambda
     if directory is not None:
         assert os.path.isdir(directory)
         assert len(os.listdir(directory)) == 1
