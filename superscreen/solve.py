@@ -46,7 +46,10 @@ class LambdaInfo(object):
         self.Lambda = Lambda
         self.london_lambda = london_lambda
         self.thickness = thickness
-        self.inhomogeneous = np.diff(self.Lambda).any()
+        self.inhomogeneous = (
+            np.ptp(self.Lambda) / max(np.min(np.abs(self.Lambda)), np.finfo(float).eps)
+            > 1e-6
+        )
         if self.london_lambda is not None:
             assert self.thickness is not None
             assert np.allclose(self.Lambda, self.london_lambda**2 / self.thickness)
