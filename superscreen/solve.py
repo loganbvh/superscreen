@@ -47,13 +47,9 @@ class LambdaInfo(object):
         self.london_lambda = london_lambda
         self.thickness = thickness
         self.inhomogeneous = np.diff(self.Lambda).any()
-        if self.inhomogeneous:
-            if self.london_lambda is None or self.thickness is None:
-                raise ValueError(
-                    f"Layer '{layer}': Inhomogeneous penetration depth must be "
-                    f"defined in terms of london_lambda and thickness."
-                )
-            assert np.array_equal(self.Lambda, self.london_lambda**2 / self.thickness)
+        if self.london_lambda is not None:
+            assert self.thickness is not None
+            assert np.allclose(self.Lambda, self.london_lambda**2 / self.thickness)
         if np.any(self.Lambda < 0):
             raise ValueError(f"Negative Lambda in layer '{layer}'.")
 
@@ -323,12 +319,7 @@ def solve_layer(
     # Shape (n, ) --> (n, 1)
     Lambda = Lambda_info.Lambda[:, np.newaxis]
     if inhomogeneous:
-        london_lambda = Lambda_info.london_lambda
-        d = Lambda_info.thickness
-
-        grad_Lambda_term = (2 / d) * np.einsum(
-            "j, ij, ijk -> jk", london_lambda, (grad @ london_lambda), grad
-        )
+        grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -367,7 +358,7 @@ def solve_layer(
             grad_Lambda = 0
 
         Ha_eff += -current * np.sum(
-            (Q[:, ix] * weights[ix].T - Lambda[ix].T * Del2[:, ix] - grad_Lambda),
+            (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
             axis=1,
         )
     film_to_vortices = defaultdict(list)
@@ -392,7 +383,7 @@ def solve_layer(
             grad_Lambda = grad_Lambda_term[ix2d]
         else:
             grad_Lambda = 0
-        A = Q[ix2d] * weights[ix1d].T - Lambda[ix1d].T * Del2[ix2d] - grad_Lambda
+        A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
@@ -526,12 +517,10 @@ def solve(
     grad = np.stack([gradx, grady], axis=0)
 
     solutions = []
-
     streams = {}
     currents = {}
     fields = {}
     screening_fields = {}
-
     applied_field = applied_field or ConstantField(0)
     vortices = vortices or []
 

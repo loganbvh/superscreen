@@ -499,14 +499,14 @@ class Solution(object):
 
             # Compute the supercurrent part of the fluxoid:
             # \oint_{\\partial poly} \mu_0\Lambda \vec{J}\cdot\mathrm{d}\vec{r}
-            J_poly = J_polys[layer][:-1]
+            J_poly = J_polys[layer]
             Lambda = device.layers[layer].Lambda
             if not callable(Lambda):
                 Lambda = Constant(Lambda)
-            Lambda_poly = Lambda(points[:, 0], points[:, 1])[:-1]
+            Lambda_poly = Lambda(points[:, 0], points[:, 1])
             # \oint_{poly}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
             dl = np.diff(points, axis=0)
-            int_J = np.trapz(Lambda_poly * np.sum(J_poly * dl, axis=1))
+            int_J = np.trapz(Lambda_poly[:-1] * np.sum(J_poly[:-1] * dl, axis=1))
             int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
             supercurrent_part = (ureg("mu_0") * int_J).to(units)
             if not with_units:
