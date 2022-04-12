@@ -50,6 +50,12 @@ class LambdaInfo(object):
             np.ptp(self.Lambda) / max(np.min(np.abs(self.Lambda)), np.finfo(float).eps)
             > 1e-6
         )
+        if self.inhomogeneous:
+            logger.warning(
+                f"Inhomogeneous {Lambda_str} in layer '{self.layer}', "
+                f"which violates the assumptions of the London model. "
+                f"Results may not be reliable."
+            )
         if self.london_lambda is not None:
             assert self.thickness is not None
             assert np.allclose(self.Lambda, self.london_lambda**2 / self.thickness)
