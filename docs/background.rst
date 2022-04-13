@@ -29,8 +29,8 @@ Model
 
 In the London model of superconductivity, the magnetic field :math:`\vec{H}(\vec{r})`
 and 3D current density :math:`\vec{j}(\vec{r})` in a superconductor with London penetration
-depth :math:`\lambda(\vec{r})` obey the second London equation:
-:math:`\nabla\times\vec{j}(\vec{r})=-\vec{H}(\vec{r})/\lambda^2(\vec{r})`, where
+depth :math:`\lambda` obey the second London equation:
+:math:`\nabla\times\vec{j}(\vec{r})=-\vec{H}(\vec{r})/\lambda^2`, where
 :math:`\nabla=\left(\frac{\partial}{\partial x}, \frac{\partial}{\partial y}, \frac{\partial}{\partial z}\right)`.
 
 Brandt's model assumes that the current density :math:`\vec{j}` is approximately independent of :math:`z`,
@@ -43,9 +43,9 @@ reduces to
 .. math::
     :label: eq1
 
-    \nabla\times\vec{J}(x, y)=-\vec{H}(x, y)/\Lambda(x, y),
+    \nabla\times\vec{J}(x, y)=-\vec{H}(x, y)/\Lambda,
 
-where :math:`\Lambda(x, y)=\lambda^2(x, y)/d` is the effective penetration depth
+where :math:`\Lambda=\lambda^2/d` is the effective penetration depth
 of the superconducting film (equal to half the Pearl length [Pearl-APL-1964]_).
 
 .. note::
@@ -130,7 +130,7 @@ in the same plane as itself). From :eq:`eq6`, we arrive at an integral equation 
 
     H_{z,\,\mathrm{applied}}(\vec{r})
     = -\int_S\left[
-        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda\nabla^2\right
     ]g(\vec{r}')\,\mathrm{d}^2r'
 
 The goal, then, is to solve (invert) :eq:`eq7` for a given :math:`H_{z,\,\mathrm{applied}}`
@@ -152,7 +152,7 @@ such a circulating current is given by :eq:`eq7` if we set
     :label: eq8
 
     H_{z,\,\mathrm{eff},\,k}(\vec{r}) = -\int_{\mathrm{hole}\,k}[
-        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda\nabla^2
     ] I_{\mathrm{circ},\,k} \,\mathrm{d}^2r'.
 
 In this case, we modify the left-hand side of :eq:`eq7` as follows:
@@ -162,7 +162,7 @@ In this case, we modify the left-hand side of :eq:`eq7` as follows:
 
     H_{z,\,\mathrm{applied}}(\vec{r}) - \sum_k H_{z,\,\mathrm{eff},\,k}(\vec{r})
     = -\int_S\left[
-        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda(\vec{r}')\nabla^2\right
+        Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda\nabla^2\right
     ]g(\vec{r}')\,\mathrm{d}^2r'
 
 Films in multiple planes
@@ -211,8 +211,7 @@ denotes matrix multiplication, with :math:`(\mathbf{A}\mathbf{B})_{ij}=\sum_{k=1
 (:math:`\ell` being the number of columns in :math:`\mathbf{A}` and the number of
 rows in :math:`\mathbf{B}`). Column vectors are treated as matrices with
 :math:`\ell` rows and :math:`1` column. On the other hand, we denote element-wise
-multiplication with a dot: :math:`(\mathbf{A}\cdot\mathbf{B})_{ij}=A_{ij}B_{ij}` for two matrices
-and :math:`(\mathbf{A}\cdot\mathbf{v})_{ij}=A_{ij}v_{i}` for a matrix and a column vector.
+multiplication with a lower dot: :math:`(\mathbf{A}.\mathbf{B})_{ij}=A_{ij}B_{ij}`.
 :math:`\mathbf{A}^T` denotes the transpose of matrix :math:`\mathbf{A}`.
 
 The matrix version of :eq:`eq4` is:
@@ -222,7 +221,7 @@ The matrix version of :eq:`eq4` is:
 
     \underbrace{\mathbf{h}_z}_\text{total field}
     = \underbrace{\mathbf{h}_{z,\,\mathrm{applied}}}_\text{applied field}
-    + \underbrace{(\mathbf{Q}\cdot\mathbf{w}^T)\mathbf{g}}_\text{screening field}.
+    + \underbrace{(\mathbf{Q}.\mathbf{w}^T)\mathbf{g}}_\text{screening field}.
 
 The :math:`n\times n` kernel matrix :math:`\mathbf{Q}` represents the kernel function :math:`Q_z(\vec{r},\vec{r}')`
 for all points lying in the plane of the film, and the :math:`n\times 1` weight vector :math:`\mathbf{w}`,
@@ -244,7 +243,7 @@ and a vector :math:`\mathbf{C}`:
     :label: eq11
 
     Q_{ij} = (\delta_{ij}-1)q_{ij}
-    + \delta_{ij}\frac{1}{w_{ij}}\left(C_i + \sum_{l\neq i}q_{il}w_{il}\right),
+    + \delta_{ij}\frac{1}{w_{j}}\left(C_i + \sum_{l\neq i}q_{il}w_{l}\right),
 
 where :math:`\delta_{ij}` is the Kronecker delta function. The diagonal terms involving
 :math:`\mathbf{C}` are meant to work around the fact that :math:`(\mathbf{q})_{ii}` diverge
@@ -263,13 +262,12 @@ is:
 .. math::
     :label: eq13
 
-    -(\mathbf{Q}\cdot\mathbf{w}^T-\mathbf{\nabla}^2\cdot\mathbf{\Lambda}^T)\mathbf{g}
+    -(\mathbf{Q}.\mathbf{w}^T-\Lambda\mathbf{\nabla}^2)\mathbf{g}
     = \mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}
 
 (where we exclude points in the mesh lying outside of the superconducting film, but keep points
-inside holes in the film). :math:`\mathbf{\Lambda}` is either a scalar or a vector defining the
-effective penetration depth at every included vertex in the mesh, and :math:`\mathbf{\nabla}^2`
-is the :ref:`Laplace operator <laplace-operator>`, an :math:`n\times n` matrix defined such that
+inside holes in the film). :math:`\mathbf{\nabla}^2` is the :ref:`Laplace operator <laplace-operator>`,
+an :math:`n\times n` matrix defined such that
 :math:`\mathbf{\nabla}^2\mathbf{f}` computes the Laplacian :math:`\nabla^2f(x,y)` of a
 function :math:`f(x,y)` defined on the mesh.
 
@@ -277,13 +275,15 @@ function :math:`f(x,y)` defined on the mesh.
 inside a superconducting film, which can efficiently be solved (e.g. by matrix inversion)
 for the unknown vector :math:`\mathbf{g}`, the stream function inside the film. Since the stream
 function outside the film and inside holes in the film is already known, solving :eq:`eq13`
-gives us the stream function for the full mesh:
+gives us the stream function for the full mesh. Defining
+:math:`\mathbf{K} = \left(\mathbf{Q}\cdot\mathbf{w}^T-\Lambda\mathbf{\nabla}^2\right)^{-1}`, we have
+
 
 .. math::
     :label: eq14
 
     \mathbf{g} = \begin{cases}
-        \left(-[\mathbf{Q}\cdot\mathbf{w}^T-\mathbf{\nabla}^2\cdot\mathbf{\Lambda}^T]\right)^{-1}
+        -\mathbf{K}
         \left(\mathbf{h}_{z,\,\mathrm{applied}} - \sum_{\mathrm{holes}\,k}\mathbf{h}_{z,\,\mathrm{eff},\,k}\right)
             & \text{inside the film}\\
         I_{\mathrm{circ},\,k}
@@ -291,6 +291,10 @@ gives us the stream function for the full mesh:
         0
             & \text{elsewhere}
     \end{cases}
+
+If there is a vortex containing flux :math:`\Phi_j` trapped in a film at position :math:`\vec{r}_j` indexed as mesh vertex :math:`j`,
+then for each position :math:`\vec{r}_i` within that film, we add to the stream function :math:`g_i` the quantity :math:`\mu_0^{-1}\Phi_jK_{ij} / w_{j}`, 
+here :math:`K_{ij}` is an element of the inverse matrix defined above, and :math:`w_{j}` is an element of the weight matrix which assigns an effective area to the mesh vertex at which the vortex is located. This process amounts to numerically inverting :eq:`eq9` in the presence of delta-function magnetic sources representing trapped vortices, as described in [Brandt-PRB-2005]_.
 
 Once the stream function :math:`\mathbf{g}` is known for the full mesh,
 the sheet current flowing in the film can be computed from :eq:`eq2`,
@@ -301,18 +305,23 @@ the :math:`x` and :math:`y` components of the field).
 
 .. _laplace-operator:
 
-Laplace operator
-================
+Laplace and gradient operators
+==============================
 
-The definition of the mesh Laplace operator :math:`\mathbf{\nabla}^2` (also called the
-Laplace-Beltrami operator [Laplacian-SGP-2014]_) deserves special attention, as it reduces
-the problem of solving a partial differential equation :math:`\nabla^2g(x,y)=f(x,y)` to the
-numerically-tractable problem of solving a matrix equation
-:math:`\mathbf{\nabla}^2\mathbf{g}=\mathbf{f}`. As described in [Vaillant-Laplacian-2013]_
+The definitions of the Laplace operator :math:`\mathbf{\nabla}^2` (also called the Laplace-Beltrami operator)
+and the gradient operator :math:`\vec{\nabla}=(\nabla_x, \nabla_y)^T` deserve special attention, as these two
+operators reduce the problem of solving a partial differential equation to the problem of solving a
+matrix equation [Laplacian-SGP-2014]_.  Given a mesh consisting of :math:`n` vertices and :math:`m` triangles,
+and a scalar field :math:`f(x, y)` represented by an :math:`n\times 1` vector :math:`\mathbf{f}` containing the values
+of the field at the mesh vertices, the goal is to construct matrices :math:`\nabla^2` and :math:`\vec{\nabla}=(\nabla_x, \nabla_y)^T`
+such that the matrix products :math:`\nabla^2\mathbf{f}` and :math:`\vec{\nabla}\mathbf{f}` approximate the Laplacian
+:math:`\left(\frac{\partial^2f}{\partial x^2}+\frac{\partial^2f}{\partial y^2}\right)` and the gradient
+:math:`\left(\frac{\partial f}{\partial x}, \frac{\partial f}{\partial y}\right)` of :math:`f(x, y)` at the mesh vertices.
+
+As described in [Vaillant-Laplacian-2013]_
 and [Laplacian-SGP-2014]_ the Laplace operator :math:`\mathbf{\nabla}^2` for a mesh is
 defined in terms of two matrices, the mass matrix :math:`\mathbf{M}` and the
-Laplacian matrix :math:`\mathbf{L}`: :math:`\mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}`.
-
+Laplacian matrix :math:`\mathbf{L}`: :math:`\mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}`
 The mass matrix gives an effective area to each vertex in the mesh. There are multiple
 ways to construct the mass matrix, but here we use a "lumped" mass matrix, which is diagonal
 with elements :math:`(\mathbf{M})_{ii} = \sum_{t\in\mathcal{N}(i)}\frac{1}{3}\mathrm{area}(t)`,
@@ -378,6 +387,61 @@ Finally, the Laplace operator is given by:
 .. math::
 
     \mathbf{\nabla}^2 = \mathbf{M}^{-1}\mathbf{L}.
+
+By default, ``SuperScreen`` uses half-cotangent weighting.
+
+We construct the two :math:`n\times n` gradient matrices :math:`\nabla_x` and :math:`\nabla_y`, using the
+"average gradient on a star" (or AGS) approach [Mancinelli-STAG-2019]_. Briefly, we first construct two
+:math:`m\times n` matrices, :math:`\vec{\nabla}_t=(\nabla_{t,x}, \nabla_{t,y})^T` using "per-cell linear estimation"
+(or PCE) [Mancinelli-STAG-2019]_, where :math:`\nabla_{t,x}\mathbf{f}` maps the field values at the vertices :math:`\mathbf{f}`
+to an estimate of the :math:`x`-component of the gradient at the triangle centroids (centers-of-mass).
+The matrices :math:`\nabla_x` and :math:`\nabla_y` are then computed by, for each vertex :math:`i`,
+taking the weighted average of :math:`\nabla_{t,x}` and :math:`\nabla_{t,y}` over adjacent triangles :math:`t\in\mathcal{N}(i)`,
+with weights given by the angle between the two sides of the triangle adjacent to the vertex.
+The resulting :math:`\vec{\nabla}=(\nabla_x, \nabla_y)^T` is a :math:`2\times n\times n` stack of matrices defined such that
+:math:`\vec{\nabla}\mathbf{f}` produces a :math:`2\times n` matrix representing the gradient of :math:`f(x, y)` at the mesh vertices,
+with the first and second rows of :math:`\vec{\nabla}\mathbf{f}` containing the :math:`x` and :math:`y` components of the gradient, respectively.
+
+
+.. _inhomogeneous:
+
+Inhomogeneous Films
+-------------------
+
+The London equation (:eq:`eq1`) is valid only under the assumption that the London penetration depth :math:`\lambda`, a proxy for the superfluid density, is constant as a function of position. In cases where the superfluid density varies as a function of position, Ginzburg-Landau theory provides a more accurate description of the magnetic response of the system. Nevertheless, in an effort to model inhomogeneous superconductors using London theory, one can write out the "inhomogeneous second London equation" for a superconductor with spatially-varying London penetration depth :math:`\lambda(\vec{r})` ([Cave-Evetts-LTP-1986]_, [Kogan-Kirtley-PRB-2011]_):
+
+.. math::
+    :label: eq15
+
+    \vec{H}(\vec{r})&=-\vec{\nabla}\times\left(\lambda^2(\vec{r})\vec{j}(\vec{r})\right)\\
+    &=-\left(\lambda^2(\vec{r})\vec{\nabla}\times\vec{j}(\vec{r}) + \vec{\nabla}\lambda^2(\vec{r})\times\vec{j}(\vec{r})\right).
+
+
+In the 2D limit, i.e. a thin film with thickness :math:`d\ll\lambda(x, y)` lying parallel to the :math:`x-y` plane carrying sheet current density :math:`\vec{J}(x, y)=\vec{j}(\vec{r})\cdot d` we have:
+
+.. math::
+    :label: eq16
+
+    \vec{H}(x, y)&=-\vec{\nabla}\times(\Lambda\vec{J})\\
+    &=-\left(\Lambda\vec{\nabla}\times\vec{J}+\vec{\nabla}\Lambda\times\vec{J}\,\right)\\
+    &=\left(\Lambda\nabla^2g+\vec{\nabla}\Lambda\cdot\vec{\nabla}g\right)\hat{z},
+
+where :math:`\Lambda=\Lambda(x, y)`, :math:`g=g(x, y)`, :math:`\vec{\nabla}=\left(\frac{\partial}{\partial x},\frac{\partial}{\partial y}\right)`,
+and :math:`\vec{J}=\vec{J}(x, y)=\vec{\nabla}\times(g\hat{z})`.
+
+If one defines an inhomogeneous effective penetration depth :math:`\Lambda(x, y)` in a ``SuperScreen`` model, :eq:`eq16`, rather than :eq:`eq1`, is solved numerically as follows. For a mesh with :math:`n` vertices, the effective penetration depth is represented by an :math:`n\times 1` vector :math:`\mathbf{\Lambda}`. :eq:`eq13` and :eq:`eq14` are updated according to:
+
+.. math::
+
+    &\mathbf{Q}.\mathbf{w}^T-\Lambda\mathbf{\nabla}^2\to\\
+    &\mathbf{Q}.\mathbf{w}^T-\mathbf{\Lambda}^T.\mathbf{\nabla}^2-\vec{\nabla}\mathbf{\Lambda}\cdot\vec{\nabla}
+
+The notation :math:`\vec{\nabla}\mathbf{f}\cdot\vec{\nabla}` indicates an inner (dot) product over the two spatial dimensions, resulting in an :math:`n\times n` matrix such that :math:`(\vec{\nabla}\mathbf{f}\cdot\vec{\nabla})\mathbf{g}` computes :math:`(\vec{\nabla}f(x, y))\cdot(\vec{\nabla}g(x, y))` (see :ref:`Laplace and gradient operators <laplace-operator>`).
+
+Note that, unlike :eq:`eq1` in which :math:`\Lambda` is assumed to be constant as a function of position :math:`\vec{r}`, solutions to :eq:`eq16` do not necessarily satisfy the fluxoid quantization condition :math:`\Phi^f_S=0` for simply-connected superconducting regions :math:`S` in which :math:`\vec{\nabla}\Lambda(\vec{r})\neq0` , where
+
+.. math::
+	\Phi^f_S=\underbrace{\int_S\mu_0H_z(\vec{r})\,\mathrm{d}^2r}_{\text{flux part}} + \underbrace{\oint_S\mu_0\Lambda(\vec{r})\vec{J}(\vec{r})\cdot\mathrm{d}\vec{r}}_{\text{supercurrent part}}.
 
 .. toctree::
     :numbered:
