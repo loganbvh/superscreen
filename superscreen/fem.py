@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 import warnings
 
 import numpy as np
@@ -222,17 +222,15 @@ def calculate_weights(
     method = method.lower()
     if method == "uniform":
         # Uniform weights are just the adjacency matrix.
-        weights = adjacency_matrix(triangles, sparse=sparse).astype(float)
-    elif method == "inv_euclidean":
-        weights = weights_inv_euclidean(points, triangles, sparse=sparse)
-    elif method == "half_cotangent":
-        weights = weights_half_cotangent(points, triangles, sparse=sparse)
-    else:
-        raise ValueError(
-            f"Unknown method ({method}). "
-            f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
-        )
-    return weights
+        return adjacency_matrix(triangles, sparse=sparse).astype(float)
+    if method == "inv_euclidean":
+        return weights_inv_euclidean(points, triangles, sparse=sparse)
+    if method == "half_cotangent":
+        return weights_half_cotangent(points, triangles, sparse=sparse)
+    raise ValueError(
+        f"Unknown method ({method}). "
+        f"Supported methods are 'uniform', 'inv_euclidean', and 'half_cotangent'."
+    )
 
 
 def mass_matrix(
@@ -316,3 +314,105 @@ def laplace_operator(
     if not sparse:
         Del2 = Del2.toarray()
     return Del2
+
+
+def gradient_triangles(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    triangle_areas: Optional[np.ndarray] = None,
+) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+    """Returns the triangle gradient operators ``Gx`` and ``Gy``.
+
+    Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
+    defined at the mesh vertices, ``Gx`` and ``Gy`` are shape ``(m, n)`` matrices
+    such that ``Gx @ f`` and ``Gy @ f`` compute the gradients of ``f`` along
+    x and y, evaluated at the triangle centroids.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        triangles: Shape (m, 3) array of triangle indices
+        triangle_areas: Shape (m, ) array of triangle areas
+
+    Returns:
+        x and y gradient matrices, both of which have shape ``(m, n)``
+    """
+    if triangle_areas is None:
+        triangle_areas = areas(points, triangles)
+    # Shape (triangles.shape[0], 3, 2)
+    xy = points[triangles]
+    edges = np.roll(xy, 2, axis=1) - np.roll(xy, 1, axis=1)
+    # Rotate edges clockwise by 90 degrees:
+    # +x --> -y, +y --> +x
+    edges_rot = np.empty_like(edges)
+    edges_rot[:, :, 0] = +edges[:, :, 1]
+    edges_rot[:, :, 1] = -edges[:, :, 0]
+
+    tri_data = edges_rot / (2 * triangle_areas[:, np.newaxis, np.newaxis])
+    tri_data = tri_data.reshape(-1, 2).T
+    shape = (triangles.shape[0], points.shape[0])
+    # Row indices: [0, 0, 0, 1, 1, 1, ...]
+    row_ind = np.array([[i] * 3 for i in range(len(triangles))]).ravel()
+    # Column indices: [t[0,0], t[0,1], t[0,2], t[1,0], t[1,1], t[1,2], ...]
+    col_ind = triangles.ravel()
+    Gx = sp.csr_matrix(
+        (tri_data[0], (row_ind, col_ind)),
+        shape=shape,
+        dtype=float,
+    )
+    Gy = sp.csr_matrix(
+        (tri_data[1], (row_ind, col_ind)),
+        shape=shape,
+        dtype=float,
+    )
+    return Gx, Gy
+
+
+def gradient_vertices(
+    points: np.ndarray,
+    triangles: np.ndarray,
+    triangle_areas: Optional[np.ndarray] = None,
+) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+    """Returns the vertex gradient operators ``gx`` and ``gy``.
+
+    Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
+    defined at the mesh vertices, ``gx`` and ``gy`` are shape ``(n, n)`` matrices
+    such that ``gx @ f`` and ``gy @ f`` compute the gradients of ``f`` along
+    x and y, evaluated at the vertices.
+
+    The vertex gradient operators are calculated by averaging the the triangle
+    gradient operators over all triangles adjacent to each vertex.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        triangles: Shape (m, 3) array of triangle indices
+        triangle_areas: Shape (m, ) array of triangle areas
+
+    Returns:
+        x and y gradient matrices, both of which have shape ``(n, n)``
+    """
+    if triangle_areas is None:
+        triangle_areas = areas(points, triangles)
+    n = points.shape[0]
+    Gx, Gy = gradient_triangles(points, triangles, triangle_areas=triangle_areas)
+    # Use numpy arrays for fast slicing even though the operators are sparse.
+    Gx = Gx.toarray()
+    Gy = Gy.toarray()
+    gx = np.zeros((n, n), dtype=float)
+    gy = np.zeros((n, n), dtype=float)
+    # This loop is difficult to vectorize because different vertices
+    # have different numbers of adjacent triangles.
+    for i in range(n):
+        adjacent_triangles, _ = np.where(np.isin(triangles, i))
+        t = adjacent_triangles
+        # Weight each triangle adjacent to vertex i by its angle at the vertex.
+        vec1 = points[triangles[t, 1]] - points[triangles[t, 0]]
+        vec2 = points[triangles[t, 2]] - points[triangles[t, 0]]
+        weights = np.arccos(
+            np.sum(vec1 * vec2, axis=1)
+            / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
+        )
+        weights /= weights.sum()
+        assert (weights > 0).all()
+        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
+        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])
+    return sp.csr_matrix(gx), sp.csr_matrix(gy)

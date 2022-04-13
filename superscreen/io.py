@@ -10,19 +10,6 @@ import numpy as np
 from .solution import Solution
 
 
-class NullContextManager(object):
-    """Does nothing."""
-
-    def __init__(self, resource=None):
-        self.resource = resource
-
-    def __enter__(self):
-        return self.resource
-
-    def __exit__(self, *args):
-        pass
-
-
 class NumpyJSONEncoder(json.JSONEncoder):
     def default(self, obj):
 

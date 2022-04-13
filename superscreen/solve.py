@@ -2,6 +2,7 @@ import os
 import logging
 import tempfile
 import itertools
+import contextlib
 from collections import defaultdict
 from typing import (
     Union,
@@ -20,7 +21,6 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
-from .io import NullContextManager
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -31,6 +31,36 @@ lambda_str = "\u03bb"
 Lambda_str = "\u039b"
 
 logger = logging.getLogger(__name__)
+
+
+class LambdaInfo(object):
+    def __init__(
+        self,
+        *,
+        layer: str,
+        Lambda: np.ndarray,
+        london_lambda: Optional[np.ndarray] = None,
+        thickness: Optional[float] = None,
+    ):
+        self.layer = layer
+        self.Lambda = Lambda
+        self.london_lambda = london_lambda
+        self.thickness = thickness
+        self.inhomogeneous = (
+            np.ptp(self.Lambda) / max(np.min(np.abs(self.Lambda)), np.finfo(float).eps)
+            > 1e-6
+        )
+        if self.inhomogeneous:
+            logger.warning(
+                f"Inhomogeneous {Lambda_str} in layer '{self.layer}', "
+                f"which violates the assumptions of the London model. "
+                f"Results may not be reliable."
+            )
+        if self.london_lambda is not None:
+            assert self.thickness is not None
+            assert np.allclose(self.Lambda, self.london_lambda**2 / self.thickness)
+        if np.any(self.Lambda < 0):
+            raise ValueError(f"Negative Lambda in layer '{layer}'.")
 
 
 def q_matrix(
@@ -135,7 +165,7 @@ def Q_matrix(
     q = q.copy()
     np.fill_diagonal(q, 0)
     Q = -q
-    np.fill_diagonal(Q, (C + np.einsum("ij,j -> i", q, weights)) / weights)
+    np.fill_diagonal(Q, (C + np.einsum("ij, j -> i", q, weights)) / weights)
     if dtype is not None:
         Q = Q.astype(dtype, copy=False)
     return Q
@@ -235,37 +265,37 @@ def solve_layer(
     *,
     device: Device,
     layer: str,
-    applied_field: Union[Callable, np.ndarray],
+    applied_field: np.ndarray,
+    weights: np.ndarray,
+    Del2: np.ndarray,
+    grad: np.ndarray,
+    Lambda_info: LambdaInfo,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
-    weights: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
-    Del2: Optional[Union[np.ndarray, sp.csr_matrix]] = None,
-    Lambda: Optional[Union[Parameter, float, np.ndarray]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
     Args:
         device: The Device to simulate.
         layer: Name of the layer to analyze.
-        applied_field: A callable that computes the applied magnetic field
-            as a function of x, y coordinates, or a vector of applied fields.
+        applied_field: The applied magnetic field evaluated at the mesh vertices.
+        weights: The Device's weight vector.
+        Del2: The Device's Laplacian operator.
+        grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
+        Lambda_info: A LambdaInfo instance defining Lambda(x, y).
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
         vortices: A list of Vortex objects located in films in this layer.
-        weights: The Device's weight vector.
-        Del2: The Device's Laplacian operator.
-        Lambda: A Parameter, array, or scalar defining the layer's effective penetration
-            depth, Lambda(x, y).
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
-        stream function, total field, film screening field
+        stream function, current density, total field, film screening field
     """
 
     circulating_currents = circulating_currents or {}
@@ -282,32 +312,23 @@ def solve_layer(
         .magnitude
     )
 
-    if weights is None:
-        weights = device.weights
-    if Del2 is None:
-        Del2 = device.Del2
-    if sp.issparse(Del2):
-        Del2 = Del2.toarray()
-
     Q = device.Q
     points = device.points
-    if Lambda is None:
-        Lambda = device.layers[layer].Lambda
+    if weights.ndim == 1:
+        # Shape (n, ) --> (n, 1)
+        weights = weights[:, np.newaxis]
 
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
 
-    if callable(applied_field):
-        # Units: current_units / device.length_units.
-        Hz_applied = applied_field(points[:, 0], points[:, 1])
-    else:
-        Hz_applied = applied_field
+    # Units: current_units / device.length_units.
+    Hz_applied = applied_field
 
-    if isinstance(Lambda, (int, float)):
-        # Make Lambda a callable
-        Lambda = Constant(Lambda)
-    if callable(Lambda):
-        Lambda = Lambda(points[:, 0], points[:, 1])
+    inhomogeneous = Lambda_info.inhomogeneous
+    # Shape (n, ) --> (n, 1)
+    Lambda = Lambda_info.Lambda[:, np.newaxis]
+    if inhomogeneous:
+        grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -339,8 +360,15 @@ def solve_layer(
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
         # Ha_eff has units of [current_unit / device.length_units]
+
+        if inhomogeneous:
+            grad_Lambda = grad_Lambda_term[:, ix]
+        else:
+            grad_Lambda = 0
+
         Ha_eff += -current * np.sum(
-            Q[:, ix] * weights[ix] - Lambda[ix] * Del2[:, ix], axis=1
+            (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
+            axis=1,
         )
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
@@ -357,15 +385,19 @@ def solve_layer(
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
 
-        # Form the linear system for the film:
-        # gf = -K @ h, where K = inv(Q * w - Lambda * Del2) = inv(A)
-        # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = Q[ix2d] * weights[ix1d] - Lambda[ix1d] * Del2[ix2d]
+        # # Form the linear system for the film:
+        # # gf = -K @ h, where K = inv(Q * w - Lambda * Del2 - grad_Lambda_term) = inv(A)
+        # # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
+        if inhomogeneous:
+            grad_Lambda = grad_Lambda_term[ix2d]
+        else:
+            grad_Lambda = 0
+        A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         lu, piv = la.lu_factor(-A)
         gf = la.lu_solve((lu, piv), h)
-
         g[ix1d] = gf
+
         if check_inversion:
             # Validate solution
             hsim = -A @ gf
@@ -390,11 +422,16 @@ def solve_layer(
             )
             # Eq. 28 in [Brandt]
             g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+    # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
+    Gx = grad[0]
+    Gy = grad[1]
+    J = np.stack([Gy @ g, -Gx @ g], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    # Equivalent to screening_field = np.einsum("ij,j -> i", Q, weights * g)
-    screening_field = Q @ (weights * g)
+    screening_field = Q @ (weights[:, 0] * g)
+    # Above is equivalent to the following, but much faster
+    # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
     total_field = Hz_applied + screening_field
-    return g, total_field, screening_field
+    return g, J, total_field, screening_field
 
 
 def solve(
@@ -478,15 +515,21 @@ def solve(
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2
+    gradx = device.gradx
+    grady = device.grady
     if sp.issparse(Del2):
         Del2 = Del2.toarray().astype(dtype, copy=False)
+    if sp.issparse(gradx):
+        gradx = gradx.toarray().astype(dtype, copy=False)
+    if sp.issparse(grady):
+        grady = grady.toarray().astype(dtype, copy=False)
+    grad = np.stack([gradx, grady], axis=0)
 
     solutions = []
-
     streams = {}
+    currents = {}
     fields = {}
     screening_fields = {}
-
     applied_field = applied_field or ConstantField(0)
     vortices = vortices or []
 
@@ -527,8 +570,20 @@ def solve(
             )
         if isinstance(Lambda, (int, float)):
             Lambda = Constant(Lambda)
-        layer_Lambdas[name] = Lambda(device.points[:, 0], device.points[:, 1]).astype(
+        Lambda = Lambda(device.points[:, 0], device.points[:, 1]).astype(
             dtype, copy=False
+        )
+        if london_lambda is not None:
+            if isinstance(london_lambda, (int, float)):
+                london_lambda = Constant(london_lambda)
+            london_lambda = london_lambda(
+                device.points[:, 0], device.points[:, 1]
+            ).astype(dtype, copy=False)
+        layer_Lambdas[name] = LambdaInfo(
+            layer=name,
+            Lambda=Lambda,
+            london_lambda=london_lambda,
+            thickness=layer.thickness,
         )
 
     vortices_by_layer = defaultdict(list)
@@ -552,7 +607,7 @@ def solve(
     for name, layer in device.layers.items():
         logger.info(f"Calculating {name} response to applied field.")
 
-        g, total_field, screening_field = solve_layer(
+        g, J, total_field, screening_field = solve_layer(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
@@ -560,12 +615,15 @@ def solve(
             vortices=vortices_by_layer[name],
             weights=weights,
             Del2=Del2,
-            Lambda=layer_Lambdas[name],
+            grad=grad,
+            Lambda_info=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
         )
         # Units: current_units
         streams[name] = g.astype(dtype, copy=False)
+        # Units: currents_units / device.length_units
+        currents[name] = J.astype(dtype, copy=False)
         # Units: current_units / device.length_units
         fields[name] = total_field.astype(dtype, copy=False)
         screening_fields[name] = screening_field.astype(dtype, copy=False)
@@ -573,6 +631,7 @@ def solve(
     solution = Solution(
         device=device,
         streams=streams,
+        current_densities=currents,
         fields={
             # Units: field_units
             layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
@@ -623,7 +682,7 @@ def solve(
         else:
             # Cache kernels in memory (much faster than saving to/loading from disk).
             cache_kernels_to_disk = False
-            context = NullContextManager()
+            context = contextlib.nullcontext()
         with context as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
@@ -672,7 +731,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     other_screening_fields[layer.name] += np.einsum(
-                        "ij,j -> i", q, weights * g, dtype=dtype
+                        "ij, j -> i", q, weights * g, dtype=dtype
                     )
                     del q, g
                 # Solve again with the screening fields from all layers.
@@ -691,13 +750,14 @@ def solve(
                         f"Calculating {name} response to applied field and "
                         f"screening field from other layers ({i+1}/{iterations})."
                     )
-                    g, total_field, screening_field = solve_layer(
+                    g, J, total_field, screening_field = solve_layer(
                         device=device,
                         layer=name,
                         applied_field=new_layer_fields[name],
                         weights=weights,
                         Del2=Del2,
-                        Lambda=layer_Lambdas[name],
+                        grad=grad,
+                        Lambda_info=layer_Lambdas[name],
                         circulating_currents=circulating_currents,
                         vortices=vortices_by_layer[name],
                         current_units=current_units,
@@ -706,12 +766,15 @@ def solve(
                     # Units: current_units
                     streams[name] = g.astype(dtype, copy=False)
                     # Units: current_units / device.length_units
+                    currents[name] = J.astype(dtype, copy=False)
+                    # Units: current_units / device.length_units
                     fields[name] = total_field.astype(dtype, copy=False)
                     screening_fields[name] = screening_field.astype(dtype, copy=False)
 
                 solution = Solution(
                     device=device,
                     streams=streams,
+                    current_densities=currents,
                     fields={
                         # Units: field_units
                         layer: (field / field_conversion_magnitude).astype(

@@ -14,7 +14,7 @@ import superscreen.geometry as geo
 def device():
 
     layers = [
-        sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
+        sc.Layer("layer1", london_lambda=0.5, thickness=0.05, z0=0.5),
     ]
 
     films = [
@@ -50,8 +50,8 @@ def two_rings():
     outer_radius = 5
 
     layers = [
-        sc.Layer("layer0", Lambda=0.5, z0=0),
-        sc.Layer("layer1", Lambda=0.5, z0=1),
+        sc.Layer("layer0", Lambda=0, z0=0),
+        sc.Layer("layer1", Lambda=0, z0=1),
     ]
 
     films = [
@@ -102,7 +102,8 @@ def two_rings():
 
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
-def test_current_value(device, return_solutions, save, tmp_path):
+@pytest.mark.parametrize("inhomogeneous", [False, True])
+def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
 
     applied_field = sc.sources.ConstantField(0)
 
@@ -113,15 +114,27 @@ def test_current_value(device, return_solutions, save, tmp_path):
     # https://docs.pytest.org/en/stable/tmpdir.html
     directory = str(tmp_path) if save else None
 
-    solutions = sc.solve(
-        device=device,
-        applied_field=applied_field,
-        circulating_currents=circulating_currents,
-        field_units="mT",
-        iterations=1,
-        return_solutions=return_solutions,
-        directory=directory,
-    )
+    old_lambda = device.layers["layer1"].london_lambda
+    try:
+        if inhomogeneous:
+
+            def linear(x, y, offset=0):
+                return offset + (y - y.min()) + (x - x.min())
+
+            device.layers["layer1"].london_lambda = sc.Parameter(
+                linear, offset=old_lambda
+            )
+        solutions = sc.solve(
+            device=device,
+            applied_field=applied_field,
+            circulating_currents=circulating_currents,
+            field_units="mT",
+            iterations=1,
+            return_solutions=return_solutions,
+            directory=directory,
+        )
+    finally:
+        device.layers["layer1"].london_lambda = old_lambda
     if directory is not None:
         assert os.path.isdir(directory)
         assert len(os.listdir(directory)) == 1
@@ -179,11 +192,6 @@ def test_invalid_vortex_args(device):
 
 
 def test_mutual_inductance_errors(two_rings):
-    with pytest.raises(ValueError):
-        _ = two_rings.mutual_inductance_matrix(
-            upper_only=True,
-            lower_only=True,
-        )
 
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
@@ -233,21 +241,6 @@ def test_mutual_inductance_matrix(
     assert np.allclose(M, M2, rtol=5e-2)
     # Check that M is symmetric
     assert np.isclose(M[0, 1], M[1, 0], rtol=5e-2)
-
-
-def test_mutual_inductance_upper_lower(two_rings, iterations=1):
-
-    M = two_rings.mutual_inductance_matrix(
-        iterations=iterations,
-        upper_only=True,
-    ).magnitude
-    assert np.array_equal(M, np.triu(M))
-
-    M = two_rings.mutual_inductance_matrix(
-        iterations=iterations,
-        lower_only=True,
-    ).magnitude
-    assert np.array_equal(M, np.tril(M))
 
 
 def test_plot_mutual_inductance(mutual_inductance_matrix):

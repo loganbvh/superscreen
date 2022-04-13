@@ -6,6 +6,7 @@ import logging
 import itertools
 import tempfile
 import warnings
+import contextlib
 import multiprocessing as mp
 from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
@@ -14,7 +15,6 @@ import pint
 import numpy as np
 
 from .solve import solve
-from .io import NullContextManager
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution, Vortex
@@ -212,7 +212,7 @@ def solve_many_serial(
     if directory is None:
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = NullContextManager(directory)
+        save_context = contextlib.nullcontext(directory)
 
     with save_context as savedir:
         for i, model in enumerate(models):
@@ -387,7 +387,7 @@ def solve_many_mp(
     if directory is None:
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = NullContextManager(directory)
+        save_context = contextlib.nullcontext(directory)
 
     with save_context as savedir:
         kwargs = []
@@ -555,7 +555,7 @@ def solve_many_ray(
     if directory is None:
         save_context = tempfile.TemporaryDirectory()
     else:
-        save_context = NullContextManager(directory)
+        save_context = contextlib.nullcontext(directory)
         paths = []
 
     result_ids = []

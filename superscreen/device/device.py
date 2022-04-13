@@ -44,6 +44,8 @@ class Device(object):
         "weights",
         "Del2",
         "Q",
+        "gradx",
+        "grady",
     )
 
     ureg = ureg
@@ -113,6 +115,8 @@ class Device(object):
         self.weights = None
         self.Del2 = None
         self.Q = None
+        self.gradx = None
+        self.grady = None
 
     @property
     def length_units(self) -> str:
@@ -286,7 +290,7 @@ class Device(object):
         """
         # Ensure that all names and types are valid before setting any attributes.
         valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("Del2",):
+        for name in ("Del2", "gradx", "grady"):
             valid_types[name] = valid_types[name] + (sp.spmatrix,)
         for name, array in arrays.items():
             if name not in self.ARRAY_NAMES:
@@ -527,6 +531,8 @@ class Device(object):
         self.weights = None
         self.Del2 = None
         self.Q = None
+        self.gradx = None
+        self.grady = None
         if compute_matrices:
             self.compute_matrices(weight_method=weight_method)
 
@@ -565,12 +571,12 @@ class Device(object):
         q = q_matrix(points, dtype=solve_dtype)
         C = C_vector(points, dtype=solve_dtype)
         self.Q = Q_matrix(q, C, self.weights, dtype=solve_dtype)
+        logger.info("Calculating gradient matrix.")
+        self.gradx, self.grady = fem.gradient_vertices(points, triangles)
 
     def mutual_inductance_matrix(
         self,
         hole_polygon_mapping: Optional[Dict[str, np.ndarray]] = None,
-        upper_only: bool = False,
-        lower_only: bool = False,
         units: str = "pH",
         all_iterations: bool = False,
         **solve_kwargs,
@@ -589,10 +595,6 @@ class Device(object):
                 enclosing those holes, for which the fluxoid will be calculated.
                 The length of this dict, ``n_holes``, will determine the dimension
                 of the square mutual inductance matrix :math:`M`.
-            upper_only: If True, evaluate only the upper triangular mutual inductance
-                matrix. Must be False if lower_only is True.
-            lower_only: If True, evaluate only the lower triangular mutual inductance
-                matrix. Must be False if upper_only is True.
             units: The units in which to report the mutual inductance.
             all_iterations: Whether to return mutual inductance matrices for all
                 ``iterations + 1`` solutions, or just the final solution.
@@ -607,9 +609,6 @@ class Device(object):
             ``iterations + 1`` if the device has multiple layers.
         """
         from ..solve import solve
-
-        if upper_only and lower_only:
-            raise ValueError("Only one of upper_only and lower_only may be True.")
 
         holes = self.holes
         if hole_polygon_mapping is None:
@@ -652,8 +651,6 @@ class Device(object):
                     f"Evaluating fluxoids for solution {n + 1}/{len(solutions)}."
                 )
                 for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
-                    if (upper_only and i > j) or (lower_only and i < j):
-                        continue
                     layer = holes[name].layer
                     fluxoid = solution.polygon_fluxoid(polygon, layer)[layer]
                     mutual_inductance[n, i, j] = (

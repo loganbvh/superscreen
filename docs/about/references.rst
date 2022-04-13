@@ -22,6 +22,12 @@ References
 
     Open access: `arXiv:1607.03950 <https://arxiv.org/abs/1607.03950>`_.
 
+.. [Kogan-Kirtley-PRB-2011]
+    `Physical Review B 83, 214521 (2011). <https://doi.org/10.1103/PhysRevB.83.214521>`_
+
+.. [Cave-Evetts-LTP-1986]
+    `Journal of Low Temperature Physics, Vol. 63, Nos. 1/2, (1986). <https://doi.org/10.1007/BF00682063>`_
+
 .. [Pearl-APL-1964]
     `Applied Physics Letters 5, 65 (1964) <https://doi.org/10.1063/1.1754056>`_
 
@@ -36,3 +42,6 @@ References
 
 .. [Vaillant-Laplacian-2013]
     `Compute Harmonic weights on a triangular mesh <http://rodolphe-vaillant.fr/?e=20>`_
+
+.. [Mancinelli-STAG-2019]
+    `Computers & Graphics 80 (2019) 37-50 <https://doi.org/10.1016/j.cag.2019.03.005>`_
