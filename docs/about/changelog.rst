@@ -14,6 +14,21 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
       The public API SHOULD NOT be considered stable.
     - Version 1.0.0 defines the public API.
 
+----
+
+Version 0.5.0
+-------------
+
+Release date: 2022-04-13
+
+Changes
+=======
+
+- Added :math:`\vec{\nabla}\Lambda(x, y)` term and clarified documentation about the model in the context of inhomogeneous films
+  (`#72 <https://github.com/loganbvh/superscreen/pull/72>`_).
+
+----
+
 Version 0.4.0
 -------------
 
@@ -24,6 +39,8 @@ Changes
 
 - Remove support for Python 3.6, which has reached `end-of-life <https://www.python.org/downloads/release/python-3615/>`_
   (`#69 <https://github.com/loganbvh/superscreen/pull/69>`_).
+
+----
 
 Version 0.3.0
 -------------
@@ -42,7 +59,9 @@ Changes
   (`#65 <https://github.com/loganbvh/superscreen/pull/65>`_).
 - Use ``scipy.linalg.lu_solve()`` in ``superscreen.solve()`` instead of ``numpy.linalg.inv()`` (`#67 <https://github.com/loganbvh/superscreen/pull/67>`_).
 
+----
+
 Version 0.2.0 (initial development release)
 -------------------------------------------
 
-Release date: 2021-11-28.
+Release date: 2021-11-28
