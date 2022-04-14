@@ -42,9 +42,8 @@ SuperScreen
 `SuperScreen <https://github.com/loganbvh/superscreen>`_ is an open-source Python package for simulating
 the magnetic response of 2D superconductors and multiplanar superconducting devices of arbitrary geometry.
 Using a matrix inversion method introduced by Brandt [Brandt-PRB-2005]_, ``SuperScreen`` solves
-the coupled London's and Maxwell's equations in and around superconducting films
-with spatially-varying penetration depth in the presence of applied magnetic fields
-and trapped flux.
+the coupled London and Maxwell's equations in and around superconducting thin films in the presence of
+inhomogeneous applied magnetic fields and trapped flux.
 
 ``SuperScreen`` can be used to calculate:
 
