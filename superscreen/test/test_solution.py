@@ -459,10 +459,11 @@ def test_visualization(solution1):
         plt.close(fig)
 
 
+@pytest.mark.parametrize("use_zs", [False, True, "z0"])
 @pytest.mark.parametrize("units", [None, "uT * um"])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("return_sum", [False, True])
-def test_bz_from_vector_potential(solution2, units, with_units, return_sum):
+def test_bz_from_vector_potential(solution2, use_zs, units, with_units, return_sum):
     solution = solution2
     applied_field = solution.applied_field
     device = solution.device
@@ -473,7 +474,14 @@ def test_bz_from_vector_potential(solution2, units, with_units, return_sum):
         gradx = gradx / ureg(device.length_units)
         grady = grady / ureg(device.length_units)
     positions = device.points.copy()
-    zs = 1 * np.ones_like(positions[:, :1])
+    z0 = 1.5
+    zs = z0 * np.ones_like(positions[:, :1])
+    applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
+    if not use_zs:
+        positions = np.concatenate([positions, zs], axis=1)
+        zs = None
+    elif use_zs == "z0":
+        zs = z0
     bz_units = None if units is None else "uT"
     Bz = solution.field_at_position(
         positions, zs=zs, units=bz_units, with_units=with_units
@@ -491,7 +499,6 @@ def test_bz_from_vector_potential(solution2, units, with_units, return_sum):
         A = sum(A.values())
     Ax = A[:, 0]
     Ay = A[:, 1]
-    applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
     if with_units:
         applied_field = applied_field * ureg(solution.field_units)
     Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
