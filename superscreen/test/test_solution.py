@@ -86,7 +86,7 @@ def solution2(device):
         applied_field=applied_field,
         circulating_currents=circulating_currents,
         field_units="mT",
-        iterations=1,
+        iterations=2,
     )
 
     return solutions[-1]
@@ -457,3 +457,44 @@ def test_visualization(solution1):
 
         fig, _ = solution1.plot_field_at_positions(solution1.device.points, zs=0.3333)
         plt.close(fig)
+
+
+@pytest.mark.parametrize("units", [None, "uT * um"])
+@pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("return_sum", [False, True])
+def test_bz_from_vector_potential(solution2, units, with_units, return_sum):
+    solution = solution2
+    applied_field = solution.applied_field
+    device = solution.device
+    ureg = device.ureg
+    gradx = device.gradx
+    grady = device.grady
+    if with_units:
+        gradx = gradx / ureg(device.length_units)
+        grady = grady / ureg(device.length_units)
+    positions = device.points.copy()
+    zs = 1 * np.ones_like(positions[:, :1])
+    bz_units = None if units is None else "uT"
+    Bz = solution.field_at_position(
+        positions, zs=zs, units=bz_units, with_units=with_units
+    )
+    A = solution.vector_potential_at_position(
+        positions,
+        zs=zs,
+        units=units,
+        with_units=with_units,
+        return_sum=return_sum,
+    )
+    if not return_sum:
+        assert isinstance(A, dict)
+        assert len(A) == len(device.layers)
+        A = sum(A.values())
+    Ax = A[:, 0]
+    Ay = A[:, 1]
+    applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
+    if with_units:
+        applied_field = applied_field * ureg(solution.field_units)
+    Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
+    if with_units:
+        Bz_from_A.ito(Bz.units)
+    assert np.all(np.abs(Bz_from_A - Bz) < 0.1 * np.max(np.abs(Bz)))

@@ -739,19 +739,17 @@ class Solution(object):
 
         Args:
             positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array
-                of (x, y, z) coordinates at which to calculate the magnetic field.
+                of (x, y, z) coordinates at which to calculate the vector potential.
                 A single list like [x, y] or [x, y, z] is also allowed.
-            zs: z coordinates at which to calculate the field. If positions has shape
+            zs: z coordinates at which to calculate the potential. If positions has shape
                 (m, 3), then this argument is not allowed. If zs is a scalar, then
                 the fields are calculated in a plane parallel to the x-y plane.
                 If zs is any array, then it must be same length as positions.
-            units: Units to which to convert the fields (can be either magnetic field H
-                or magnetic flux density B = mu0 * H). If not given, then the fields
-                are returned in units of ``self.field_units``.
-            with_units: Whether to return the fields as ``pint.Quantity``
+            units: Units to which to convert the vector potential.
+            with_units: Whether to return the vector potential as a ``pint.Quantity``
                 with units attached.
-            return_sum: Whether to return the sum of the fields from all layers in
-                the device, or a dict of ``{layer_name: field_from_layer}``.
+            return_sum: Whether to return the sum of the potential from all layers in
+                the device, or a dict of ``{layer_name: potential_from_layer}``.
 
         Returns:
             An np.ndarray if return_sum is True, otherwise a dict of
