@@ -729,9 +729,10 @@ class Solution(object):
         point(s) in space.
 
         The vector potential :math:`\\vec{A}` at position :math:`\\vec{r}`
-        due to sheet current density :math:`\\vec{J}(\\vec{r}')` is
+        due to sheet current density :math:`\\vec{J}(\\vec{r}')` flowing in a film
+        with lateral geometry :math:`S` is:
 
-        .. math:
+        .. math::
 
             \\vec{A}(\\vec{r}) = \\frac{\\mu_0}{4\\pi}
             \\int_S\\frac{\\vec{J}(\\vec{r}')}{|\\vec{r}-\\vec{r}'|}\\mathrm{d}^2r'.
@@ -754,7 +755,7 @@ class Solution(object):
 
         Returns:
             An np.ndarray if return_sum is True, otherwise a dict of
-            ``{layer_name: poteitnal_from_layer}``. If with_units is True, then the
+            ``{layer_name: potential_from_layer}``. If with_units is True, then the
             array(s) will contain pint.Quantities. ``potential_from_layer`` will have
             shape ``(m, 3)``.
         """
