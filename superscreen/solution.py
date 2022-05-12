@@ -716,6 +716,101 @@ class Solution(object):
             fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
         return fields
 
+    def vector_potential_at_position(
+        self,
+        positions: np.ndarray,
+        *,
+        zs: Optional[Union[float, np.ndarray]] = None,
+        units: Optional[str] = None,
+        with_units: bool = True,
+        return_sum: bool = True,
+    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        """Calculates the vector potential due to currents in the device at any
+        point(s) in space.
+
+        The vector potential :math:`\\vec{A}` at position :math:`\\vec{r}`
+        due to sheet current density :math:`\\vec{J}(\\vec{r}')` flowing in a film
+        with lateral geometry :math:`S` is:
+
+        .. math::
+
+            \\vec{A}(\\vec{r}) = \\frac{\\mu_0}{4\\pi}
+            \\int_S\\frac{\\vec{J}(\\vec{r}')}{|\\vec{r}-\\vec{r}'|}\\mathrm{d}^2r'.
+
+        Args:
+            positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array
+                of (x, y, z) coordinates at which to calculate the vector potential.
+                A single list like [x, y] or [x, y, z] is also allowed.
+            zs: z coordinates at which to calculate the potential. If positions has shape
+                (m, 3), then this argument is not allowed. If zs is a scalar, then
+                the fields are calculated in a plane parallel to the x-y plane.
+                If zs is any array, then it must be same length as positions.
+            units: Units to which to convert the vector potential.
+            with_units: Whether to return the vector potential as a ``pint.Quantity``
+                with units attached.
+            return_sum: Whether to return the sum of the potential from all layers in
+                the device, or a dict of ``{layer_name: potential_from_layer}``.
+
+        Returns:
+            An np.ndarray if return_sum is True, otherwise a dict of
+            ``{layer_name: potential_from_layer}``. If with_units is True, then the
+            array(s) will contain pint.Quantities. ``potential_from_layer`` will have
+            shape ``(m, 3)``.
+        """
+        device = self.device
+        dtype = device.solve_dtype
+        ureg = device.ureg
+        points = device.points.astype(dtype, copy=False)
+        areas = device.weights
+        units = units or f"{self.field_units} * {device.length_units}"
+
+        # In case something like a list [x, y] or [x, y, z] is given
+        positions = np.atleast_2d(positions)
+        # If positions includes z coordinates, peel those off here
+        if positions.shape[1] == 3:
+            if zs is not None:
+                raise ValueError(
+                    "If positions has shape (m, 3) then zs cannot be specified."
+                )
+            zs = positions[:, 2]
+            positions = positions[:, :2]
+        elif isinstance(zs, (int, float, np.generic)):
+            # constant zs
+            zs = zs * np.ones(positions.shape[0], dtype=dtype)
+        if not isinstance(zs, np.ndarray):
+            raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
+        if zs.ndim == 1:
+            # We need zs to be shape (m, 1)
+            zs = zs[:, np.newaxis]
+        rho2 = distance.cdist(positions, points, metric="sqeuclidean").astype(
+            dtype, copy=False
+        )
+        # Compute the vector potential at the specified positions
+        # from the currents in each layer
+        vector_potentials = {}
+        for name, layer in device.layers.items():
+            dz = zs - layer.z0
+            if np.any(dz == 0):
+                raise ValueError(
+                    f"Cannot calculate fields in the same plane as layer {name}."
+                )
+            # J has units of [current / length], shape = (device.points.shape[0], 2)
+            J = self.current_densities[name]
+            # rho has units of [length] and
+            # shape = (postitions.shape[0], device.points.shape[0], 1)
+            rho = np.sqrt(rho2 + dz**2)[:, :, np.newaxis]
+            Axy = np.einsum("ijk, j -> ik", J / rho, areas, dtype=dtype)
+            # z-component is zero because currents are parallel to the x-y plane.
+            A = np.concatenate([Axy, np.zeros_like(Axy[:, :1])], axis=1)
+            A = A * ureg(self.current_units)
+            A = (ureg("mu_0") / (4 * np.pi) * A).to(units)
+            if not with_units:
+                A = A.magnitude
+            vector_potentials[name] = A
+        if return_sum:
+            return sum(vector_potentials.values())
+        return vector_potentials
+
     def to_file(
         self,
         directory: str,
