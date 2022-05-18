@@ -726,7 +726,10 @@ class Solution(object):
         return_sum: bool = True,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Calculates the vector potential due to currents in the device at any
-        point(s) in space.
+        point(s) in space. Note that this only considers the vector potential
+        due to currents in the device, so only represents the total vector potential
+        in cases where the applied field is zero (e.g. models with only vortices and/or
+        circulating currents).
 
         The vector potential :math:`\\vec{A}` at position :math:`\\vec{r}`
         due to sheet current density :math:`\\vec{J}(\\vec{r}')` flowing in a film
