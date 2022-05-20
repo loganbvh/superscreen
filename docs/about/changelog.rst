@@ -16,6 +16,18 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.6.0
+-------------
+
+Release date: 2022-05-20
+
+Changes
+=======
+
+- Added ``Solution.vector_potential_at_position()`` (`#73 <https://github.com/loganbvh/superscreen/pull/73>`_).
+
+----
+
 Version 0.5.0
 -------------
 
