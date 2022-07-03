@@ -141,8 +141,8 @@ def pearl_vortex(
     # Define Fourier-space coordinates
     kmaxx = np.pi / dx
     kmaxy = np.pi / dy
-    kx = np.linspace(-kmaxx, kmaxx, xs.shape[0])
-    ky = np.linspace(-kmaxy, kmaxy, ys.shape[0])
+    kx = np.linspace(-kmaxx, kmaxx, xs.shape[0], endpoint=False)
+    ky = np.linspace(-kmaxy, kmaxy, ys.shape[0], endpoint=False)
     X, Y = np.meshgrid(xs, ys)
     KX, KY = np.meshgrid(kx, ky)
     K = np.sqrt(KX**2 + KY**2)
