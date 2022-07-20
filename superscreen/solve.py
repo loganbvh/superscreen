@@ -448,6 +448,7 @@ def solve(
     directory: Optional[str] = None,
     cache_memory_cutoff: float = np.inf,
     log_level: int = logging.INFO,
+    gpu: bool = False,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
@@ -510,8 +511,14 @@ def solve(
             "The device does not have a Laplace operator. "
             "Call device.compute_matrices() to calculate it."
         )
+    if gpu:
+        import jax
+        import jax.numpy as jnp
 
-    dtype = device.solve_dtype
+        dtype = np.float32
+
+    else:
+        dtype = device.solve_dtype
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Del2 = device.Del2
@@ -683,12 +690,20 @@ def solve(
             # Cache kernels in memory (much faster than saving to/loading from disk).
             cache_kernels_to_disk = False
             context = contextlib.nullcontext()
+        if gpu:
+            cache_kernels_to_disk = False
+            rho2 = jax.device_put(rho2)
         with context as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
                 other_screening_fields = {
                     name: np.zeros(points.shape[0], dtype=dtype) for name in layer_names
                 }
+                if gpu:
+                    streams = {
+                        layer.name: jax.device_put(streams[layer.name])
+                        for layer in device.layers_list
+                    }
                 for layer, other_layer in itertools.product(
                     device.layers_list, repeat=2
                 ):
@@ -715,10 +730,11 @@ def solve(
                     # or calculate it if it's not yet in the cache.
                     q = kernels.get(key, None)
                     if q is None:
-                        q = (
-                            (2 * dz**2 - rho2)
-                            / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
-                        ).astype(dtype, copy=False)
+                        q = (2 * dz**2 - rho2) / (
+                            4 * np.pi * (dz**2 + rho2) ** (5 / 2)
+                        )
+                        if not gpu:
+                            q = q.astype(dtype, copy=False)
                         if cache_kernels_to_disk:
                             fname = os.path.join(tempdir, "_".join(key))
                             np.save(fname, q)
@@ -730,9 +746,15 @@ def solve(
                         q = np.load(q)
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    other_screening_fields[layer.name] += np.einsum(
-                        "ij, j -> i", q, weights * g, dtype=dtype
-                    )
+                    if gpu:
+                        screening_field = jnp.einsum(
+                            "ij, j -> i", q, weights * g
+                        ).block_until_ready()
+                    else:
+                        screening_field = np.einsum(
+                            "ij, j -> i", q, weights * g, dtype=dtype
+                        )
+                    other_screening_fields[layer.name] += screening_field
                     del q, g
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
