@@ -525,7 +525,9 @@ def solve_many_ray(
         initialized_ray = True
 
     ray_resources = ray.available_resources()
-    num_cpus = int(ray_resources["CPU"])
+    num_cpus = sum(
+        val for name, val in ray_resources.items() if name.startswith("node.")
+    )
     logger.info(f"ray resources: {ray_resources}")
 
     solver = f"superscreen.solve_many:ray:{num_cpus}"
