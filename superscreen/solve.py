@@ -763,7 +763,7 @@ def solve(
                     # Units: current_units / device.length_units
                     new_layer_fields[name] = (
                         layer_fields[name] + other_screening_fields[name]
-                    ).astype(dtype, copy=False)
+                    ).astype(dtype)
                 streams = {}
                 fields = {}
                 screening_fields = {}
