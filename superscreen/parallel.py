@@ -528,6 +528,7 @@ def solve_many_ray(
     num_cpus = sum(
         val for name, val in ray_resources.items() if name.startswith("node.")
     )
+    num_cpus = int(num_cpus)
     logger.info(f"ray resources: {ray_resources}")
 
     solver = f"superscreen.solve_many:ray:{num_cpus}"
