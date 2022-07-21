@@ -12,6 +12,7 @@ from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
 import ray
 import pint
+import joblib
 import numpy as np
 
 from .solve import solve
@@ -21,6 +22,12 @@ from .solution import Solution, Vortex
 
 
 logger = logging.getLogger(__name__)
+
+
+def cpu_count(logical: bool = False):
+    njoblib = joblib.cpu_count()
+    npsutil = psutil.cpu_count(logical=logical)
+    return min(njoblib, npsutil)
 
 
 def create_models(
@@ -377,7 +384,7 @@ def solve_many_mp(
     else:
         shared_arrays = arrays
     if num_cpus is None:
-        num_cpus = psutil.cpu_count(logical=False)
+        num_cpus = cpu_count(logical=False)
     num_cpus = min(len(models), num_cpus)
     solver = f"superscreen.solve_many:multiprocessing:{num_cpus}"
 
@@ -515,7 +522,7 @@ def solve_many_ray(
 
     initialized_ray = False
     if num_cpus is None:
-        num_cpus = psutil.cpu_count(logical=False)
+        num_cpus = cpu_count(logical=False)
     elif ray.is_initialized():
         logger.warning("Ignoring num_cpus because ray is already initialized.")
         num_cpus = int(ray.available_resources()["CPU"])
