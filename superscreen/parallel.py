@@ -518,6 +518,7 @@ def solve_many_ray(
         num_cpus = psutil.cpu_count(logical=False)
     elif ray.is_initialized():
         logger.warning("Ignoring num_cpus because ray is already initialized.")
+        num_cpus = int(ray.available_resources()["CPU"])
     if not ray.is_initialized():
         num_cpus = min(len(models), num_cpus)
         logger.info(f"Initializing ray with {num_cpus} process(es).")
@@ -525,10 +526,6 @@ def solve_many_ray(
         initialized_ray = True
 
     ray_resources = ray.available_resources()
-    num_cpus = sum(
-        val for name, val in ray_resources.items() if name.startswith("node.")
-    )
-    num_cpus = int(num_cpus)
     logger.info(f"ray resources: {ray_resources}")
 
     solver = f"superscreen.solve_many:ray:{num_cpus}"
