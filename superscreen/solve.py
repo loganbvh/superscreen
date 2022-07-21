@@ -754,7 +754,9 @@ def solve(
                         screening_field = np.einsum(
                             "ij, j -> i", q, weights * g, dtype=dtype
                         )
-                    other_screening_fields[layer.name] += screening_field
+                    other_screening_fields[layer.name] += np.asarray(
+                        screening_field, dtype=dtype
+                    )
                     del q, g
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
@@ -763,7 +765,7 @@ def solve(
                     # Units: current_units / device.length_units
                     new_layer_fields[name] = (
                         layer_fields[name] + other_screening_fields[name]
-                    ).astype(dtype)
+                    ).astype(dtype, copy=False)
                 streams = {}
                 fields = {}
                 screening_fields = {}
