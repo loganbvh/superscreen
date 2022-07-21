@@ -36,6 +36,7 @@ PYTHON_VERSION = ">=3.7, <3.10"
 INSTALL_REQUIRES = [
     "dill",
     "ipython",
+    "joblib",
     "jupyter",
     "matplotlib",
     "meshpy",

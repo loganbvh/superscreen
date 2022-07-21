@@ -4,6 +4,7 @@ import contextlib
 
 import pytest
 import ray
+import joblib
 
 import superscreen as sc
 
@@ -12,7 +13,8 @@ import superscreen as sc
 def ray_initialized():
     # Seems to help on Windows :/
     assert os.environ["RAY_START_REDIS_WAIT_RETRIES"] == "48"
-    ray.init(num_cpus=2, log_to_driver=False)
+    num_cpus = min(2, joblib.cpu_count())
+    ray.init(num_cpus=num_cpus, log_to_driver=False)
     try:
         yield True
     finally:
