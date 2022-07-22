@@ -532,6 +532,11 @@ def solve(
         grady = grady.toarray().astype(dtype, copy=False)
     grad = np.stack([gradx, grady], axis=0)
 
+    if gpu:
+        weights = jax.device_put(weights)
+        Del2 = jax.device_put(Del2)
+        grad = jax.device_put(grad)
+
     solutions = []
     streams = {}
     currents = {}
@@ -557,7 +562,7 @@ def solve(
     layer_Lambdas = {}
     for name, layer in device.layers.items():
         # Units: current_units / device.length_units
-        layer_fields[name] = (
+        layer_field = (
             applied_field(device.points[:, 0], device.points[:, 1], layer.z0)
             * field_conversion_magnitude
         ).astype(dtype, copy=False)
@@ -586,6 +591,11 @@ def solve(
             london_lambda = london_lambda(
                 device.points[:, 0], device.points[:, 1]
             ).astype(dtype, copy=False)
+        if gpu:
+            layer_fields[name] = jax.device_put(layer_field)
+            Lambda = jax.device_put(Lambda)
+            if london_lambda is not None:
+                london_lambda = jax.device_put(london_lambda)
         layer_Lambdas[name] = LambdaInfo(
             layer=name,
             Lambda=Lambda,
@@ -637,8 +647,13 @@ def solve(
 
     solution = Solution(
         device=device,
-        streams=streams,
-        current_densities=currents,
+        streams={
+            layer: np.asarray(stream, dtype=dtype) for layer, stream in streams.items()
+        },
+        current_densities={
+            layer: np.asarray(current, dtype=dtype)
+            for layer, current in currents.items()
+        },
         fields={
             # Units: field_units
             layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
@@ -696,14 +711,13 @@ def solve(
         with context as tempdir:
             for i in range(iterations):
                 # Calculate the screening fields at each layer from every other layer
-                other_screening_fields = {
-                    name: np.zeros(points.shape[0], dtype=dtype) for name in layer_names
-                }
                 if gpu:
-                    streams = {
-                        layer.name: jax.device_put(streams[layer.name])
-                        for layer in device.layers_list
-                    }
+                    zeros = jnp.zeros
+                else:
+                    zeros = np.zeros
+                other_screening_fields = {
+                    zeros(points.shape[0], dtype=dtype) for name in layer_names
+                }
                 for layer, other_layer in itertools.product(
                     device.layers_list, repeat=2
                 ):
@@ -754,9 +768,7 @@ def solve(
                         screening_field = np.einsum(
                             "ij, j -> i", q, weights * g, dtype=dtype
                         )
-                    other_screening_fields[layer.name] += np.asarray(
-                        screening_field, dtype=dtype
-                    )
+                    other_screening_fields[layer.name] += screening_field
                     del q, g
                 # Solve again with the screening fields from all layers.
                 # Calculate applied fields only once per iteration.
@@ -765,7 +777,7 @@ def solve(
                     # Units: current_units / device.length_units
                     new_layer_fields[name] = (
                         layer_fields[name] + other_screening_fields[name]
-                    ).astype(dtype, copy=False)
+                    ).astype(dtype)
                 streams = {}
                 fields = {}
                 screening_fields = {}
@@ -788,27 +800,33 @@ def solve(
                         check_inversion=check_inversion,
                     )
                     # Units: current_units
-                    streams[name] = g.astype(dtype, copy=False)
+                    streams[name] = g
                     # Units: current_units / device.length_units
-                    currents[name] = J.astype(dtype, copy=False)
+                    currents[name] = J
                     # Units: current_units / device.length_units
-                    fields[name] = total_field.astype(dtype, copy=False)
-                    screening_fields[name] = screening_field.astype(dtype, copy=False)
+                    fields[name] = total_field
+                    screening_fields[name] = screening_field
 
                 solution = Solution(
                     device=device,
-                    streams=streams,
-                    current_densities=currents,
+                    streams={
+                        layer: np.asarray(g, dtype=dtype)
+                        for layer, g in streams.items()
+                    },
+                    current_densities={
+                        layer: np.asarray(J, dtype=dtype)
+                        for layer, J in currents.items()
+                    },
                     fields={
                         # Units: field_units
-                        layer: (field / field_conversion_magnitude).astype(
+                        layer: (np.asarray(field) / field_conversion_magnitude).astype(
                             dtype, copy=False
                         )
                         for layer, field in fields.items()
                     },
                     screening_fields={
                         # Units: field_units
-                        layer: (field / field_conversion_magnitude).astype(
+                        layer: (np.asarray(field) / field_conversion_magnitude).astype(
                             dtype, copy=False
                         )
                         for layer, field in screening_fields.items()
