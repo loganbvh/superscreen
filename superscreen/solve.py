@@ -328,14 +328,13 @@ def solve_layer(
         einsum_ = jnp.einsum
     else:
         sum_ = np.sum
-        einsum_ = jnp.einsum
+        einsum_ = np.einsum
 
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
 
     inhomogeneous = Lambda_info.inhomogeneous
-    # Shape (n, ) --> (n, 1)
-    Lambda = Lambda_info.Lambda[:, np.newaxis]
+    Lambda = Lambda_info.Lambda
     if inhomogeneous:
         grad_Lambda_term = einsum_("ijk, ijk -> jk", (grad @ Lambda), grad)
 
@@ -619,18 +618,19 @@ def solve(
             Lambda = Constant(Lambda)
         Lambda = Lambda(device.points[:, 0], device.points[:, 1]).astype(
             dtype, copy=False
-        )
+        )[:, np.newaxis]
         if london_lambda is not None:
             if isinstance(london_lambda, (int, float)):
                 london_lambda = Constant(london_lambda)
             london_lambda = london_lambda(
                 device.points[:, 0], device.points[:, 1]
-            ).astype(dtype, copy=False)
+            ).astype(dtype, copy=False)[:, np.newaxis]
         if gpu:
-            layer_fields[name] = jax.device_put(layer_field)
+            layer_field = jax.device_put(layer_field)
             Lambda = jax.device_put(Lambda)
             if london_lambda is not None:
                 london_lambda = jax.device_put(london_lambda)
+        layer_fields[name] = layer_field
         layer_Lambdas[name] = LambdaInfo(
             layer=name,
             Lambda=Lambda,
@@ -714,169 +714,162 @@ def solve(
 
     layer_names = list(device.layers)
     nlayers = len(layer_names)
-    if iterations and nlayers > 1:
-        rho2 = distance.cdist(points, points, metric="sqeuclidean").astype(
-            dtype,
-            copy=False,
+    if nlayers < 2 or iterations < 1:
+        if return_solutions:
+            return solutions
+        return
+    rho2 = distance.cdist(points, points, metric="sqeuclidean").astype(
+        dtype,
+        copy=False,
+    )
+    # Cache kernel matrices.
+    kernels = {}
+    if cache_memory_cutoff is None:
+        cache_memory_cutoff = np.inf
+    if cache_memory_cutoff < 0:
+        raise ValueError(
+            f"Kernel cache memory cutoff must be greater than zero "
+            f"(got {cache_memory_cutoff})."
         )
-        # Cache kernel matrices.
-        kernels = {}
-        if cache_memory_cutoff is None:
-            cache_memory_cutoff = np.inf
-        if cache_memory_cutoff < 0:
-            raise ValueError(
-                f"Kernel cache memory cutoff must be greater than zero "
-                f"(got {cache_memory_cutoff})."
-            )
-        nkernels = nlayers * (nlayers - 1) // 2
-        total_bytes = nkernels * rho2.nbytes
-        available_bytes = psutil.virtual_memory().available
-        if total_bytes > cache_memory_cutoff * available_bytes:
-            # Save kernel matrices to disk to avoid filling up memory.
-            cache_kernels_to_disk = True
-            context = tempfile.TemporaryDirectory()
-        else:
-            # Cache kernels in memory (much faster than saving to/loading from disk).
-            cache_kernels_to_disk = False
-            context = contextlib.nullcontext()
-        if gpu:
-            cache_kernels_to_disk = False
-            rho2 = jax.device_put(rho2)
-        with context as tempdir:
-            for i in range(iterations):
-                # Calculate the screening fields at each layer from every other layer
-                if gpu:
-                    zeros = jnp.zeros
-                else:
-                    zeros = np.zeros
-                other_screening_fields = {
-                    zeros(points.shape[0], dtype=dtype) for name in layer_names
-                }
-                for layer, other_layer in itertools.product(
-                    device.layers_list, repeat=2
+    nkernels = nlayers * (nlayers - 1) // 2
+    total_bytes = nkernels * rho2.nbytes
+    available_bytes = psutil.virtual_memory().available
+    if total_bytes > cache_memory_cutoff * available_bytes:
+        # Save kernel matrices to disk to avoid filling up memory.
+        cache_kernels_to_disk = True
+        context = tempfile.TemporaryDirectory()
+    else:
+        # Cache kernels in memory (much faster than saving to/loading from disk).
+        cache_kernels_to_disk = False
+        context = contextlib.nullcontext()
+    if gpu:
+        cache_kernels_to_disk = False
+        rho2 = jax.device_put(rho2)
+    with context as tempdir:
+        for i in range(iterations):
+            # Calculate the screening fields at each layer from every other layer
+            if gpu:
+                zeros = jnp.zeros
+            else:
+                zeros = np.zeros
+            other_screening_fields = {
+                name: zeros(points.shape[0], dtype=dtype) for name in layer_names
+            }
+            for layer, other_layer in itertools.product(device.layers_list, repeat=2):
+                if layer.name == other_layer.name:
+                    continue
+                if (
+                    i == 0
+                    and layer.name == layer_names[0]
+                    and other_layer.name == layer_names[1]
                 ):
-                    if layer.name == other_layer.name:
-                        continue
-                    if (
-                        i == 0
-                        and layer.name == layer_names[0]
-                        and other_layer.name == layer_names[1]
-                    ):
-                        logger.info(
-                            f"Caching {nkernels} layer-to-layer kernel(s) "
-                            f"({total_bytes / 1024 ** 2:.0f} MB total) "
-                            f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
-                        )
-                    logger.debug(
-                        f"Calculating screening field at {layer.name} "
-                        f"from {other_layer.name} ({i+1}/{iterations})."
-                    )
-                    g = streams[other_layer.name]
-                    dz = other_layer.z0 - layer.z0
-                    key = frozenset((layer.name, other_layer.name))
-                    # Get the cached kernel matrix,
-                    # or calculate it if it's not yet in the cache.
-                    q = kernels.get(key, None)
-                    if q is None:
-                        q = (2 * dz**2 - rho2) / (
-                            4 * np.pi * (dz**2 + rho2) ** (5 / 2)
-                        )
-                        if not gpu:
-                            q = q.astype(dtype, copy=False)
-                        if cache_kernels_to_disk:
-                            fname = os.path.join(tempdir, "_".join(key))
-                            np.save(fname, q)
-                            kernels[key] = f"{fname}.npy"
-                        else:
-                            kernels[key] = q
-                    elif isinstance(q, str):
-                        # Kernel was cached to disk, so load it into memory.
-                        q = np.load(q)
-                    # Calculate the dipole kernel and integrate
-                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    if gpu:
-                        screening_field = jnp.einsum("ij, j -> i", q, weights * g)
-                    else:
-                        screening_field = np.einsum(
-                            "ij, j -> i", q, weights * g, dtype=dtype
-                        )
-                    other_screening_fields[layer.name] += screening_field
-                    del q, g
-                # Solve again with the screening fields from all layers.
-                # Calculate applied fields only once per iteration.
-                new_layer_fields = {}
-                for name, layer in device.layers.items():
-                    # Units: current_units / device.length_units
-                    new_layer_fields[name] = (
-                        layer_fields[name] + other_screening_fields[name]
-                    ).astype(dtype)
-                streams = {}
-                fields = {}
-                screening_fields = {}
-                for name, layer in device.layers.items():
                     logger.info(
-                        f"Calculating {name} response to applied field and "
-                        f"screening field from other layers ({i+1}/{iterations})."
+                        f"Caching {nkernels} layer-to-layer kernel(s) "
+                        f"({total_bytes / 1024 ** 2:.0f} MB total) "
+                        f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
                     )
-                    g, J, total_field, screening_field = solve_layer(
-                        device=device,
-                        layer=name,
-                        applied_field=new_layer_fields[name],
-                        kernel=Q,
-                        weights=weights,
-                        Del2=Del2,
-                        grad=grad,
-                        Lambda_info=layer_Lambdas[name],
-                        circulating_currents=circulating_currents,
-                        vortices=vortices_by_layer[name],
-                        current_units=current_units,
-                        check_inversion=check_inversion,
-                        gpu=gpu,
-                    )
-                    # Units: current_units
-                    streams[name] = g
-                    # Units: current_units / device.length_units
-                    currents[name] = J
-                    # Units: current_units / device.length_units
-                    fields[name] = total_field
-                    screening_fields[name] = screening_field
-
-                solution = Solution(
-                    device=device,
-                    streams={
-                        layer: np.asarray(g, dtype=dtype)
-                        for layer, g in streams.items()
-                    },
-                    current_densities=currents,
-                    fields={
-                        # Units: field_units
-                        layer: (np.asarray(field) / field_conversion_magnitude).astype(
-                            dtype, copy=False
-                        )
-                        for layer, field in fields.items()
-                    },
-                    screening_fields={
-                        # Units: field_units
-                        layer: (np.asarray(field) / field_conversion_magnitude).astype(
-                            dtype, copy=False
-                        )
-                        for layer, field in screening_fields.items()
-                    },
-                    applied_field=applied_field,
-                    field_units=field_units,
-                    current_units=current_units,
-                    circulating_currents=circulating_currents,
-                    vortices=vortices,
-                    solver=_solver,
+                logger.debug(
+                    f"Calculating screening field at {layer.name} "
+                    f"from {other_layer.name} ({i+1}/{iterations})."
                 )
-                if directory is not None:
-                    solution.to_file(os.path.join(directory, str(i + 1)))
-                if return_solutions:
-                    solutions.append(solution)
-                else:
-                    del solution
-        if cache_kernels_to_disk:
-            context.cleanup()
+                g = streams[other_layer.name]
+                dz = other_layer.z0 - layer.z0
+                key = frozenset((layer.name, other_layer.name))
+                # Get the cached kernel matrix,
+                # or calculate it if it's not yet in the cache.
+                q = kernels.get(key, None)
+                if q is None:
+                    q = (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
+                    if not gpu:
+                        q = q.astype(dtype, copy=False)
+                    if cache_kernels_to_disk:
+                        fname = os.path.join(tempdir, "_".join(key))
+                        np.save(fname, q)
+                        kernels[key] = f"{fname}.npy"
+                    else:
+                        kernels[key] = q
+                elif isinstance(q, str):
+                    # Kernel was cached to disk, so load it into memory.
+                    q = np.load(q)
+                # Calculate the dipole kernel and integrate
+                # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                screening_field = q @ (weights[:, 0] * g)
+                other_screening_fields[layer.name] += screening_field
+                del q, g
+            # Solve again with the screening fields from all layers.
+            # Calculate applied fields only once per iteration.
+            new_layer_fields = {}
+            for name, layer in device.layers.items():
+                # Units: current_units / device.length_units
+                new_layer_fields[name] = (
+                    layer_fields[name] + other_screening_fields[name]
+                )
+            streams = {}
+            fields = {}
+            screening_fields = {}
+            for name, layer in device.layers.items():
+                logger.info(
+                    f"Calculating {name} response to applied field and "
+                    f"screening field from other layers ({i+1}/{iterations})."
+                )
+                g, J, total_field, screening_field = solve_layer(
+                    device=device,
+                    layer=name,
+                    applied_field=new_layer_fields[name],
+                    kernel=Q,
+                    weights=weights,
+                    Del2=Del2,
+                    grad=grad,
+                    Lambda_info=layer_Lambdas[name],
+                    circulating_currents=circulating_currents,
+                    vortices=vortices_by_layer[name],
+                    current_units=current_units,
+                    check_inversion=check_inversion,
+                    gpu=gpu,
+                )
+                # Units: current_units
+                streams[name] = g
+                # Units: current_units / device.length_units
+                currents[name] = J
+                # Units: current_units / device.length_units
+                fields[name] = total_field
+                screening_fields[name] = screening_field
+
+            solution = Solution(
+                device=device,
+                streams={
+                    layer: np.asarray(g, dtype=dtype) for layer, g in streams.items()
+                },
+                current_densities=currents,
+                fields={
+                    # Units: field_units
+                    layer: (np.asarray(field) / field_conversion_magnitude).astype(
+                        dtype, copy=False
+                    )
+                    for layer, field in fields.items()
+                },
+                screening_fields={
+                    # Units: field_units
+                    layer: (np.asarray(field) / field_conversion_magnitude).astype(
+                        dtype, copy=False
+                    )
+                    for layer, field in screening_fields.items()
+                },
+                applied_field=applied_field,
+                field_units=field_units,
+                current_units=current_units,
+                circulating_currents=circulating_currents,
+                vortices=vortices,
+                solver=_solver,
+            )
+            if directory is not None:
+                solution.to_file(os.path.join(directory, str(i + 1)))
+            if return_solutions:
+                solutions.append(solution)
+            else:
+                del solution
+    if cache_kernels_to_disk:
+        context.cleanup()
     if return_solutions:
         return solutions
 
