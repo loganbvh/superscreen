@@ -266,6 +266,7 @@ def solve_layer(
     device: Device,
     layer: str,
     applied_field: np.ndarray,
+    kernel: np.ndarray,
     weights: np.ndarray,
     Del2: np.ndarray,
     grad: np.ndarray,
@@ -274,6 +275,7 @@ def solve_layer(
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
     check_inversion: bool = True,
+    gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
@@ -312,14 +314,21 @@ def solve_layer(
         .magnitude
     )
 
-    Q = device.Q
-    points = device.points
-    if weights.ndim == 1:
-        # Shape (n, ) --> (n, 1)
-        weights = weights[:, np.newaxis]
-
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
+
+    Q = kernel
+    points = device.points
+
+    if gpu:
+        import jax
+        import jax.numpy as jnp
+
+        sum_ = jnp.sum
+        einsum_ = jnp.einsum
+    else:
+        sum_ = np.sum
+        einsum_ = jnp.einsum
 
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
@@ -328,7 +337,7 @@ def solve_layer(
     # Shape (n, ) --> (n, 1)
     Lambda = Lambda_info.Lambda[:, np.newaxis]
     if inhomogeneous:
-        grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
+        grad_Lambda_term = einsum_("ijk, ijk -> jk", (grad @ Lambda), grad)
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -345,6 +354,9 @@ def solve_layer(
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(Hz_applied)
     Ha_eff = np.zeros_like(Hz_applied)
+    if gpu:
+        g = jax.device_put(g)
+        Ha_eff = jax.device_put(Ha_eff)
     for name in holes:
         current = circulating_currents.get(name, None)
         if current is None:
@@ -355,7 +367,10 @@ def solve_layer(
             current = current.to(current_units).magnitude
 
         ix = hole_indices[name]
-        g[ix] = current  # g[hole] = I_circ
+        if gpu:
+            g.at[ix].set(current)
+        else:
+            g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
@@ -366,7 +381,7 @@ def solve_layer(
         else:
             grad_Lambda = 0
 
-        Ha_eff += -current * np.sum(
+        Ha_eff += -current * sum_(
             (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
             axis=1,
         )
@@ -394,9 +409,13 @@ def solve_layer(
             grad_Lambda = 0
         A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        lu, piv = la.lu_factor(-A)
-        gf = la.lu_solve((lu, piv), h)
-        g[ix1d] = gf
+        if gpu:
+            gf = jnp.linalg.solve(-A, h)
+            g.at[ix1d].set(gf)
+        else:
+            lu, piv = la.lu_factor(-A)
+            gf = la.lu_solve((lu, piv), h)
+            g[ix1d] = gf
 
         if check_inversion:
             # Validate solution
@@ -410,7 +429,10 @@ def solve_layer(
         for vortex in film_to_vortices[name]:
             if K is None:
                 # Compute K only once if needed
-                K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
+                if gpu:
+                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))
+                else:
+                    K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
             # in the film-specific sub-mesh
             j_film = np.argmin(
@@ -421,16 +443,23 @@ def solve_layer(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
             # Eq. 28 in [Brandt]
-            g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+            if gpu:
+                g.at[ix1d].add(
+                    vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+                )
+            else:
+                g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     Gx = grad[0]
     Gy = grad[1]
-    J = np.stack([Gy @ g, -Gx @ g], axis=1)
+    Jx = np.asarray(Gy @ g)
+    Jy = np.asarray(-Gx @ g)
+    J = np.stack([Jx, Jy], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = Q @ (weights[:, 0] * g)
+    screening_field = np.asarray(Q @ (weights[:, 0] * g))
     # Above is equivalent to the following, but much faster
     # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
-    total_field = Hz_applied + screening_field
+    total_field = np.asarray(Hz_applied) + screening_field
     return g, J, total_field, screening_field
 
 
@@ -521,6 +550,10 @@ def solve(
         dtype = device.solve_dtype
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
+    Q = device.Q.astype(dtype, copy=False)
+    if weights.ndim == 1:
+        # Shape (n, ) --> (n, 1)
+        weights = weights[:, np.newaxis]
     Del2 = device.Del2
     gradx = device.gradx
     grady = device.grady
@@ -535,6 +568,8 @@ def solve(
     if gpu:
         weights = jax.device_put(weights)
         Del2 = jax.device_put(Del2)
+        grad = jax.device_put(grad)
+        Q = jax.device_put(Q)
         grad = jax.device_put(grad)
 
     solutions = []
@@ -628,6 +663,7 @@ def solve(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
+            kernel=Q,
             circulating_currents=circulating_currents,
             vortices=vortices_by_layer[name],
             weights=weights,
@@ -636,9 +672,10 @@ def solve(
             Lambda_info=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
+            gpu=gpu,
         )
         # Units: current_units
-        streams[name] = g.astype(dtype, copy=False)
+        streams[name] = g.astype(dtype)
         # Units: currents_units / device.length_units
         currents[name] = J.astype(dtype, copy=False)
         # Units: current_units / device.length_units
@@ -650,10 +687,7 @@ def solve(
         streams={
             layer: np.asarray(stream, dtype=dtype) for layer, stream in streams.items()
         },
-        current_densities={
-            layer: np.asarray(current, dtype=dtype)
-            for layer, current in currents.items()
-        },
+        current_densities=currents,
         fields={
             # Units: field_units
             layer: (field / field_conversion_magnitude).astype(dtype, copy=False)
@@ -761,9 +795,7 @@ def solve(
                     # Calculate the dipole kernel and integrate
                     # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
                     if gpu:
-                        screening_field = jnp.einsum(
-                            "ij, j -> i", q, weights * g
-                        ).block_until_ready()
+                        screening_field = jnp.einsum("ij, j -> i", q, weights * g)
                     else:
                         screening_field = np.einsum(
                             "ij, j -> i", q, weights * g, dtype=dtype
@@ -790,6 +822,7 @@ def solve(
                         device=device,
                         layer=name,
                         applied_field=new_layer_fields[name],
+                        kernel=Q,
                         weights=weights,
                         Del2=Del2,
                         grad=grad,
@@ -798,6 +831,7 @@ def solve(
                         vortices=vortices_by_layer[name],
                         current_units=current_units,
                         check_inversion=check_inversion,
+                        gpu=gpu,
                     )
                     # Units: current_units
                     streams[name] = g
@@ -813,10 +847,7 @@ def solve(
                         layer: np.asarray(g, dtype=dtype)
                         for layer, g in streams.items()
                     },
-                    current_densities={
-                        layer: np.asarray(J, dtype=dtype)
-                        for layer, J in currents.items()
-                    },
+                    current_densities=currents,
                     fields={
                         # Units: field_units
                         layer: (np.asarray(field) / field_conversion_magnitude).astype(
