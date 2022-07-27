@@ -40,10 +40,20 @@ SuperScreen
 
 
 `SuperScreen <https://github.com/loganbvh/superscreen>`_ is an open-source Python package for simulating
-the magnetic response of 2D superconductors and multiplanar superconducting devices of arbitrary geometry.
+the magnetic response of 2D superconductors and thin film superconducting devices of arbitrary geometry.
 Using a matrix inversion method introduced by Brandt [Brandt-PRB-2005]_, ``SuperScreen`` solves
 the coupled London and Maxwell's equations in and around superconducting thin films in the presence of
 inhomogeneous applied magnetic fields and trapped flux.
+
+.. tip::
+
+   ``SuperScreen`` is described in detail in the following paper:
+
+      SuperScreen: An open-source package for simulating the magnetic response of two-dimensional superconducting devices,
+      Computer Physics Communications, Volume 280, 2022, 108464
+      `https://doi.org/10.1016/j.cpc.2022.108464 <https://doi.org/10.1016/j.cpc.2022.108464>`_.
+
+   The accepted version of the paper can also be found on arXiv: `arXiv:2203.13388 <https://doi.org/10.48550/arXiv.2203.13388>`_.
 
 ``SuperScreen`` can be used to calculate:
 
@@ -61,6 +71,24 @@ interactively online via `Binder <https://mybinder.org/>`_:
 
 .. image:: https://mybinder.org/badge_logo.svg
  :target: https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD
+
+If you use ``SuperScreen`` in your research, please cite the paper linked above.
+
+.. code-block::
+
+   % BibTeX citation
+   @article{
+      Bishop-Van_Horn2022-sy,
+      title    = "{SuperScreen}: An open-source package for simulating the magnetic
+                  response of two-dimensional superconducting devices",
+      author   = "Bishop-Van Horn, Logan and Moler, Kathryn A",
+      journal  = "Comput. Phys. Commun.",
+      volume   =  280,
+      pages    = "108464",
+      month    =  nov,
+      year     =  2022,
+      url      = "https://doi.org/10.1016/j.cpc.2022.108464"
+   }
    
 
 .. toctree::

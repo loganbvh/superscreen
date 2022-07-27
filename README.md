@@ -2,15 +2,12 @@
 
 ![SuperScreen Logo](docs/images/logo_currents_small.png)
 
-SuperScreen is a package for simulating the magnetic response of multi-planar thin film
-superconducting devices. SuperScreen solves the coupled Maxwell's and London equations
-on a triangular mesh using a matrix inversion method described in the following references:
+`SuperScreen` is a Python package for simulating the magnetic response of thin film superconducting devices. `SuperScreen` solves the coupled Maxwell's and London equations on a triangular mesh using a matrix inversion method described in the following paper:
 
-1. Phys. Rev. B 72, 024529 (2005) [[arXiv:cond-mat/0506144](https://arxiv.org/abs/cond-mat/0506144)]
-2. Rev. Sci. Instrum. 87, 093702 (2016) [[arXiv:1605.09483](https://arxiv.org/abs/1605.09483)]
-3. Supercond. Sci. Technol. 29 (2016) 124001 [[arXiv:1607.03950](https://arxiv.org/abs/1607.03950)]
+>SuperScreen: An open-source package for simulating the magnetic response of two-dimensional superconducting devices, Computer Physics Communications, Volume 280, 2022, 108464 [https://doi.org/10.1016/j.cpc.2022.108464](https://doi.org/10.1016/j.cpc.2022.108464).
 
-See the [documentation](https://superscreen.readthedocs.io/en/latest/) for more details.
+The accepted version of the paper can also be found on arXiv: [arXiv:2203.13388](https://doi.org/10.48550/arXiv.2203.13388). The GitHub repository accompanying the paper can be found [here](https://github.com/loganbvh/superscreen-paper).
+
 
 ![PyPI](https://img.shields.io/pypi/v/superscreen) ![GitHub Workflow Status (branch)](https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main) [![Documentation Status](https://readthedocs.org/projects/superscreen/badge/?version=latest)](https://superscreen.readthedocs.io/en/latest/?badge=latest) [![codecov](https://codecov.io/gh/loganbvh/superscreen/branch/main/graph/badge.svg?token=XW7LSY8WVD)](https://codecov.io/gh/loganbvh/superscreen) ![GitHub](https://img.shields.io/github/license/loganbvh/superscreen) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![DOI](https://zenodo.org/badge/376110557.svg)](https://zenodo.org/badge/latestdoi/376110557)
 
@@ -26,8 +23,7 @@ Click the badge below and navigate to `docs/notebooks/` to try `SuperScreen` int
 
 ## Install `SuperScreen`
 
-`SuperScreen` requires `python >=3.7, <3.10`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the
-[documentation](https://superscreen.readthedocs.io/en/latest/).
+`SuperScreen` requires `python >=3.7, <3.10`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the [documentation](https://superscreen.readthedocs.io/en/latest/).
 
 ### Install via `pip`
 
@@ -59,4 +55,21 @@ pip install -e .
 
 ### Contributing
 
-Want to contribute to `superscreen`? Check out our [contribution guidelines](CONTRIBUTING.md).
+Want to contribute to `SuperScreen`? Check out our [contribution guidelines](CONTRIBUTING.md).
+
+### BibTeX citation
+
+Please cite this paper if you use `SuperScreen` in your research.
+
+    @article{
+        Bishop-Van_Horn2022-sy,
+        title    = "{SuperScreen}: An open-source package for simulating the magnetic
+                    response of two-dimensional superconducting devices",
+        author   = "Bishop-Van Horn, Logan and Moler, Kathryn A",
+        journal  = "Comput. Phys. Commun.",
+        volume   =  280,
+        pages    = "108464",
+        month    =  nov,
+        year     =  2022,
+        url      = "https://doi.org/10.1016/j.cpc.2022.108464"
+    }
