@@ -4,11 +4,37 @@
 License
 *******
 
+.. tip::
+
+   Please cite this paper if you use ``SuperScreen`` in your research.
+
+      SuperScreen: An open-source package for simulating the magnetic response of two-dimensional superconducting devices,
+      Computer Physics Communications, Volume 280, 2022, 108464
+      `https://doi.org/10.1016/j.cpc.2022.108464 <https://doi.org/10.1016/j.cpc.2022.108464>`_.
+
+    .. code-block::
+
+        % BibTeX citation
+        @article{
+            Bishop-Van_Horn2022-sy,
+            title    = "{SuperScreen}: An open-source package for simulating the magnetic
+                        response of two-dimensional superconducting devices",
+            author   = "Bishop-Van Horn, Logan and Moler, Kathryn A",
+            journal  = "Comput. Phys. Commun.",
+            volume   =  280,
+            pages    = "108464",
+            month    =  nov,
+            year     =  2022,
+            url      = "https://doi.org/10.1016/j.cpc.2022.108464"
+        }
+
+----
+
 .. code-block:: text
 
     MIT License
 
-    Copyright (c) 2021 Logan Bishop-Van Horn
+    Copyright (c) 2021-2022 Logan Bishop-Van Horn
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
