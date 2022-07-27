@@ -61,7 +61,7 @@ Want to contribute to `SuperScreen`? Check out our [contribution guidelines](CON
 
 Please cite this paper if you use `SuperScreen` in your research.
 
-    @ARTICLE{
+    @article{
         Bishop-Van_Horn2022-sy,
         title    = "{SuperScreen}: An open-source package for simulating the magnetic
                     response of two-dimensional superconducting devices",
@@ -71,6 +71,5 @@ Please cite this paper if you use `SuperScreen` in your research.
         pages    = "108464",
         month    =  nov,
         year     =  2022,
-        url      = "https://doi.org/10.1016/j.cpc.2022.108464",
-        keywords = "Superconductivity; Meissner screening; London equation; Inductance"
+        url      = "https://doi.org/10.1016/j.cpc.2022.108464"
     }
