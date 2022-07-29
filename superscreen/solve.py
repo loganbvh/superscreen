@@ -21,6 +21,14 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
+try:
+    import jax
+    import jax.numpy as jnp
+
+    HAS_JAX = True
+except (ModuleNotFoundError, ImportError):
+    HAS_JAX = False
+
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -321,13 +329,14 @@ def solve_layer(
     points = device.points
 
     if gpu:
-        import jax
-        import jax.numpy as jnp
-
-        # sum_ = jnp.sum
+        if not HAS_JAX:
+            raise ValueError("Running solve(..., gpu=True) requires the JAX package. ")
+        if not jax.devices():
+            raise RuntimeError(
+                "Running solve(..., gpu=True) requires a CUDA-compatible GPU."
+            )
         einsum_ = jnp.einsum
     else:
-        # sum_ = np.sum
         einsum_ = np.einsum
 
     # Units: current_units / device.length_units.
@@ -337,8 +346,6 @@ def solve_layer(
     Lambda = Lambda_info.Lambda
     if inhomogeneous:
         grad_Lambda_term = einsum_("ijk, ijk -> jk", (grad @ Lambda), grad)
-        # if gpu:
-        #     grad_Lambda_term.block_until_ready()
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -409,9 +416,6 @@ def solve_layer(
                 # A given vortex can only lie in a single film.
                 continue
 
-    # if gpu:
-    #     Ha_eff.block_until_ready()
-
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
         # We want all points that are in a film and not in a hole.
@@ -429,8 +433,7 @@ def solve_layer(
         A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         if gpu:
-            # jax.block_until_ready([A, h])
-            gf = jnp.linalg.solve(-A, h)  # .block_until_ready()
+            gf = jnp.linalg.solve(-A, h)
             g = g.at[ix1d].set(gf)
         else:
             lu_piv = la.lu_factor(-A)
@@ -450,7 +453,7 @@ def solve_layer(
             if K is None:
                 # Compute K only once if needed
                 if gpu:
-                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))  # .block_until_ready()
+                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))
                 else:
                     K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
@@ -467,7 +470,6 @@ def solve_layer(
                 g = g.at[ix1d].add(
                     vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
                 )
-                # jax.block_until_ready(g)
             else:
                 g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
