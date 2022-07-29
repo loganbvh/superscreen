@@ -412,10 +412,6 @@ def solve_layer(
     if gpu:
         Ha_eff.block_until_ready()
 
-    import pdb
-
-    pdb.set_trace()
-
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
         # We want all points that are in a film and not in a hole.
@@ -443,7 +439,7 @@ def solve_layer(
 
         if check_inversion:
             # Validate solution
-            hsim = np.asarray(-A @ gf)
+            hsim = -A @ gf
             if not np.allclose(hsim, h):
                 logger.warning(
                     f"Unable to solve for stream function in {layer} ({name}), "
