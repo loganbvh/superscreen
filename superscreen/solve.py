@@ -355,7 +355,9 @@ def solve_layer(
     Ha_eff = np.zeros_like(Hz_applied)
     if gpu:
         g = jax.device_put(g)
+        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
         Ha_eff = jax.device_put(Ha_eff)
+
     for name in holes:
         current = circulating_currents.get(name, None)
         if current is None:
@@ -380,10 +382,14 @@ def solve_layer(
         else:
             grad_Lambda = 0
 
-        Ha_eff += -current * sum_(
-            (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
-            axis=1,
+        Ha_eff.at[Ha_eff_ix].add(
+            -current
+            * sum_(
+                (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
+                axis=1,
+            )
         )
+
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
@@ -412,8 +418,8 @@ def solve_layer(
             gf = jnp.linalg.solve(-A, h)
             g.at[ix1d].set(gf)
         else:
-            lu, piv = la.lu_factor(-A)
-            gf = la.lu_solve((lu, piv), h)
+            lu_piv = la.lu_factor(-A)
+            gf = la.lu_solve(lu_piv, h)
             g[ix1d] = gf
 
         if check_inversion:
@@ -431,7 +437,7 @@ def solve_layer(
                 if gpu:
                     K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))
                 else:
-                    K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
+                    K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
             # in the film-specific sub-mesh
             j_film = np.argmin(
