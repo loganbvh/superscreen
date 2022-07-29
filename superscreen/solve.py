@@ -385,15 +385,18 @@ def solve_layer(
             grad_Lambda = 0
 
         if gpu:
+            jax.block_until_ready(g)
             Ha_eff.at[Ha_eff_ix].add(
-                -current
-                * jnp.sum(
-                    (
-                        Q[:, ix] * weights[ix, 0]
-                        - Lambda[ix, 0] * Del2[:, ix]
-                        - grad_Lambda
-                    ),
-                    axis=1,
+                jax.block_until_ready(
+                    -current
+                    * jnp.sum(
+                        (
+                            Q[:, ix] * weights[ix, 0]
+                            - Lambda[ix, 0] * Del2[:, ix]
+                            - grad_Lambda
+                        ),
+                        axis=1,
+                    )
                 )
             )
         else:
@@ -411,7 +414,7 @@ def solve_layer(
 
     if gpu:
         Ha_eff.block_until_ready()
-        print(np.where(Ha_eff != 0))
+        print(np.where(np.asarray(Ha_eff) != 0))
 
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
