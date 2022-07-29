@@ -410,6 +410,7 @@ def solve_layer(
                 continue
 
     if gpu:
+        print(Ha_eff)
         Ha_eff.block_until_ready()
 
     # Now solve for the stream function inside the superconducting films
