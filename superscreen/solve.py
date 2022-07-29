@@ -426,11 +426,10 @@ def solve_layer(
             grad_Lambda = grad_Lambda_term[ix2d]
         else:
             grad_Lambda = 0
-        A = (
-            Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
-        ).block_until_ready()
-        h = (Hz_applied[ix1d] - Ha_eff[ix1d]).block_until_ready()
+        A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
+        h = Hz_applied[ix1d] - Ha_eff[ix1d]
         if gpu:
+            jax.block_until_ready([A, h])
             gf = jnp.linalg.solve(-A, h).block_until_ready()
             g.at[ix1d].set(gf)
         else:
@@ -440,7 +439,7 @@ def solve_layer(
 
         if check_inversion:
             # Validate solution
-            hsim = -A @ gf
+            hsim = np.asarray(-A @ gf)
             if not np.allclose(hsim, h):
                 logger.warning(
                     f"Unable to solve for stream function in {layer} ({name}), "
@@ -468,6 +467,7 @@ def solve_layer(
                 g.at[ix1d].add(
                     vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
                 )
+                jax.block_until_ready(g)
             else:
                 g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
