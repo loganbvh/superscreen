@@ -357,7 +357,7 @@ def solve_layer(
     Ha_eff = np.zeros_like(Hz_applied)
     if gpu:
         g = jax.device_put(g)
-        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
+        # Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
         Ha_eff = jax.device_put(Ha_eff)
 
     for name in holes:
@@ -385,19 +385,22 @@ def solve_layer(
             grad_Lambda = 0
 
         if gpu:
-            jax.block_until_ready(g)
-            Ha_eff.at[Ha_eff_ix].add(
-                jax.block_until_ready(
-                    -current
-                    * jnp.sum(
-                        (
-                            Q[:, ix] * weights[ix, 0]
-                            - Lambda[ix, 0] * Del2[:, ix]
-                            - grad_Lambda
-                        ),
-                        axis=1,
-                    )
-                )
+            # Ha_eff.at[Ha_eff_ix].add(
+            #     jax.block_until_ready(
+            #         -current
+            #         * jnp.sum(
+            #             (
+            #                 Q[:, ix] * weights[ix, 0]
+            #                 - Lambda[ix, 0] * Del2[:, ix]
+            #                 - grad_Lambda
+            #             ),
+            #             axis=1,
+            #         )
+            #     )
+            # )
+            Ha_eff += -current * jnp.sum(
+                (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
+                axis=1,
             )
         else:
             Ha_eff += -current * np.sum(
