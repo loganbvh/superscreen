@@ -329,12 +329,6 @@ def solve_layer(
     points = device.points
 
     if gpu:
-        if not HAS_JAX:
-            raise ValueError("Running solve(..., gpu=True) requires the JAX package. ")
-        if not jax.devices():
-            raise RuntimeError(
-                "Running solve(..., gpu=True) requires a CUDA-compatible GPU."
-            )
         einsum_ = jnp.einsum
     else:
         einsum_ = np.einsum
@@ -564,13 +558,17 @@ def solve(
             "Call device.compute_matrices() to calculate it."
         )
     if gpu:
-        import jax
-        import jax.numpy as jnp
+        if not HAS_JAX:
+            raise ValueError("Running solve(..., gpu=True) requires the JAX package. ")
+        if not jax.devices():
+            raise RuntimeError(
+                "Running solve(..., gpu=True) requires a CUDA-compatible GPU."
+            )
 
         dtype = np.float32
-
     else:
         dtype = device.solve_dtype
+
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Q = device.Q.astype(dtype, copy=False)
