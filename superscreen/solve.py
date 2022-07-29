@@ -414,7 +414,10 @@ def solve_layer(
 
     if gpu:
         Ha_eff.block_until_ready()
-        print(np.where(np.asarray(Ha_eff) != 0))
+
+    import pdb
+
+    pdb.set_trace()
 
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
