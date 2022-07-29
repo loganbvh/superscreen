@@ -357,7 +357,7 @@ def solve_layer(
     Ha_eff = np.zeros_like(Hz_applied)
     if gpu:
         g = jax.device_put(g)
-        # Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
+        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
         Ha_eff = jax.device_put(Ha_eff)
 
     for name in holes:
@@ -371,7 +371,7 @@ def solve_layer(
 
         ix = hole_indices[name]
         if gpu:
-            g.at[ix].set(current)
+            g = g.at[ix].set(current)
         else:
             g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
@@ -385,22 +385,16 @@ def solve_layer(
             grad_Lambda = 0
 
         if gpu:
-            # Ha_eff.at[Ha_eff_ix].add(
-            #     jax.block_until_ready(
-            #         -current
-            #         * jnp.sum(
-            #             (
-            #                 Q[:, ix] * weights[ix, 0]
-            #                 - Lambda[ix, 0] * Del2[:, ix]
-            #                 - grad_Lambda
-            #             ),
-            #             axis=1,
-            #         )
-            #     )
-            # )
-            Ha_eff += -current * jnp.sum(
-                (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
-                axis=1,
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(
+                -current
+                * jnp.sum(
+                    (
+                        Q[:, ix] * weights[ix, 0]
+                        - Lambda[ix, 0] * Del2[:, ix]
+                        - grad_Lambda
+                    ),
+                    axis=1,
+                )
             )
         else:
             Ha_eff += -current * np.sum(
@@ -441,7 +435,7 @@ def solve_layer(
         if gpu:
             jax.block_until_ready([A, h])
             gf = jnp.linalg.solve(-A, h).block_until_ready()
-            g.at[ix1d].set(gf)
+            g = g.at[ix1d].set(gf)
         else:
             lu_piv = la.lu_factor(-A)
             gf = la.lu_solve(lu_piv, h)
@@ -474,7 +468,7 @@ def solve_layer(
             )
             # Eq. 28 in [Brandt]
             if gpu:
-                g.at[ix1d].add(
+                g = g.at[ix1d].add(
                     vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
                 )
                 jax.block_until_ready(g)
