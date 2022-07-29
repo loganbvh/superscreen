@@ -324,10 +324,10 @@ def solve_layer(
         import jax
         import jax.numpy as jnp
 
-        sum_ = jnp.sum
+        # sum_ = jnp.sum
         einsum_ = jnp.einsum
     else:
-        sum_ = np.sum
+        # sum_ = np.sum
         einsum_ = np.einsum
 
     # Units: current_units / device.length_units.
@@ -382,14 +382,23 @@ def solve_layer(
         else:
             grad_Lambda = 0
 
-        Ha_eff.at[Ha_eff_ix].add(
-            -current
-            * sum_(
+        if gpu:
+            Ha_eff.at[Ha_eff_ix].add(
+                -current
+                * jnp.sum(
+                    (
+                        Q[:, ix] * weights[ix, 0]
+                        - Lambda[ix, 0] * Del2[:, ix]
+                        - grad_Lambda
+                    ),
+                    axis=1,
+                )
+            )
+        else:
+            Ha_eff += -current * np.sum(
                 (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
                 axis=1,
             )
-        )
-
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
@@ -397,6 +406,13 @@ def solve_layer(
                 film_to_vortices[name].append(vortex)
                 # A given vortex can only lie in a single film.
                 continue
+
+    import pdb
+
+    pdb.set_trace()
+
+    if gpu:
+        Ha_eff.block_until_ready()
 
     # Now solve for the stream function inside the superconducting films
     for name, film in films.items():
@@ -412,10 +428,12 @@ def solve_layer(
             grad_Lambda = grad_Lambda_term[ix2d]
         else:
             grad_Lambda = 0
-        A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
-        h = Hz_applied[ix1d] - Ha_eff[ix1d]
+        A = (
+            Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
+        ).block_until_ready()
+        h = (Hz_applied[ix1d] - Ha_eff[ix1d]).block_until_ready()
         if gpu:
-            gf = jnp.linalg.solve(-A, h)
+            gf = jnp.linalg.solve(-A, h).block_until_ready()
             g.at[ix1d].set(gf)
         else:
             lu_piv = la.lu_factor(-A)
