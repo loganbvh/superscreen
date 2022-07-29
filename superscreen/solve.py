@@ -337,6 +337,8 @@ def solve_layer(
     Lambda = Lambda_info.Lambda
     if inhomogeneous:
         grad_Lambda_term = einsum_("ijk, ijk -> jk", (grad @ Lambda), grad)
+        if gpu:
+            grad_Lambda_term.block_until_ready()
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -407,10 +409,6 @@ def solve_layer(
                 # A given vortex can only lie in a single film.
                 continue
 
-    import pdb
-
-    pdb.set_trace()
-
     if gpu:
         Ha_eff.block_until_ready()
 
@@ -453,7 +451,7 @@ def solve_layer(
             if K is None:
                 # Compute K only once if needed
                 if gpu:
-                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))
+                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0])).block_until_ready()
                 else:
                     K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
