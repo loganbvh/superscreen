@@ -550,10 +550,10 @@ def solve(
             raise ValueError(
                 "Running solve(..., gpu=True) requires the JAX package."
             ) from e
-        if not jax.devices():
-            raise RuntimeError(
-                "Running solve(..., gpu=True) requires a CUDA-compatible GPU."
-            )
+        jax_device = jax.devices()[0]
+        logger.info(f"Using JAX with device {jax_device}.")
+        if "cpu" in jax_device.device_kind:
+            logger.warning("No GPU found. Using JAX on the CPU.")
         dtype = np.float32
     else:
         dtype = device.solve_dtype
