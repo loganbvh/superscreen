@@ -21,14 +21,6 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
-try:
-    import jax
-    import jax.numpy as jnp
-
-    HAS_JAX = True
-except (ModuleNotFoundError, ImportError):
-    HAS_JAX = False
-
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -329,6 +321,9 @@ def solve_layer(
     points = device.points
 
     if gpu:
+        import jax
+        import jax.numpy as jnp
+
         einsum_ = jnp.einsum
     else:
         einsum_ = np.einsum
@@ -385,23 +380,13 @@ def solve_layer(
         else:
             grad_Lambda = 0
 
+        k = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
         if gpu:
-            Ha_eff = Ha_eff.at[Ha_eff_ix].add(
-                -current
-                * jnp.sum(
-                    (
-                        Q[:, ix] * weights[ix, 0]
-                        - Lambda[ix, 0] * Del2[:, ix]
-                        - grad_Lambda
-                    ),
-                    axis=1,
-                )
-            )
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(k, axis=1))
         else:
-            Ha_eff += -current * np.sum(
-                (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
-                axis=1,
-            )
+            Ha_eff += -current * np.sum(k, axis=1)
+        del k
+
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
@@ -447,7 +432,7 @@ def solve_layer(
             if K is None:
                 # Compute K only once if needed
                 if gpu:
-                    K = jnp.linalg.solve(A, jnp.eye(A.shape[0]))
+                    K = jnp.linalg.solve(-A, jnp.eye(A.shape[0]))
                 else:
                     K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
@@ -460,12 +445,12 @@ def solve_layer(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
             # Eq. 28 in [Brandt]
+            g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
             if gpu:
-                g = g.at[ix1d].add(
-                    vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
-                )
+                g = g.at[ix1d].add(g_vortex)
             else:
-                g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+                g[ix1d] += g_vortex
+            del g_vortex
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     Gx = grad[0]
     Gy = grad[1]
@@ -558,13 +543,17 @@ def solve(
             "Call device.compute_matrices() to calculate it."
         )
     if gpu:
-        if not HAS_JAX:
-            raise ValueError("Running solve(..., gpu=True) requires the JAX package. ")
+        try:
+            import jax
+            import jax.numpy as jnp
+        except (ModuleNotFoundError, ImportError) as e:
+            raise ValueError(
+                "Running solve(..., gpu=True) requires the JAX package."
+            ) from e
         if not jax.devices():
             raise RuntimeError(
                 "Running solve(..., gpu=True) requires a CUDA-compatible GPU."
             )
-
         dtype = np.float32
     else:
         dtype = device.solve_dtype
@@ -770,10 +759,7 @@ def solve(
     with context as tempdir:
         for i in range(iterations):
             # Calculate the screening fields at each layer from every other layer
-            if gpu:
-                zeros = jnp.zeros
-            else:
-                zeros = np.zeros
+            zeros = jnp.zeros if gpu else np.zeros
             other_screening_fields = {
                 name: zeros(points.shape[0], dtype=dtype) for name in layer_names
             }
@@ -802,8 +788,6 @@ def solve(
                 q = kernels.get(key, None)
                 if q is None:
                     q = (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
-                    if not gpu:
-                        q = q.astype(dtype, copy=False)
                     if cache_kernels_to_disk:
                         fname = os.path.join(tempdir, "_".join(key))
                         np.save(fname, q)
