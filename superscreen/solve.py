@@ -21,6 +21,14 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
+try:
+    import jax
+    import jax.numpy as jnp
+
+    HAS_JAX = True
+except (ModuleNotFoundError, ImportError):
+    HAS_JAX = False
+
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -274,7 +282,7 @@ def solve_layer(
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
@@ -295,6 +303,7 @@ def solve_layer(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
+        gpu: Solve on a GPU if available (requires JAX and CUDA).
 
     Returns:
         stream function, current density, total field, film screening field
@@ -321,9 +330,8 @@ def solve_layer(
     points = device.points
 
     if gpu:
-        import jax
-        import jax.numpy as jnp
-
+        if not HAS_JAX:
+            raise ValueError("Running solve_layer(..., gpu=True) requires JAX.")
         einsum_ = jnp.einsum
     else:
         einsum_ = np.einsum
@@ -473,7 +481,7 @@ def solve(
     vortices: Optional[List[Vortex]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     return_solutions: bool = True,
     directory: Optional[str] = None,
@@ -520,6 +528,7 @@ def solve(
             case, the arrays will remain in memory unless they are swapped to disk
             by the operating system.
         log_level: Logging level to use, if any.
+        gpu: Solve on a GPU if available (requires JAX and CUDA).
         _solver: Name of the solver method used.
 
     Returns:
@@ -543,17 +552,15 @@ def solve(
             "Call device.compute_matrices() to calculate it."
         )
     if gpu:
-        try:
-            import jax
-            import jax.numpy as jnp
-        except (ModuleNotFoundError, ImportError) as e:
-            raise ValueError(
-                "Running solve(..., gpu=True) requires the JAX package."
-            ) from e
+        if not HAS_JAX:
+            raise ValueError("Running solve(..., gpu=True) requires JAX.")
         jax_device = jax.devices()[0]
         logger.info(f"Using JAX with device {jax_device}.")
         if "cpu" in jax_device.device_kind:
             logger.warning("No GPU found. Using JAX on the CPU.")
+            _solver = _solver + ":jax:cpu"
+        else:
+            _solver = _solver + ":jax:gpu"
         dtype = np.float32
     else:
         dtype = device.solve_dtype
@@ -896,7 +903,7 @@ def solve_many(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
     directory: Optional[str] = None,
