@@ -67,3 +67,33 @@ If you prefer, you can also run the ``superscreen`` tests in a single line:
 .. code-block:: bash
 
     python -m superscreen.testing
+
+GPU Acceleration
+----------------
+
+``SuperScreen`` can use a graphics processing unit (GPU) as a hardware accelerator to speed up computations.
+GPU acceleration relies on the `JAX library <https://github.com/google/jax>`_  from Google and requires
+a machine running Linux (or `Windows Subsystem Linux, WSL <https://docs.microsoft.com/en-us/windows/wsl/about>`_)
+with an Nvidia GPU.
+
+.. tip::
+
+    These installation instructions require that you have installed ``superscreen`` in a conda environment
+    as described above. Below we assume that this conda environment is called ``superscreen``.
+
+CUDA and JAX can be installed as follows:
+
+.. code-block:: bash
+
+  # Activate superscreen conda environment
+  conda activate superscreen
+  # Install CUDA from the Nvidia conda channel:
+  # https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#conda-installation
+  conda install cuda -c nvidia
+  # Install JAX based on instructions provided by Google:
+  # https://github.com/google/jax#installation
+  pip install --upgrade pip
+  pip install --upgrade "jax[cuda]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+Once installed, running ``SuperScreen`` on a GPU is as simple as passing the keyword argument ``gpu=True`` to
+``superscreen.solve()``. See [notebook] for an demonstration of GPU-accelerated ``SuperScreen`` simulations.

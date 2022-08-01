@@ -3,13 +3,13 @@
 
 ![GitHub Workflow Status (branch)](https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main) [![Documentation Status](https://readthedocs.org/projects/superscreen/badge/?version=latest)](https://superscreen.readthedocs.io/en/latest/?badge=latest) [![codecov](https://codecov.io/gh/loganbvh/superscreen/branch/main/graph/badge.svg?token=XW7LSY8WVD)](https://codecov.io/gh/loganbvh/superscreen) ![GitHub](https://img.shields.io/github/license/loganbvh/superscreen) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![DOI](https://zenodo.org/badge/376110557.svg)](https://zenodo.org/badge/latestdoi/376110557)
 
-SuperScreen is a package for simulating the magnetic response of multi-planar thin film
-superconducting devices. SuperScreen solves the coupled Maxwell's and London equations
-on a triangular mesh using a matrix inversion method described in the following references:
+`SuperScreen` is a Python package for simulating the magnetic response of thin film superconducting devices. `SuperScreen` solves the coupled Maxwell's and London equations on a triangular mesh using a matrix inversion method described in the following paper:
 
-1. Phys. Rev. B 72, 024529 (2005).
-2. Rev. Sci. Instrum. 87, 093702 (2016).
-3. Supercond. Sci. Technol. 29 (2016) 124001.
+>SuperScreen: An open-source package for simulating the magnetic response of two-dimensional superconducting devices, Computer Physics Communications, Volume 280, 2022, 108464 [https://doi.org/10.1016/j.cpc.2022.108464](https://doi.org/10.1016/j.cpc.2022.108464).
+
+The accepted version of the paper can also be found on arXiv: [arXiv:2203.13388](https://doi.org/10.48550/arXiv.2203.13388). The GitHub repository accompanying the paper can be found [here](https://github.com/loganbvh/superscreen-paper).
+
+## Learn `SuperScreen`
 
 The documentation for `SuperScreen` can be found at [superscreen.readthedocs.io](https://superscreen.readthedocs.io/en/latest/).
 
@@ -59,6 +59,9 @@ EXTRAS_REQUIRE = {
         "sphinx-autodoc-typehints",
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
+    ],
+    "jax": [
+        "jax[cpu]",
     ],
 }
 
