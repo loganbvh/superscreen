@@ -557,7 +557,7 @@ def solve(
         jax_device = jax.devices()[0]
         logger.info(f"Using JAX with device {jax_device}.")
         if "cpu" in jax_device.device_kind:
-            logger.warning("No GPU found. Using JAX on the CPU.")
+            logger.info("No GPU found. Using JAX on the CPU.")
             _solver = _solver + ":jax:cpu"
         else:
             _solver = _solver + ":jax:gpu"
