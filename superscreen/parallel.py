@@ -1,7 +1,6 @@
 import os
 import time
 import shutil
-import psutil
 import logging
 import itertools
 import tempfile
@@ -25,9 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def cpu_count(logical: bool = False):
-    njoblib = joblib.cpu_count()
-    npsutil = psutil.cpu_count(logical=logical)
-    return min(njoblib, npsutil)
+    return joblib.cpu_count(only_physical_cores=(not logical))
 
 
 def create_models(
