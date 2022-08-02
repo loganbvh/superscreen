@@ -3,7 +3,7 @@
 #SBATCH --job-name=gpu-ipynb
 #SBATCH --partition=gpu
 #SBATCH --gpus=1
-#SBATCH --cpus-per-cpu=2
+#SBATCH --cpus-per-gpu=2
 #SBATCH --time=4:00:00
 #SBATCH --mem=8G
 #SBATCH --chdir=$HOME/superscreen/docs/notebooks
