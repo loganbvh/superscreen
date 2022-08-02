@@ -24,6 +24,7 @@ from scipy.spatial import distance
 try:
     import jax
     import jax.numpy as jnp
+    import jax.scipy.linalg as jla
 
     HAS_JAX = True
 except (ModuleNotFoundError, ImportError):
@@ -420,7 +421,8 @@ def solve_layer(
         A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
         if gpu:
-            gf = jnp.linalg.solve(-A, h)
+            lu_piv = jla.lu_factor(-A)
+            gf = jla.lu_solve(lu_piv, h)
             g = g.at[ix1d].set(gf)
         else:
             lu_piv = la.lu_factor(-A)
@@ -440,7 +442,7 @@ def solve_layer(
             if K is None:
                 # Compute K only once if needed
                 if gpu:
-                    K = jnp.linalg.solve(-A, jnp.eye(A.shape[0]))
+                    K = -jla.lu_solve(lu_piv, jnp.eye(A.shape[0]))
                 else:
                     K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
