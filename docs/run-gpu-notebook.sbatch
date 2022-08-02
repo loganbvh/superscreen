@@ -5,7 +5,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=2
 #SBATCH --time=4:00:00
-#SBATCH --mem=8G
+#SBATCH --mem=16G
 
 # Activate conda env
 source $GROUP_HOME/miniconda3/bin/activate
