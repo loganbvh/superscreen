@@ -115,6 +115,7 @@ Once installed, running ``SuperScreen`` on a GPU is as simple as passing the key
     >>> import os
     >>> os.environ["LD_LIBRARY_PATH"] = "$CONDA_PREFIX/lib"
 
-  If you don't set this environment variable, you may see a ``cuSolver internal error`` when you try to
-  run :python:`superscreen.solve(..., gpu=True)`. ``$CONDA_PREFIX`` is an environment variable set automatically by conda
-  that points to the directory of the active conda environment. For example, it might be ``$HOME/opt/anaconda3/envs/superscreen``.
+  If you don't set this environment variable, you may see a CUDA-related error such as ``cuSolver internal error``
+  when you try to run :python:`superscreen.solve(..., gpu=True)`. ``$CONDA_PREFIX`` is an environment variable
+  set automatically by conda that points to the directory of the active conda environment.
+  For example, it might be ``$HOME/opt/anaconda3/envs/superscreen``.
