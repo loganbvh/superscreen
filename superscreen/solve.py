@@ -913,6 +913,7 @@ def solve_many(
     log_level: int = logging.INFO,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
+    gpu: bool = False,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -957,6 +958,8 @@ def solve_many(
         log_level: Logging level to use, if any.
         use_shared_memory: Whether to use shared memory if parallel_method is not None.
         num_cpus: The number of processes to utilize.
+        gpu: Solve on a GPU if available (requires JAX and CUDA). gpu = True is only allowed
+            for serial execution, i.e., ``parallel_method in {None, False, "serial"}``.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of
@@ -980,12 +983,13 @@ def solve_many(
             f"Unknown parallel method, {parallel_method}. "
             f"Valid methods are {list(parallel_methods)}."
         )
-    if num_cpus is not None and parallel_method in (None, False, "serial"):
+    serial_methods = {None, False, "serial"}
+    if num_cpus is not None and parallel_method in serial_methods:
         logger.warning(
             f"Ignoring num_cpus because parallel_method = {parallel_method!r}."
         )
 
-    solutions, paths = parallel_methods[parallel_method](
+    kwargs = dict(
         device=device,
         applied_fields=applied_fields,
         circulating_currents=circulating_currents,
@@ -1006,6 +1010,15 @@ def solve_many(
         num_cpus=num_cpus,
     )
 
+    if parallel_method in serial_methods:
+        kwargs["gpu"] = gpu
+    elif gpu:
+        raise ValueError(
+            "Running solve_many() with gpu = True requires serial execution "
+            "(i.e., parallel method in {None, False, 'serial'})."
+        )
+
+    solutions, paths = parallel_methods[parallel_method](**kwargs)
     return solutions, paths
 
 

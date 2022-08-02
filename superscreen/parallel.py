@@ -187,6 +187,7 @@ def solve_many_serial(
     keep_only_final_solution: bool = False,
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
+    gpu: bool = False,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
 ):
@@ -206,7 +207,7 @@ def solve_many_serial(
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     logger.info(f"Solving {len(models)} models serially with 1 process.")
 
@@ -236,6 +237,7 @@ def solve_many_serial(
                 return_solutions=False,
                 cache_memory_cutoff=cache_memory_cutoff,
                 directory=path,
+                gpu=gpu,
                 _solver=solver,
             )
             paths.append(path)
@@ -250,7 +252,7 @@ def solve_many_serial(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
@@ -371,7 +373,7 @@ def solve_many_mp(
         product=product,
     )
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
 
@@ -440,7 +442,7 @@ def solve_many_mp(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
@@ -534,7 +536,7 @@ def solve_many_ray(
 
     solver = f"superscreen.solve_many:ray:{num_cpus}"
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     # Put the device's big arrays in shared memory.
     # The copy is necessary here so that the arrays do not get pinned in shared memory.
@@ -596,7 +598,7 @@ def solve_many_ray(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(

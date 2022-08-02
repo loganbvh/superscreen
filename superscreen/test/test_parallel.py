@@ -87,23 +87,26 @@ def test_solve_many(
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]
 
+    solve_kwargs = dict(
+        applied_fields=applied_field,
+        circulating_currents=circulating_currents,
+        vortices=vortices,
+        iterations=2,
+        return_solutions=return_solutions,
+        keep_only_final_solution=keep_only_final_solution,
+        use_shared_memory=use_shared_memory,
+    )
+
     if save:
         save_context = tempfile.TemporaryDirectory()
     else:
         save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_serial, paths_serial = sc.solve_many(
-            device=device,
+            device,
             parallel_method=None,
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
             directory=directory,
-            use_shared_memory=use_shared_memory,
-            num_cpus=num_cpus,
+            **solve_kwargs,
         )
         solver = "superscreen.solve_many:serial:1"
         solutions, paths = solutions_serial, paths_serial
@@ -138,18 +141,21 @@ def test_solve_many(
     else:
         save_context = contextlib.nullcontext()
     with save_context as directory:
+        with pytest.raises(ValueError):
+            solutions_mp, paths_mp = sc.solve_many(
+                device,
+                parallel_method="mp",
+                num_cpus=num_cpus,
+                directory=directory,
+                gpu=True,
+                **solve_kwargs,
+            )
         solutions_mp, paths_mp = sc.solve_many(
-            device=device,
+            device,
             parallel_method="mp",
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
-            directory=directory,
-            use_shared_memory=use_shared_memory,
             num_cpus=num_cpus,
+            directory=directory,
+            **solve_kwargs,
         )
         ncpu = min(len(circulating_currents), os.cpu_count())
         solver = f"superscreen.solve_many:multiprocessing:{ncpu}"
@@ -186,17 +192,11 @@ def test_solve_many(
         save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_ray, paths_ray = sc.solve_many(
-            device=device,
+            device,
             parallel_method="ray",
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
-            directory=directory,
-            use_shared_memory=use_shared_memory,
             num_cpus=num_cpus,
+            directory=directory,
+            **solve_kwargs,
         )
         solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray
