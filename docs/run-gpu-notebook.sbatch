@@ -14,3 +14,5 @@ conda activate superscreen-jax
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
 
 jupyter nbconvert --to notebook --execute --inplace notebooks/gpu.ipynb
+
+rm slurm-$SLURM_JOBID.out
