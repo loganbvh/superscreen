@@ -96,9 +96,8 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    :caption: Getting Started
 
    installation.rst
-   background.rst
    notebooks/quickstart.ipynb
-   gpu-acceleration.rst
+   background.rst
 
 .. toctree::
    :maxdepth: 2

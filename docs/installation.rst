@@ -4,6 +4,12 @@
 Installation
 ************
 
+.. role:: bash(code)
+   :language: bash
+
+.. role:: python(code)
+  :language: python
+
 ``SuperScreen`` requires ``Python >=3.7, <3.10`` and can be installed either from
 `PyPI <https://pypi.org/project/superscreen/>`_, the Python Package index,
 or from the ``SuperScreen`` `GitHub repository <https://github.com/loganbvh/superscreen>`_.
@@ -68,7 +74,7 @@ If you prefer, you can also run the ``superscreen`` tests in a single line:
 
     python -m superscreen.testing
 
-GPU Acceleration
+GPU acceleration
 ----------------
 
 ``SuperScreen`` can use a graphics processing unit (GPU) as a hardware accelerator to speed up computations.
@@ -76,7 +82,7 @@ GPU acceleration relies on the `JAX library <https://github.com/google/jax>`_  f
 a machine running Linux (or `Windows Subsystem Linux, WSL <https://docs.microsoft.com/en-us/windows/wsl/about>`_)
 with an Nvidia GPU.
 
-.. tip::
+.. note::
 
     These installation instructions require that you have installed ``superscreen`` in a conda environment
     as described above. Below we assume that this conda environment is called ``superscreen``.
@@ -95,5 +101,20 @@ CUDA and JAX can be installed as follows:
   pip install --upgrade pip
   pip install --upgrade "jax[cuda]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-Once installed, running ``SuperScreen`` on a GPU is as simple as passing the keyword argument ``gpu=True`` to
-``superscreen.solve()``. See [notebook] for an demonstration of GPU-accelerated ``SuperScreen`` simulations.
+Once installed, running ``SuperScreen`` on a GPU is as simple as passing the keyword argument :python:`gpu=True` to
+:python:`superscreen.solve()`. See [notebook] for an demonstration of GPU-accelerated ``SuperScreen`` simulations.
+
+.. note::
+
+  To ensure that JAX can find the appropriate GPU libraries, you may need to set the environment variable
+  :bash:`export LD_LIBRARY_PATH=$CONDA_PREFIX/lib` after activating your conda environment and before starting Python.
+  Alternatively, in your Python session you can run:
+
+  .. code-block:: python
+
+    >>> import os
+    >>> os.environ["LD_LIBRARY_PATH"] = "$CONDA_PREFIX/lib"
+
+  If you don't set this environment variable, you may see a ``cuSolver internal error`` when you try to
+  run :python:`superscreen.solve(..., gpu=True)`. ``$CONDA_PREFIX`` is an environment variable set automatically by conda
+  that points to the directory of the active conda environment. For example, it might be ``$HOME/opt/anaconda3/envs/superscreen``.
