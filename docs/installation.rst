@@ -102,7 +102,8 @@ CUDA and JAX can be installed as follows:
   pip install --upgrade "jax[cuda]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 Once installed, running ``SuperScreen`` on a GPU is as simple as passing the keyword argument :python:`gpu=True` to
-:python:`superscreen.solve()`. See [notebook] for an demonstration of GPU-accelerated ``SuperScreen`` simulations.
+:python:`superscreen.solve()`. See `GPU acceleration <notebooks/gpu.ipynb>`_ for an demonstration of
+GPU-accelerated ``SuperScreen`` simulations.
 
 .. note::
 
