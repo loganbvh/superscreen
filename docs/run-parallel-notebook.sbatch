@@ -3,7 +3,7 @@
 #SBATCH --job-name=parallel-ipynb
 #SBATCH --partition=normal
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=5
+#SBATCH --cpus-per-task=11
 #SBATCH --time=4:00:00
 #SBATCH --mem=16G
 
