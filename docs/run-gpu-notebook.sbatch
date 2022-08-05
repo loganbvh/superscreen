@@ -11,7 +11,7 @@
 source $GROUP_HOME/miniconda3/bin/activate
 conda activate superscreen-jax
 
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib
+export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}
 
 jupyter nbconvert --to notebook --execute --inplace notebooks/gpu.ipynb
 

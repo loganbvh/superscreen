@@ -107,14 +107,14 @@ GPU-accelerated ``SuperScreen`` simulations.
 
 .. note::
 
-  To ensure that JAX can find the appropriate GPU libraries, you may need to set the environment variable
-  :bash:`export LD_LIBRARY_PATH=$CONDA_PREFIX/lib` after activating your conda environment and before starting Python.
-  Alternatively, in your Python session you can run:
+  To ensure that JAX can find the appropriate GPU libraries, you may need to update the environment variable
+  :bash:`export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}` after activating your
+  conda environment and before starting Python. Alternatively, in your Python session you can run:
 
   .. code-block:: python
 
     >>> import os
-    >>> os.environ["LD_LIBRARY_PATH"] = "$CONDA_PREFIX/lib"
+    >>> os.environ["LD_LIBRARY_PATH"] = f"$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 
   If you don't set this environment variable, you may see a CUDA-related error such as ``cuSolver internal error``
   when you try to run :python:`superscreen.solve(..., gpu=True)`. ``$CONDA_PREFIX`` is an environment variable
