@@ -4,13 +4,20 @@ import time
 import inspect
 from typing import Optional, Dict
 
+import joblib
 import ray
-import psutil
 import numpy
 import scipy
 import IPython
 from IPython.display import HTML
 import matplotlib
+
+try:
+    import jax
+
+    jax_version = jax.__version__
+except (ModuleNotFoundError, ImportError):
+    jax_version = None
 
 import superscreen
 
@@ -35,7 +42,7 @@ def _blas_info() -> str:
         _has_lib_key and any("openblas" in lib for lib in blas_info["libraries"])
     ):
         blas = "OPENBLAS"
-    elif "extra_link_args" in blas_info.keys() and (
+    elif "extra_link_args" in blas_info and (
         "-Wl,Accelerate" in blas_info["extra_link_args"]
     ):
         blas = "Accelerate"
@@ -46,13 +53,14 @@ def _blas_info() -> str:
 
 def version_dict() -> Dict[str, str]:
     """Returns a dictionary containing the versions of important dependencies."""
-    cpu_count = [psutil.cpu_count(logical=b) for b in (False, True)]
+    cpu_count = [joblib.cpu_count(only_physical_cores=b) for b in (True, False)]
     return {
         "SuperScreen": superscreen.__version__,
         "Numpy": numpy.__version__,
         "SciPy": scipy.__version__,
         "matplotlib": matplotlib.__version__,
         "ray": ray.__version__,
+        "jax": str(jax_version),
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",

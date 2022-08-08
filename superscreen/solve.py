@@ -21,6 +21,15 @@ import scipy.sparse as sp
 import scipy.linalg as la
 from scipy.spatial import distance
 
+try:
+    import jax
+    import jax.numpy as jnp
+    import jax.scipy.linalg as jla
+
+    HAS_JAX = True
+except (ModuleNotFoundError, ImportError):
+    HAS_JAX = False
+
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
@@ -266,6 +275,7 @@ def solve_layer(
     device: Device,
     layer: str,
     applied_field: np.ndarray,
+    kernel: np.ndarray,
     weights: np.ndarray,
     Del2: np.ndarray,
     grad: np.ndarray,
@@ -273,7 +283,8 @@ def solve_layer(
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
+    gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
@@ -282,6 +293,7 @@ def solve_layer(
         layer: Name of the layer to analyze.
         applied_field: The applied magnetic field evaluated at the mesh vertices.
         weights: The Device's weight vector.
+        kernel: The Device's kernel matrix ``Q``.
         Del2: The Device's Laplacian operator.
         grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
         Lambda_info: A LambdaInfo instance defining Lambda(x, y).
@@ -293,6 +305,7 @@ def solve_layer(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
+        gpu: Solve on a GPU if available (requires JAX and CUDA).
 
     Returns:
         stream function, current density, total field, film screening field
@@ -312,23 +325,26 @@ def solve_layer(
         .magnitude
     )
 
-    Q = device.Q
-    points = device.points
-    if weights.ndim == 1:
-        # Shape (n, ) --> (n, 1)
-        weights = weights[:, np.newaxis]
-
     films = {name: film for name, film in device.films.items() if film.layer == layer}
     holes = {name: hole for name, hole in device.holes.items() if hole.layer == layer}
+
+    Q = kernel
+    points = device.points
+
+    if gpu:
+        if not HAS_JAX:
+            raise ValueError("Running solve_layer(..., gpu=True) requires JAX.")
+        einsum_ = jnp.einsum
+    else:
+        einsum_ = np.einsum
 
     # Units: current_units / device.length_units.
     Hz_applied = applied_field
 
     inhomogeneous = Lambda_info.inhomogeneous
-    # Shape (n, ) --> (n, 1)
-    Lambda = Lambda_info.Lambda[:, np.newaxis]
+    Lambda = Lambda_info.Lambda
     if inhomogeneous:
-        grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
+        grad_Lambda_term = einsum_("ijk, ijk -> jk", (grad @ Lambda), grad)
 
     # Identify holes in the superconductor
     hole_indices = {}
@@ -345,6 +361,11 @@ def solve_layer(
     # and Eqs 17-18 in [Kirtley2].
     g = np.zeros_like(Hz_applied)
     Ha_eff = np.zeros_like(Hz_applied)
+    if gpu:
+        g = jax.device_put(g)
+        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
+        Ha_eff = jax.device_put(Ha_eff)
+
     for name in holes:
         current = circulating_currents.get(name, None)
         if current is None:
@@ -355,7 +376,10 @@ def solve_layer(
             current = current.to(current_units).magnitude
 
         ix = hole_indices[name]
-        g[ix] = current  # g[hole] = I_circ
+        if gpu:
+            g = g.at[ix].set(current)
+        else:
+            g[ix] = current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
@@ -366,10 +390,13 @@ def solve_layer(
         else:
             grad_Lambda = 0
 
-        Ha_eff += -current * np.sum(
-            (Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda),
-            axis=1,
-        )
+        k = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
+        if gpu:
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(k, axis=1))
+        else:
+            Ha_eff += -current * np.sum(k, axis=1)
+        del k
+
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
         for name, film in films.items():
@@ -394,9 +421,14 @@ def solve_layer(
             grad_Lambda = 0
         A = Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * Del2[ix2d] - grad_Lambda
         h = Hz_applied[ix1d] - Ha_eff[ix1d]
-        lu, piv = la.lu_factor(-A)
-        gf = la.lu_solve((lu, piv), h)
-        g[ix1d] = gf
+        if gpu:
+            lu_piv = jla.lu_factor(-A)
+            gf = jla.lu_solve(lu_piv, h)
+            g = g.at[ix1d].set(gf)
+        else:
+            lu_piv = la.lu_factor(-A)
+            gf = la.lu_solve(lu_piv, h)
+            g[ix1d] = gf
 
         if check_inversion:
             # Validate solution
@@ -410,7 +442,10 @@ def solve_layer(
         for vortex in film_to_vortices[name]:
             if K is None:
                 # Compute K only once if needed
-                K = -la.lu_solve((lu, piv), np.eye(A.shape[0]))
+                if gpu:
+                    K = -jla.lu_solve(lu_piv, jnp.eye(A.shape[0]))
+                else:
+                    K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
             # Index of the mesh vertex that is closest to the vortex position:
             # in the film-specific sub-mesh
             j_film = np.argmin(
@@ -421,16 +456,23 @@ def solve_layer(
                 np.sum(np.square(points - [[vortex.x, vortex.y]]), axis=1)
             )
             # Eq. 28 in [Brandt]
-            g[ix1d] += vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+            g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+            if gpu:
+                g = g.at[ix1d].add(g_vortex)
+            else:
+                g[ix1d] += g_vortex
+            del g_vortex
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     Gx = grad[0]
     Gy = grad[1]
-    J = np.stack([Gy @ g, -Gx @ g], axis=1)
+    Jx = np.asarray(Gy @ g)
+    Jy = np.asarray(-Gx @ g)
+    J = np.stack([Jx, Jy], axis=1)
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = Q @ (weights[:, 0] * g)
+    screening_field = np.asarray(Q @ (weights[:, 0] * g))
     # Above is equivalent to the following, but much faster
     # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
-    total_field = Hz_applied + screening_field
+    total_field = np.asarray(Hz_applied) + screening_field
     return g, J, total_field, screening_field
 
 
@@ -442,12 +484,13 @@ def solve(
     vortices: Optional[List[Vortex]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     return_solutions: bool = True,
     directory: Optional[str] = None,
     cache_memory_cutoff: float = np.inf,
     log_level: int = logging.INFO,
+    gpu: bool = False,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
@@ -488,6 +531,7 @@ def solve(
             case, the arrays will remain in memory unless they are swapped to disk
             by the operating system.
         log_level: Logging level to use, if any.
+        gpu: Solve on a GPU if available (requires JAX and CUDA).
         _solver: Name of the solver method used.
 
     Returns:
@@ -510,10 +554,26 @@ def solve(
             "The device does not have a Laplace operator. "
             "Call device.compute_matrices() to calculate it."
         )
+    if gpu:
+        if not HAS_JAX:
+            raise ValueError("Running solve(..., gpu=True) requires JAX.")
+        jax_device = jax.devices()[0]
+        logger.info(f"Using JAX with device {jax_device}.")
+        if "cpu" in jax_device.device_kind:
+            logger.warning("No GPU found. Using JAX on the CPU.")
+            _solver = _solver + ":jax:cpu"
+        else:
+            _solver = _solver + ":jax:gpu"
+        dtype = np.float32
+    else:
+        dtype = device.solve_dtype
 
-    dtype = device.solve_dtype
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
+    Q = device.Q.astype(dtype, copy=False)
+    if weights.ndim == 1:
+        # Shape (n, ) --> (n, 1)
+        weights = weights[:, np.newaxis]
     Del2 = device.Del2
     gradx = device.gradx
     grady = device.grady
@@ -524,6 +584,13 @@ def solve(
     if sp.issparse(grady):
         grady = grady.toarray().astype(dtype, copy=False)
     grad = np.stack([gradx, grady], axis=0)
+
+    if gpu:
+        weights = jax.device_put(weights)
+        Del2 = jax.device_put(Del2)
+        grad = jax.device_put(grad)
+        Q = jax.device_put(Q)
+        grad = jax.device_put(grad)
 
     solutions = []
     streams = {}
@@ -550,7 +617,7 @@ def solve(
     layer_Lambdas = {}
     for name, layer in device.layers.items():
         # Units: current_units / device.length_units
-        layer_fields[name] = (
+        layer_field = (
             applied_field(device.points[:, 0], device.points[:, 1], layer.z0)
             * field_conversion_magnitude
         ).astype(dtype, copy=False)
@@ -572,13 +639,19 @@ def solve(
             Lambda = Constant(Lambda)
         Lambda = Lambda(device.points[:, 0], device.points[:, 1]).astype(
             dtype, copy=False
-        )
+        )[:, np.newaxis]
         if london_lambda is not None:
             if isinstance(london_lambda, (int, float)):
                 london_lambda = Constant(london_lambda)
             london_lambda = london_lambda(
                 device.points[:, 0], device.points[:, 1]
-            ).astype(dtype, copy=False)
+            ).astype(dtype, copy=False)[:, np.newaxis]
+        if gpu:
+            layer_field = jax.device_put(layer_field)
+            Lambda = jax.device_put(Lambda)
+            if london_lambda is not None:
+                london_lambda = jax.device_put(london_lambda)
+        layer_fields[name] = layer_field
         layer_Lambdas[name] = LambdaInfo(
             layer=name,
             Lambda=Lambda,
@@ -611,6 +684,7 @@ def solve(
             device=device,
             layer=name,
             applied_field=layer_fields[name],
+            kernel=Q,
             circulating_currents=circulating_currents,
             vortices=vortices_by_layer[name],
             weights=weights,
@@ -619,9 +693,10 @@ def solve(
             Lambda_info=layer_Lambdas[name],
             current_units=current_units,
             check_inversion=check_inversion,
+            gpu=gpu,
         )
         # Units: current_units
-        streams[name] = g.astype(dtype, copy=False)
+        streams[name] = g.astype(dtype)
         # Units: currents_units / device.length_units
         currents[name] = J.astype(dtype, copy=False)
         # Units: current_units / device.length_units
@@ -630,7 +705,9 @@ def solve(
 
     solution = Solution(
         device=device,
-        streams=streams,
+        streams={
+            layer: np.asarray(stream, dtype=dtype) for layer, stream in streams.items()
+        },
         current_densities=currents,
         fields={
             # Units: field_units
@@ -658,152 +735,157 @@ def solve(
 
     layer_names = list(device.layers)
     nlayers = len(layer_names)
-    if iterations and nlayers > 1:
-        rho2 = distance.cdist(points, points, metric="sqeuclidean").astype(
-            dtype,
-            copy=False,
+    if nlayers < 2 or iterations < 1:
+        if return_solutions:
+            return solutions
+        return
+    rho2 = distance.cdist(points, points, metric="sqeuclidean").astype(
+        dtype,
+        copy=False,
+    )
+    # Cache kernel matrices.
+    kernels = {}
+    if cache_memory_cutoff is None:
+        cache_memory_cutoff = np.inf
+    if cache_memory_cutoff < 0:
+        raise ValueError(
+            f"Kernel cache memory cutoff must be greater than zero "
+            f"(got {cache_memory_cutoff})."
         )
-        # Cache kernel matrices.
-        kernels = {}
-        if cache_memory_cutoff is None:
-            cache_memory_cutoff = np.inf
-        if cache_memory_cutoff < 0:
-            raise ValueError(
-                f"Kernel cache memory cutoff must be greater than zero "
-                f"(got {cache_memory_cutoff})."
-            )
-        nkernels = nlayers * (nlayers - 1) // 2
-        total_bytes = nkernels * rho2.nbytes
-        available_bytes = psutil.virtual_memory().available
-        if total_bytes > cache_memory_cutoff * available_bytes:
-            # Save kernel matrices to disk to avoid filling up memory.
-            cache_kernels_to_disk = True
-            context = tempfile.TemporaryDirectory()
-        else:
-            # Cache kernels in memory (much faster than saving to/loading from disk).
-            cache_kernels_to_disk = False
-            context = contextlib.nullcontext()
-        with context as tempdir:
-            for i in range(iterations):
-                # Calculate the screening fields at each layer from every other layer
-                other_screening_fields = {
-                    name: np.zeros(points.shape[0], dtype=dtype) for name in layer_names
-                }
-                for layer, other_layer in itertools.product(
-                    device.layers_list, repeat=2
+    nkernels = nlayers * (nlayers - 1) // 2
+    total_bytes = nkernels * rho2.nbytes
+    available_bytes = psutil.virtual_memory().available
+    if total_bytes > cache_memory_cutoff * available_bytes:
+        # Save kernel matrices to disk to avoid filling up memory.
+        cache_kernels_to_disk = True
+        context = tempfile.TemporaryDirectory()
+    else:
+        # Cache kernels in memory (much faster than saving to/loading from disk).
+        cache_kernels_to_disk = False
+        context = contextlib.nullcontext()
+    if gpu:
+        cache_kernels_to_disk = False
+        rho2 = jax.device_put(rho2)
+    with context as tempdir:
+        for i in range(iterations):
+            # Calculate the screening fields at each layer from every other layer
+            zeros = jnp.zeros if gpu else np.zeros
+            other_screening_fields = {
+                name: zeros(points.shape[0], dtype=dtype) for name in layer_names
+            }
+            for layer, other_layer in itertools.product(device.layers_list, repeat=2):
+                if layer.name == other_layer.name:
+                    continue
+                if (
+                    i == 0
+                    and layer.name == layer_names[0]
+                    and other_layer.name == layer_names[1]
                 ):
-                    if layer.name == other_layer.name:
-                        continue
-                    if (
-                        i == 0
-                        and layer.name == layer_names[0]
-                        and other_layer.name == layer_names[1]
-                    ):
-                        logger.info(
-                            f"Caching {nkernels} layer-to-layer kernel(s) "
-                            f"({total_bytes / 1024 ** 2:.0f} MB total) "
-                            f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
-                        )
-                    logger.debug(
-                        f"Calculating screening field at {layer.name} "
-                        f"from {other_layer.name} ({i+1}/{iterations})."
-                    )
-                    g = streams[other_layer.name]
-                    dz = other_layer.z0 - layer.z0
-                    key = frozenset((layer.name, other_layer.name))
-                    # Get the cached kernel matrix,
-                    # or calculate it if it's not yet in the cache.
-                    q = kernels.get(key, None)
-                    if q is None:
-                        q = (
-                            (2 * dz**2 - rho2)
-                            / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
-                        ).astype(dtype, copy=False)
-                        if cache_kernels_to_disk:
-                            fname = os.path.join(tempdir, "_".join(key))
-                            np.save(fname, q)
-                            kernels[key] = f"{fname}.npy"
-                        else:
-                            kernels[key] = q
-                    elif isinstance(q, str):
-                        # Kernel was cached to disk, so load it into memory.
-                        q = np.load(q)
-                    # Calculate the dipole kernel and integrate
-                    # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-                    other_screening_fields[layer.name] += np.einsum(
-                        "ij, j -> i", q, weights * g, dtype=dtype
-                    )
-                    del q, g
-                # Solve again with the screening fields from all layers.
-                # Calculate applied fields only once per iteration.
-                new_layer_fields = {}
-                for name, layer in device.layers.items():
-                    # Units: current_units / device.length_units
-                    new_layer_fields[name] = (
-                        layer_fields[name] + other_screening_fields[name]
-                    ).astype(dtype, copy=False)
-                streams = {}
-                fields = {}
-                screening_fields = {}
-                for name, layer in device.layers.items():
                     logger.info(
-                        f"Calculating {name} response to applied field and "
-                        f"screening field from other layers ({i+1}/{iterations})."
+                        f"Caching {nkernels} layer-to-layer kernel(s) "
+                        f"({total_bytes / 1024 ** 2:.0f} MB total) "
+                        f"{'to disk' if cache_kernels_to_disk else 'in memory'}."
                     )
-                    g, J, total_field, screening_field = solve_layer(
-                        device=device,
-                        layer=name,
-                        applied_field=new_layer_fields[name],
-                        weights=weights,
-                        Del2=Del2,
-                        grad=grad,
-                        Lambda_info=layer_Lambdas[name],
-                        circulating_currents=circulating_currents,
-                        vortices=vortices_by_layer[name],
-                        current_units=current_units,
-                        check_inversion=check_inversion,
-                    )
-                    # Units: current_units
-                    streams[name] = g.astype(dtype, copy=False)
-                    # Units: current_units / device.length_units
-                    currents[name] = J.astype(dtype, copy=False)
-                    # Units: current_units / device.length_units
-                    fields[name] = total_field.astype(dtype, copy=False)
-                    screening_fields[name] = screening_field.astype(dtype, copy=False)
-
-                solution = Solution(
-                    device=device,
-                    streams=streams,
-                    current_densities=currents,
-                    fields={
-                        # Units: field_units
-                        layer: (field / field_conversion_magnitude).astype(
-                            dtype, copy=False
-                        )
-                        for layer, field in fields.items()
-                    },
-                    screening_fields={
-                        # Units: field_units
-                        layer: (field / field_conversion_magnitude).astype(
-                            dtype, copy=False
-                        )
-                        for layer, field in screening_fields.items()
-                    },
-                    applied_field=applied_field,
-                    field_units=field_units,
-                    current_units=current_units,
-                    circulating_currents=circulating_currents,
-                    vortices=vortices,
-                    solver=_solver,
+                logger.debug(
+                    f"Calculating screening field at {layer.name} "
+                    f"from {other_layer.name} ({i+1}/{iterations})."
                 )
-                if directory is not None:
-                    solution.to_file(os.path.join(directory, str(i + 1)))
-                if return_solutions:
-                    solutions.append(solution)
-                else:
-                    del solution
-        if cache_kernels_to_disk:
-            context.cleanup()
+                g = streams[other_layer.name]
+                dz = other_layer.z0 - layer.z0
+                key = frozenset((layer.name, other_layer.name))
+                # Get the cached kernel matrix,
+                # or calculate it if it's not yet in the cache.
+                q = kernels.get(key, None)
+                if q is None:
+                    q = (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
+                    if cache_kernels_to_disk:
+                        fname = os.path.join(tempdir, "_".join(key))
+                        np.save(fname, q)
+                        kernels[key] = f"{fname}.npy"
+                    else:
+                        kernels[key] = q
+                elif isinstance(q, str):
+                    # Kernel was cached to disk, so load it into memory.
+                    q = np.load(q)
+                # Calculate the dipole kernel and integrate
+                # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
+                screening_field = q @ (weights[:, 0] * g)
+                other_screening_fields[layer.name] += screening_field
+                del q, g
+            # Solve again with the screening fields from all layers.
+            # Calculate applied fields only once per iteration.
+            new_layer_fields = {}
+            for name, layer in device.layers.items():
+                # Units: current_units / device.length_units
+                new_layer_fields[name] = (
+                    layer_fields[name] + other_screening_fields[name]
+                )
+            streams = {}
+            fields = {}
+            screening_fields = {}
+            for name, layer in device.layers.items():
+                logger.info(
+                    f"Calculating {name} response to applied field and "
+                    f"screening field from other layers ({i+1}/{iterations})."
+                )
+                g, J, total_field, screening_field = solve_layer(
+                    device=device,
+                    layer=name,
+                    applied_field=new_layer_fields[name],
+                    kernel=Q,
+                    weights=weights,
+                    Del2=Del2,
+                    grad=grad,
+                    Lambda_info=layer_Lambdas[name],
+                    circulating_currents=circulating_currents,
+                    vortices=vortices_by_layer[name],
+                    current_units=current_units,
+                    check_inversion=check_inversion,
+                    gpu=gpu,
+                )
+                # Units: current_units
+                streams[name] = g
+                # Units: current_units / device.length_units
+                currents[name] = J
+                # Units: current_units / device.length_units
+                fields[name] = total_field
+                screening_fields[name] = screening_field
+
+            solution = Solution(
+                device=device,
+                streams={
+                    layer: np.asarray(g, dtype=dtype) for layer, g in streams.items()
+                },
+                current_densities=currents,
+                fields={
+                    # Units: field_units
+                    layer: (np.asarray(field) / field_conversion_magnitude).astype(
+                        dtype, copy=False
+                    )
+                    for layer, field in fields.items()
+                },
+                screening_fields={
+                    # Units: field_units
+                    layer: (np.asarray(field) / field_conversion_magnitude).astype(
+                        dtype, copy=False
+                    )
+                    for layer, field in screening_fields.items()
+                },
+                applied_field=applied_field,
+                field_units=field_units,
+                current_units=current_units,
+                circulating_currents=circulating_currents,
+                vortices=vortices,
+                solver=_solver,
+            )
+            if directory is not None:
+                solution.to_file(os.path.join(directory, str(i + 1)))
+            if return_solutions:
+                solutions.append(solution)
+            else:
+                del solution
+    if cache_kernels_to_disk:
+        context.cleanup()
     if return_solutions:
         return solutions
 
@@ -824,7 +906,7 @@ def solve_many(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
     directory: Optional[str] = None,
@@ -834,6 +916,7 @@ def solve_many(
     log_level: int = logging.INFO,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
+    gpu: bool = False,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -878,6 +961,8 @@ def solve_many(
         log_level: Logging level to use, if any.
         use_shared_memory: Whether to use shared memory if parallel_method is not None.
         num_cpus: The number of processes to utilize.
+        gpu: Solve on a GPU if available (requires JAX and CUDA). gpu = True is only allowed
+            for serial execution, i.e., ``parallel_method in {None, False, "serial"}``.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of
@@ -901,12 +986,13 @@ def solve_many(
             f"Unknown parallel method, {parallel_method}. "
             f"Valid methods are {list(parallel_methods)}."
         )
-    if num_cpus is not None and parallel_method in (None, False, "serial"):
+    serial_methods = {None, False, "serial"}
+    if num_cpus is not None and parallel_method in serial_methods:
         logger.warning(
             f"Ignoring num_cpus because parallel_method = {parallel_method!r}."
         )
 
-    solutions, paths = parallel_methods[parallel_method](
+    kwargs = dict(
         device=device,
         applied_fields=applied_fields,
         circulating_currents=circulating_currents,
@@ -927,6 +1013,15 @@ def solve_many(
         num_cpus=num_cpus,
     )
 
+    if parallel_method in serial_methods:
+        kwargs["gpu"] = gpu
+    elif gpu:
+        raise ValueError(
+            "Running solve_many() with gpu = True requires serial execution "
+            "(i.e., parallel method in {None, False, 'serial'})."
+        )
+
+    solutions, paths = parallel_methods[parallel_method](**kwargs)
     return solutions, paths
 
 

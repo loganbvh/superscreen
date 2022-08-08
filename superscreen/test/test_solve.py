@@ -5,6 +5,14 @@ import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
+try:
+    import jax  # noqa: F401
+
+    HAS_JAX = True
+    os.environ["JAX_PLATFORMS"] = "cpu"
+except (ModuleNotFoundError, ImportError):
+    HAS_JAX = False
+
 
 import superscreen as sc
 import superscreen.geometry as geo
@@ -103,7 +111,8 @@ def two_rings():
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
 @pytest.mark.parametrize("inhomogeneous", [False, True])
-def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
+@pytest.mark.parametrize("gpu", [False, True])
+def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, gpu):
 
     applied_field = sc.sources.ConstantField(0)
 
@@ -132,6 +141,7 @@ def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
             iterations=1,
             return_solutions=return_solutions,
             directory=directory,
+            gpu=(HAS_JAX and gpu),
         )
     finally:
         device.layers["layer1"].london_lambda = old_lambda
@@ -215,9 +225,11 @@ def mutual_inductance_matrix(two_rings, iterations=3):
     return M
 
 
+@pytest.mark.parametrize("gpu", [False, True])
 def test_mutual_inductance_matrix(
     two_rings,
     mutual_inductance_matrix,
+    gpu,
     iterations=3,
 ):
     hole_polygon_mapping = {
@@ -229,6 +241,7 @@ def test_mutual_inductance_matrix(
         hole_polygon_mapping=hole_polygon_mapping,
         iterations=iterations,
         all_iterations=True,
+        gpu=(HAS_JAX and gpu),
     )
     assert isinstance(M, list)
     assert len(M) == iterations + 1
@@ -280,7 +293,8 @@ def test_plot_mutual_inductance(mutual_inductance_matrix):
         _ = sc.plot_mutual_inductance([M[0], 0])
 
 
-def test_fluxoid_single(device):
+@pytest.mark.parametrize("gpu", [False, True])
+def test_fluxoid_single(device, gpu):
 
     from scipy.optimize import RootResults
 
@@ -291,7 +305,9 @@ def test_fluxoid_single(device):
     _ = sc.make_fluxoid_polygons(device, interp_points=101)
 
     fluxoids = {hole: 0 for hole in device.holes}
-    solution, result = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
+    solution, result = sc.find_fluxoid_solution(
+        device, fluxoids=fluxoids, gpu=(HAS_JAX and gpu)
+    )
     assert isinstance(solution, sc.Solution)
     assert isinstance(result, RootResults)
     fluxoid = solution.hole_fluxoid(list(device.holes)[0])

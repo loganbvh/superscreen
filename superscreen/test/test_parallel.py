@@ -4,6 +4,7 @@ import contextlib
 
 import pytest
 import ray
+import joblib
 
 import superscreen as sc
 
@@ -12,7 +13,8 @@ import superscreen as sc
 def ray_initialized():
     # Seems to help on Windows :/
     assert os.environ["RAY_START_REDIS_WAIT_RETRIES"] == "48"
-    ray.init(num_cpus=2, log_to_driver=False)
+    num_cpus = min(2, joblib.cpu_count())
+    ray.init(num_cpus=num_cpus, log_to_driver=False)
     try:
         yield True
     finally:
@@ -85,23 +87,26 @@ def test_solve_many(
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]
 
+    solve_kwargs = dict(
+        applied_fields=applied_field,
+        circulating_currents=circulating_currents,
+        vortices=vortices,
+        iterations=2,
+        return_solutions=return_solutions,
+        keep_only_final_solution=keep_only_final_solution,
+        use_shared_memory=use_shared_memory,
+    )
+
     if save:
         save_context = tempfile.TemporaryDirectory()
     else:
         save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_serial, paths_serial = sc.solve_many(
-            device=device,
+            device,
             parallel_method=None,
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
             directory=directory,
-            use_shared_memory=use_shared_memory,
-            num_cpus=num_cpus,
+            **solve_kwargs,
         )
         solver = "superscreen.solve_many:serial:1"
         solutions, paths = solutions_serial, paths_serial
@@ -118,12 +123,15 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.Solution) for s in solutions)
-                assert all(s.solver == solver for s in solutions)
+                for s in solutions:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
             else:
-                assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.Solution) for s in solutions[0])
-                assert all(s.solver == solver for s in solutions[0])
+                for lst in solutions:
+                    assert isinstance(lst, list)
+                for s in solutions[0]:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
         else:
             assert solutions is None
 
@@ -133,18 +141,21 @@ def test_solve_many(
     else:
         save_context = contextlib.nullcontext()
     with save_context as directory:
+        with pytest.raises(ValueError):
+            solutions_mp, paths_mp = sc.solve_many(
+                device,
+                parallel_method="mp",
+                num_cpus=num_cpus,
+                directory=directory,
+                gpu=True,
+                **solve_kwargs,
+            )
         solutions_mp, paths_mp = sc.solve_many(
-            device=device,
+            device,
             parallel_method="mp",
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
-            directory=directory,
-            use_shared_memory=use_shared_memory,
             num_cpus=num_cpus,
+            directory=directory,
+            **solve_kwargs,
         )
         ncpu = min(len(circulating_currents), os.cpu_count())
         solver = f"superscreen.solve_many:multiprocessing:{ncpu}"
@@ -162,12 +173,15 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.Solution) for s in solutions)
-                assert all(s.solver == solver for s in solutions)
+                for s in solutions:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
             else:
-                assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.Solution) for s in solutions[0])
-                assert all(s.solver == solver for s in solutions[0])
+                for lst in solutions:
+                    assert isinstance(lst, list)
+                for s in solutions[0]:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
         else:
             assert solutions is None
 
@@ -178,17 +192,11 @@ def test_solve_many(
         save_context = contextlib.nullcontext()
     with save_context as directory:
         solutions_ray, paths_ray = sc.solve_many(
-            device=device,
+            device,
             parallel_method="ray",
-            applied_fields=applied_field,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-            iterations=2,
-            return_solutions=return_solutions,
-            keep_only_final_solution=keep_only_final_solution,
-            directory=directory,
-            use_shared_memory=use_shared_memory,
             num_cpus=num_cpus,
+            directory=directory,
+            **solve_kwargs,
         )
         solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray
@@ -205,12 +213,15 @@ def test_solve_many(
             assert isinstance(solutions, list)
             assert len(solutions) == len(circulating_currents)
             if keep_only_final_solution:
-                assert all(isinstance(s, sc.Solution) for s in solutions)
-                assert all(s.solver == solver for s in solutions)
+                for s in solutions:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
             else:
-                assert all(isinstance(lst, list) for lst in solutions)
-                assert all(isinstance(s, sc.Solution) for s in solutions[0])
-                assert all(s.solver == solver for s in solutions[0])
+                for lst in solutions:
+                    assert isinstance(lst, list)
+                for s in solutions[0]:
+                    assert isinstance(s, sc.Solution)
+                    assert s.solver == solver
         else:
             assert solutions is None
 

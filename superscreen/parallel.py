@@ -1,7 +1,6 @@
 import os
 import time
 import shutil
-import psutil
 import logging
 import itertools
 import tempfile
@@ -12,6 +11,7 @@ from typing import Union, Callable, Optional, Dict, Tuple, List, Any
 
 import ray
 import pint
+import joblib
 import numpy as np
 
 from .solve import solve
@@ -21,6 +21,10 @@ from .solution import Solution, Vortex
 
 
 logger = logging.getLogger(__name__)
+
+
+def cpu_count(logical: bool = False):
+    return joblib.cpu_count(only_physical_cores=(not logical))
 
 
 def create_models(
@@ -175,7 +179,7 @@ def solve_many_serial(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 1,
     product: bool = False,
     directory: Optional[str] = None,
@@ -183,6 +187,7 @@ def solve_many_serial(
     keep_only_final_solution: bool = False,
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
+    gpu: bool = False,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
 ):
@@ -202,7 +207,7 @@ def solve_many_serial(
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     logger.info(f"Solving {len(models)} models serially with 1 process.")
 
@@ -232,6 +237,7 @@ def solve_many_serial(
                 return_solutions=False,
                 cache_memory_cutoff=cache_memory_cutoff,
                 directory=path,
+                gpu=gpu,
                 _solver=solver,
             )
             paths.append(path)
@@ -246,7 +252,7 @@ def solve_many_serial(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
@@ -345,7 +351,7 @@ def solve_many_mp(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: bool = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
     directory: Optional[str] = None,
@@ -367,7 +373,7 @@ def solve_many_mp(
         product=product,
     )
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     arrays = device.get_arrays(copy_arrays=False, dense=True)
 
@@ -377,7 +383,7 @@ def solve_many_mp(
     else:
         shared_arrays = arrays
     if num_cpus is None:
-        num_cpus = psutil.cpu_count(logical=False)
+        num_cpus = cpu_count(logical=False)
     num_cpus = min(len(models), num_cpus)
     solver = f"superscreen.solve_many:multiprocessing:{num_cpus}"
 
@@ -436,7 +442,7 @@ def solve_many_mp(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(
@@ -490,7 +496,7 @@ def solve_many_ray(
     layer_update_kwargs: Optional[List[Dict[str, Any]]] = None,
     field_units: str = "mT",
     current_units: str = "uA",
-    check_inversion: Optional[bool] = True,
+    check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
     directory: Optional[str] = None,
@@ -515,9 +521,10 @@ def solve_many_ray(
 
     initialized_ray = False
     if num_cpus is None:
-        num_cpus = psutil.cpu_count(logical=False)
+        num_cpus = cpu_count(logical=False)
     elif ray.is_initialized():
         logger.warning("Ignoring num_cpus because ray is already initialized.")
+        num_cpus = int(ray.available_resources()["CPU"])
     if not ray.is_initialized():
         num_cpus = min(len(models), num_cpus)
         logger.info(f"Initializing ray with {num_cpus} process(es).")
@@ -525,12 +532,11 @@ def solve_many_ray(
         initialized_ray = True
 
     ray_resources = ray.available_resources()
-    num_cpus = int(ray_resources["CPU"])
     logger.info(f"ray resources: {ray_resources}")
 
     solver = f"superscreen.solve_many:ray:{num_cpus}"
 
-    t0 = time.time()
+    t0 = time.perf_counter()
 
     # Put the device's big arrays in shared memory.
     # The copy is necessary here so that the arrays do not get pinned in shared memory.
@@ -592,7 +598,7 @@ def solve_many_ray(
                 keep_only_final_solution=keep_only_final_solution,
             )
 
-    t1 = time.time()
+    t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
     seconds_per_model = elapsed_seconds / len(models)
     logger.info(

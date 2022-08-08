@@ -1,5 +1,6 @@
 dill
 ipython
+joblib
 jupyter
 matplotlib
 meshpy

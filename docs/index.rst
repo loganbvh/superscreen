@@ -106,6 +106,7 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    notebooks/polygons.ipynb
    notebooks/field-sources.ipynb
    notebooks/io.ipynb
+   notebooks/gpu.ipynb
    notebooks/parallel.ipynb
    notebooks/logo.ipynb
 

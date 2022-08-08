@@ -5,6 +5,7 @@ from copy import deepcopy
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Optional, Union, List, Tuple, Dict, Any
+import warnings
 
 import dill
 import numpy as np
@@ -507,14 +508,16 @@ class Device(object):
         if optimesh_steps:
             logger.info(f"Optimizing mesh with {points.shape[0]} vertices.")
             try:
-                points, triangles = optimize_mesh(
-                    points,
-                    triangles,
-                    optimesh_steps,
-                    method=optimesh_method,
-                    tolerance=optimesh_tolerance,
-                    verbose=optimesh_verbose,
-                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    points, triangles = optimize_mesh(
+                        points,
+                        triangles,
+                        optimesh_steps,
+                        method=optimesh_method,
+                        tolerance=optimesh_tolerance,
+                        verbose=optimesh_verbose,
+                    )
             except np.linalg.LinAlgError as e:
                 err = (
                     "LinAlgError encountered in optimesh. Try reducing min_points "
