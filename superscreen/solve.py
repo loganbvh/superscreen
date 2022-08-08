@@ -293,6 +293,7 @@ def solve_layer(
         layer: Name of the layer to analyze.
         applied_field: The applied magnetic field evaluated at the mesh vertices.
         weights: The Device's weight vector.
+        kernel: The Device's kernel matrix ``Q``.
         Del2: The Device's Laplacian operator.
         grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
         Lambda_info: A LambdaInfo instance defining Lambda(x, y).
