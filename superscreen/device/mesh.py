@@ -18,6 +18,7 @@ def generate_mesh(
     coords: np.ndarray,
     min_points: Optional[int] = None,
     convex_hull: bool = False,
+    boundary: Optional[np.ndarray] = None,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Generates a Delaunay mesh for a given set of polygon vertex coordinates.
@@ -45,8 +46,15 @@ def generate_mesh(
     # [(x0, y0), (x1, y1)]
     if convex_hull:
         facets = spatial.ConvexHull(coords).simplices
+        if boundary is not None:
+            raise ValueError(
+                "Cannot have both boundary is not None and convex_hull = True."
+            )
     else:
         indices = np.arange(coords.shape[0], dtype=int)
+        if boundary is not None:
+            boundary = list(map(tuple, boundary))
+            indices = [i for i in indices if tuple(coords[i]) in boundary]
         facets = np.stack([indices, np.roll(indices, -1)], axis=1)
 
     mesh_info = triangle.MeshInfo()

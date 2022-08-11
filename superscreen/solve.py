@@ -369,7 +369,7 @@ def solve_layer(
     if isinstance(device, TransportDevice):
         transport_device = True
         device._check_current_mapping(terminal_currents)
-        boundary_indices = device.boundary_vertices
+        boundary_indices = device.boundary_vertices()
         in_terminal = np.zeros(points.shape[0], dtype=bool)
         boundary_points = points[boundary_indices]
         in_terminal[boundary_indices] = True
@@ -388,25 +388,19 @@ def solve_layer(
                 sign = 1
             current = terminal_currents[terminal.name]
             ix_boundary = terminal.contains_points(boundary_points, index=True).tolist()
-            remaining_boundary = boundary_indices[(max(ix_boundary) + 1) :]
-            imax = boundary_indices.shape[0] - 1
-            if 0 in ix_boundary and imax in ix_boundary:
-                # Handle case where boundary_indices wraps around inside a terminal.
-                remaining_boundary = np.concatenate(
-                    [
-                        boundary_indices[: (ix_boundary.index(imax) - 1)],
-                        remaining_boundary,
-                    ],
-                    axis=0,
-                )
+            remaining_boundary = boundary_indices[(ix_boundary[-1] + 1) :]
             ix = boundary_indices[ix_boundary]
             stream = stream_from_terminal_current(points[ix], sign * current)
             if gpu:
                 g = g.at[ix].add(stream)
                 g = g.at[remaining_boundary].add(stream[-1] - stream[0])
+                if terminal in device.source_terminals:
+                    g = g.at[in_hole].add(-current / 2)
             else:
                 g[ix] += stream
                 g[remaining_boundary] += stream[-1] - stream[0]
+                if terminal in device.source_terminals:
+                    g[in_hole] += -current / 2
 
         ix = boundary_indices
         if inhomogeneous:
@@ -427,9 +421,7 @@ def solve_layer(
     # and Eqs 17-18 in [Kirtley2].
 
     for name in holes:
-        current = circulating_currents.get(name, None)
-        if current is None:
-            continue
+        current = circulating_currents.get(name, 0)
         if isinstance(current, str):
             current = device.ureg(current)
         if isinstance(current, pint.Quantity):
@@ -451,9 +443,11 @@ def solve_layer(
             grad_Lambda = 0
         A = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
         if gpu:
-            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(A, axis=1))
+            # Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(A, axis=1))
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-A @ g[ix])
         else:
-            Ha_eff += -current * np.sum(A, axis=1)
+            # Ha_eff += -current * np.sum(A, axis=1)
+            Ha_eff += -A @ g[ix]
         del A
 
     film_to_vortices = defaultdict(list)

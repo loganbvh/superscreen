@@ -6,6 +6,7 @@ import scipy.linalg as la
 
 from .components import Layer, Polygon
 from .device import Device
+from . import mesh
 
 
 def stream_from_current_density(points, J):
@@ -81,13 +82,17 @@ class TransportDevice(Device):
         )
         self.source_terminals = source_terminals or []
         self.drain_terminals = drain_terminals or []
-        all_terminals = self.source_terminals + self.drain_terminals
+        all_terminals = self.terminals
         for terminal in all_terminals:
             if terminal.name is None:
                 raise ValueError("All current terminals must have a unique name.")
         num_terminals = len(all_terminals)
         if len(set(terminal.name for terminal in all_terminals)) != num_terminals:
             raise ValueError("All current terminals must have a unique name.")
+
+    @property
+    def terminals(self) -> List[Polygon]:
+        return self.source_terminals + self.drain_terminals
 
     @property
     def layers(self) -> Dict[str, Layer]:
@@ -161,6 +166,7 @@ class TransportDevice(Device):
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         return super().make_mesh(
+            bounding_polygon=self.film.name,
             min_points=min_points,
             weight_method=weight_method,
             compute_matrices=compute_matrices,
@@ -168,6 +174,24 @@ class TransportDevice(Device):
             optimesh_steps=None,
             **meshpy_kwargs,
         )
+
+    def boundary_vertices(self, ensure_continuous: bool = True) -> np.ndarray:
+        """An array of boundary vertex indices, ordered counterclockwise."""
+        if self.points is None:
+            return None
+        indices = mesh.boundary_vertices(self.points, self.triangles)
+        if not ensure_continuous:
+            return indices
+        terminals = self.terminals
+        boundary = self.points[indices]
+        for term in terminals:
+            term_ix = indices[term.contains_points(boundary)]
+            discont = np.diff(term_ix) != 1
+            if np.any(discont):
+                i_discont = np.where(discont)[0][0]
+                indices = np.roll(indices, -(i_discont + 1))
+                break
+        return indices
 
     def _check_current_mapping(self, current_mapping: Dict[str, float]) -> None:
         terminal_names = {t.name for t in self.source_terminals + self.drain_terminals}

@@ -249,13 +249,6 @@ class Device:
             return None
         return fem.areas(self.points, self.triangles)
 
-    @property
-    def boundary_vertices(self) -> np.ndarray:
-        """An array of boundary vertex indices, ordered counterclockwise."""
-        if self.points is None:
-            return None
-        return mesh.boundary_vertices(self.points, self.triangles)
-
     def get_arrays(
         self,
         copy_arrays: bool = False,
@@ -478,6 +471,7 @@ class Device:
 
     def make_mesh(
         self,
+        bounding_polygon: Optional[str] = None,
         compute_matrices: bool = True,
         convex_hull: bool = True,
         weight_method: str = "half_cotangent",
@@ -508,10 +502,15 @@ class Device:
         """
         logger.info("Generating mesh...")
         poly_points = self.poly_points
+        if bounding_polygon is None:
+            boundary = None
+        else:
+            boundary = self.polygons[bounding_polygon].points
         points, triangles = mesh.generate_mesh(
             poly_points,
             min_points=min_points,
             convex_hull=convex_hull,
+            boundary=boundary,
             **meshpy_kwargs,
         )
         if optimesh_steps:
