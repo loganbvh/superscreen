@@ -18,13 +18,12 @@ from .. import fem
 from ..units import ureg
 from ..parameter import Parameter
 from .components import Layer, Polygon
-from .mesh import generate_mesh, optimize_mesh
-
+from . import mesh
 
 logger = logging.getLogger(__name__)
 
 
-class Device(object):
+class Device:
     """An object representing a device composed of multiple layers of
     thin film superconductor.
 
@@ -228,7 +227,8 @@ class Device(object):
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are duplicate points,
         # meshpy.triangle will segfault.
-        points = np.unique(points, axis=0)
+        _, ix = np.unique(points, return_index=True, axis=0)
+        points = points[np.sort(ix)]
         return points
 
     @property
@@ -248,6 +248,13 @@ class Device(object):
         if self.points is None:
             return None
         return fem.areas(self.points, self.triangles)
+
+    @property
+    def boundary_vertices(self) -> np.ndarray:
+        """An array of boundary vertex indices, ordered counterclockwise."""
+        if self.points is None:
+            return None
+        return mesh.boundary_vertices(self.points, self.triangles)
 
     def get_arrays(
         self,
@@ -472,6 +479,7 @@ class Device(object):
     def make_mesh(
         self,
         compute_matrices: bool = True,
+        convex_hull: bool = True,
         weight_method: str = "half_cotangent",
         min_points: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
@@ -480,11 +488,12 @@ class Device(object):
         optimesh_verbose: bool = False,
         **meshpy_kwargs,
     ) -> None:
-        """Computes or refines the triangular mesh.
+        """Generates and optimizes the triangular mesh.
 
         Args:
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
+            convex_hull: If True, mesh the entire convex hull of the device's polygons.
             weight_method: Weight methods for computing the Laplace operator:
                 one of "uniform", "half_cotangent", or "inv_euclidian".
             min_points: Minimum number of vertices in the mesh. If None, then
@@ -499,10 +508,10 @@ class Device(object):
         """
         logger.info("Generating mesh...")
         poly_points = self.poly_points
-        points, triangles = generate_mesh(
+        points, triangles = mesh.generate_mesh(
             poly_points,
             min_points=min_points,
-            convex_hull=True,
+            convex_hull=convex_hull,
             **meshpy_kwargs,
         )
         if optimesh_steps:
@@ -510,7 +519,7 @@ class Device(object):
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=UserWarning)
-                    points, triangles = optimize_mesh(
+                    points, triangles = mesh.optimize_mesh(
                         points,
                         triangles,
                         optimesh_steps,

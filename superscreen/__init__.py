@@ -1,6 +1,6 @@
 from .about import version_dict, version_table
 from .solve import convert_field, solve, solve_many
-from .device import Layer, Polygon, Device
+from .device import Layer, Polygon, Device, TransportDevice
 from .fluxoid import (
     make_fluxoid_polygons,
     find_fluxoid_solution,

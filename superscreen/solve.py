@@ -34,6 +34,7 @@ from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
 from .device import Device
+from .device.transport import TransportDevice, stream_from_terminal_current
 
 
 lambda_str = "\u03bb"
@@ -42,7 +43,7 @@ Lambda_str = "\u039b"
 logger = logging.getLogger(__name__)
 
 
-class LambdaInfo(object):
+class LambdaInfo:
     def __init__(
         self,
         *,
@@ -280,6 +281,7 @@ def solve_layer(
     Del2: np.ndarray,
     grad: np.ndarray,
     Lambda_info: LambdaInfo,
+    terminal_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     current_units: str = "uA",
@@ -312,6 +314,7 @@ def solve_layer(
     """
 
     circulating_currents = circulating_currents or {}
+    terminal_currents = terminal_currents or {}
     for name in circulating_currents:
         if name not in device.holes:
             raise ValueError(f"Circulating current specified for unknown hole: {name}.")
@@ -354,17 +357,74 @@ def solve_layer(
         hole_indices[name] = np.where(ix)[0]
         in_hole = np.logical_or(in_hole, ix)
 
+    g = np.zeros_like(Hz_applied)
+    Ha_eff = np.zeros_like(Hz_applied)
+
+    if gpu:
+        g = jax.device_put(g)
+        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
+        Ha_eff = jax.device_put(Ha_eff)
+
+    transport_device = False
+    if isinstance(device, TransportDevice):
+        transport_device = True
+        device._check_current_mapping(terminal_currents)
+        boundary_indices = device.boundary_vertices
+        in_terminal = np.zeros(points.shape[0], dtype=bool)
+        boundary_points = points[boundary_indices]
+        in_terminal[boundary_indices] = True
+
+        def min_index(terminal):
+            return terminal.contains_points(boundary_points, index=True).min()
+
+        # Sort terminals counterclockwise
+        terminals = sorted(
+            device.source_terminals + device.drain_terminals, key=min_index
+        )
+        for terminal in terminals:
+            if terminal in device.source_terminals:
+                sign = -1
+            else:
+                sign = 1
+            current = terminal_currents[terminal.name]
+            ix_boundary = terminal.contains_points(boundary_points, index=True).tolist()
+            remaining_boundary = boundary_indices[(max(ix_boundary) + 1) :]
+            imax = boundary_indices.shape[0] - 1
+            if 0 in ix_boundary and imax in ix_boundary:
+                # Handle case where boundary_indices wraps around inside a terminal.
+                remaining_boundary = np.concatenate(
+                    [
+                        boundary_indices[: (ix_boundary.index(imax) - 1)],
+                        remaining_boundary,
+                    ],
+                    axis=0,
+                )
+            ix = boundary_indices[ix_boundary]
+            stream = stream_from_terminal_current(points[ix], sign * current)
+            if gpu:
+                g = g.at[ix].add(stream)
+                g = g.at[remaining_boundary].add(stream[-1] - stream[0])
+            else:
+                g[ix] += stream
+                g[remaining_boundary] += stream[-1] - stream[0]
+
+        ix = boundary_indices
+        if inhomogeneous:
+            grad_Lambda = grad_Lambda_term[:, ix]
+        else:
+            grad_Lambda = 0
+        A = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
+        if gpu:
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-A @ g[ix])
+        else:
+            Ha_eff += -A @ g[ix]
+        del A
+
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
     # 2. Effective field associated with I_circ_hole
     # See Section II(a) in [Brandt], Eqs. 18-19 in [Kirtley1],
     # and Eqs 17-18 in [Kirtley2].
-    g = np.zeros_like(Hz_applied)
-    Ha_eff = np.zeros_like(Hz_applied)
-    if gpu:
-        g = jax.device_put(g)
-        Ha_eff_ix = np.arange(Ha_eff.shape[0], dtype=int)
-        Ha_eff = jax.device_put(Ha_eff)
 
     for name in holes:
         current = circulating_currents.get(name, None)
@@ -377,9 +437,9 @@ def solve_layer(
 
         ix = hole_indices[name]
         if gpu:
-            g = g.at[ix].set(current)
+            g = g.at[ix].add(current)
         else:
-            g[ix] = current  # g[hole] = I_circ
+            g[ix] += current  # g[hole] = I_circ
         # Effective field associated with the circulating currents:
         # current is in [current_units], Lambda is in [device.length_units],
         # and Del2 is in [device.length_units ** (-2)], so
@@ -389,13 +449,12 @@ def solve_layer(
             grad_Lambda = grad_Lambda_term[:, ix]
         else:
             grad_Lambda = 0
-
-        k = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
+        A = Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * Del2[:, ix] - grad_Lambda
         if gpu:
-            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(k, axis=1))
+            Ha_eff = Ha_eff.at[Ha_eff_ix].add(-current * jnp.sum(A, axis=1))
         else:
-            Ha_eff += -current * np.sum(k, axis=1)
-        del k
+            Ha_eff += -current * np.sum(A, axis=1)
+        del A
 
     film_to_vortices = defaultdict(list)
     for vortex in vortices:
@@ -409,6 +468,8 @@ def solve_layer(
     for name, film in films.items():
         # We want all points that are in a film and not in a hole.
         ix1d = np.logical_and(film.contains_points(points), np.logical_not(in_hole))
+        if transport_device:
+            ix1d = np.logical_and(ix1d, np.logical_not(in_terminal))
         ix1d = np.where(ix1d)[0]
         ix2d = np.ix_(ix1d, ix1d)
 
@@ -424,11 +485,11 @@ def solve_layer(
         if gpu:
             lu_piv = jla.lu_factor(-A)
             gf = jla.lu_solve(lu_piv, h)
-            g = g.at[ix1d].set(gf)
+            g = g.at[ix1d].add(gf)
         else:
             lu_piv = la.lu_factor(-A)
             gf = la.lu_solve(lu_piv, h)
-            g[ix1d] = gf
+            g[ix1d] += gf
 
         if check_inversion:
             # Validate solution
@@ -480,6 +541,7 @@ def solve(
     device: Device,
     *,
     applied_field: Optional[Callable] = None,
+    terminal_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     field_units: str = "mT",
@@ -685,6 +747,7 @@ def solve(
             layer=name,
             applied_field=layer_fields[name],
             kernel=Q,
+            terminal_currents=terminal_currents,
             circulating_currents=circulating_currents,
             vortices=vortices_by_layer[name],
             weights=weights,

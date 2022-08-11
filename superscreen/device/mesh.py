@@ -1,10 +1,14 @@
 from typing import Optional, Tuple
 import logging
 
+from matplotlib.tri import Triangulation
 import numpy as np
 from scipy import spatial
 from meshpy import triangle
 import optimesh
+from shapely.geometry import MultiLineString
+from shapely.geometry.polygon import orient
+from shapely.ops import polygonize
 
 
 logger = logging.getLogger(__name__)
@@ -108,3 +112,28 @@ def optimize_mesh(
         **kwargs,
     )
     return points, triangles
+
+
+def boundary_vertices(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Returns an array of boundary vertex indices, ordered counterclockwise.
+
+    Args:
+        points: Shape ``(n, 2)`` array of vertex coordinates.
+        triangles: Shape ``(m, 3)`` array of triangle indices.
+
+    Returns:
+        An array of boundary vertex indices, ordered counterclockwise.
+    """
+    tri = Triangulation(points[:, 0], points[:, 1], triangles)
+    boundary_edges = set()
+    for i, neighbors in enumerate(tri.neighbors):
+        for k in range(3):
+            if neighbors[k] == -1:
+                boundary_edges.add((triangles[i, k], triangles[i, (k + 1) % 3]))
+    edges = MultiLineString([points[edge, :] for edge in boundary_edges])
+    polygons = list(polygonize(edges))
+    assert len(polygons) == 1, polygons
+    polygon = orient(polygons[0])
+    points_list = [tuple(xy) for xy in points]
+    indices = np.array([points_list.index(xy) for xy in polygon.exterior.coords])
+    return indices[:-1]
