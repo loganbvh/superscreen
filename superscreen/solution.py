@@ -72,7 +72,7 @@ class Fluxoid(NamedTuple):
     supercurrent_part: Union[float, pint.Quantity]
 
 
-class Solution(object):
+class Solution:
     """A container for the calculated stream functions and fields,
     with some convenient data processing methods.
 

@@ -6,7 +6,7 @@ import dill
 import numpy as np
 
 
-class _FakeArgSpec(object):
+class _FakeArgSpec:
     def __init__(
         self,
         args=None,
@@ -61,7 +61,7 @@ def function_repr(
     return func.__name__ + "(" + ", ".join(args) + ")"
 
 
-class Parameter(object):
+class Parameter:
     """A callable object that computes a scalar or vector quantity
     as a function of position coordinates x, y (and optionally z).
 

@@ -18,7 +18,7 @@ from .mesh import generate_mesh, optimize_mesh
 logger = logging.getLogger(__name__)
 
 
-class Layer(object):
+class Layer:
     """A single layer of a superconducting device.
 
     You can provide either an effective penetration depth Lambda,
@@ -114,7 +114,7 @@ class Layer(object):
         return deepcopy(self)
 
 
-class Polygon(object):
+class Polygon:
     """A polygonal region located in a Layer.
 
     Args:
@@ -631,6 +631,10 @@ class Polygon(object):
             points=points,
             mesh=self.mesh,
         )
+
+    @property
+    def convex_hull(self):
+        return
 
     def plot(self, ax: Optional[plt.Axes] = None, **kwargs) -> plt.Axes:
         """Plots the Polygon's vertices.
