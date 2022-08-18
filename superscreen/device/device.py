@@ -48,6 +48,12 @@ class Device:
         "grady",
     )
 
+    POLYGONS = (
+        "films",
+        "holes",
+        "abstract_regions",
+    )
+
     ureg = ureg
 
     def __init__(
@@ -216,7 +222,10 @@ class Device:
     @property
     def polygons(self) -> Dict[str, Polygon]:
         """A dict of ``{name: polygon}`` for all Polygons in the device."""
-        return {**self.films, **self.holes, **self.abstract_regions}
+        polygons = {}
+        for attr_name in self.POLYGONS:
+            polygons[attr_name] = getattr(self, attr_name)
+        return polygons
 
     @property
     def poly_points(self) -> np.ndarray:
