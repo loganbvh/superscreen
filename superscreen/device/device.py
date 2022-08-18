@@ -224,7 +224,7 @@ class Device:
         """A dict of ``{name: polygon}`` for all Polygons in the device."""
         polygons = {}
         for attr_name in self.POLYGONS:
-            polygons[attr_name] = getattr(self, attr_name)
+            polygons.update(getattr(self, attr_name))
         return polygons
 
     @property
