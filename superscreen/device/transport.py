@@ -13,7 +13,7 @@ def stream_from_current_density(points, J):
     # (0, 0, 1) X (Jx, Jy, 0) == (-Jy, Jx, 0)
     zhat_cross_J = J[:, [1, 0]]
     zhat_cross_J[:, 0] *= -1
-    dl = np.diff(points, axis=0, prepend=[points[0]])
+    dl = np.diff(points, axis=0, prepend=points[:1])
     integrand = np.sum(zhat_cross_J * dl, axis=1)
     return integrate.cumulative_trapezoid(integrand, initial=0)
 
@@ -25,10 +25,11 @@ def unit_vector(vector):
 
 def edge_vectors(points):
     dr = np.diff(points, axis=0)
-    lengths = np.linalg.norm(dr, axis=1)[:, np.newaxis]
     normals = np.cross(dr, [0, 0, 1])
     unit_normals = unit_vector(normals)
-    return np.sum(lengths), unit_normals[:, :2]
+    total_length = np.linalg.norm(points[-1] - points[0])
+    unit_normals = np.concatenate([unit_normals, unit_normals[-1:]], axis=0)
+    return total_length, unit_normals[:, :2]
 
 
 def terminal_current_density(points, current):
@@ -38,19 +39,27 @@ def terminal_current_density(points, current):
 
 def stream_from_terminal_current(points, current):
     J = terminal_current_density(points, current)
-    J = np.append(J, [J[-1]], axis=0)
-    return stream_from_current_density(points, J)
+    g = stream_from_current_density(points, J)
+    return g * current / g[-1]
 
 
 class TransportDevice(Device):
+    """An object representing a single-layer, single-film  device to which
+    a source-drain current bias can be applied.
 
-    """An object representing a device composed of multiple layers of
-    thin film superconductor.
+    There can be multiple source terminals, but only a single drain terminal.
+    The drain terminal acts as a sink for currents from all source terminals.
 
     Args:
         name: Name of the device.
         layer: The ``Layer`` making up the device.
         film: The ``Polygon`` representing superconducting film.
+        source_terminals: A list of Polygons representing source terminals for
+            a transport current. Any mesh vertices that are on the boundary of the film
+            and lie inside a source terminal will have current source boundary
+            conditions.
+        drain_terminal: Polygon representing the sole current drain (or output) terminal
+            of the device.
         holes: ``Holes`` representing holes in superconducting films.
         abstract_regions: ``Polygons`` representing abstract regions in a device.
             Abstract regions will be meshed, and one can calculate the flux through them.
@@ -58,19 +67,33 @@ class TransportDevice(Device):
         solve_dtype: The float data type to use when solving the device.
     """
 
+    POLYGONS = Device.POLYGONS + ("terminals",)
+
     def __init__(
         self,
         name: str,
         *,
         layer: Layer,
         film: Polygon,
-        source_terminals: Optional[List[Polygon]] = None,
-        drain_terminals: Optional[List[Polygon]] = None,
+        source_terminals: List[Polygon],
+        drain_terminal: Polygon,
         holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float64",
     ):
+        self.source_terminals = source_terminals
+        self.drain_terminal = drain_terminal
+        all_terminals = list(self.terminals.values())
+        for terminal in all_terminals:
+            if terminal.name is None:
+                raise ValueError("All current terminals must have a unique name.")
+            terminal.mesh = False
+            terminal.layer = film.layer
+        num_terminals = len(all_terminals)
+        if len(set(terminal.name for terminal in all_terminals)) != num_terminals:
+            raise ValueError("All current terminals must have a unique name.")
+
         super().__init__(
             name,
             layers=[layer],
@@ -80,19 +103,12 @@ class TransportDevice(Device):
             length_units=length_units,
             solve_dtype=solve_dtype,
         )
-        self.source_terminals = source_terminals or []
-        self.drain_terminals = drain_terminals or []
-        all_terminals = self.terminals
-        for terminal in all_terminals:
-            if terminal.name is None:
-                raise ValueError("All current terminals must have a unique name.")
-        num_terminals = len(all_terminals)
-        if len(set(terminal.name for terminal in all_terminals)) != num_terminals:
-            raise ValueError("All current terminals must have a unique name.")
 
     @property
-    def terminals(self) -> List[Polygon]:
-        return self.source_terminals + self.drain_terminals
+    def terminals(self) -> Dict[str, Polygon]:
+        return {
+            term.name: term for term in self.source_terminals + [self.drain_terminal]
+        }
 
     @property
     def layers(self) -> Dict[str, Layer]:
@@ -146,11 +162,48 @@ class TransportDevice(Device):
     def film(self, film: Polygon) -> None:
         self.films = {film.name: film}
 
+    def copy(
+        self, with_arrays: bool = True, copy_arrays: bool = False
+    ) -> "TransportDevice":
+        """Copy this Device to create a new one.
+
+        Args:
+            with_arrays: Whether to set the large arrays on the new Device.
+            copy_arrays: Whether to create copies of the large arrays, or just
+                return references to the existing arrays.
+
+        Returns:
+            A new Device instance, copied from self
+        """
+        source_terminals = [term.copy() for term in self.source_terminals]
+        holes = [hole.copy() for hole in self.holes.values()]
+        abstract_regions = [region.copy() for region in self.abstract_regions.values()]
+
+        device = TransportDevice(
+            self.name,
+            layer=self.layer.copy(),
+            film=self.film.copy(),
+            source_terminals=source_terminals,
+            drain_terminal=self.drain_terminal.copy(),
+            holes=holes,
+            abstract_regions=abstract_regions,
+            length_units=self.length_units,
+        )
+        if with_arrays:
+            arrays = self.get_arrays(copy_arrays=copy_arrays)
+            if arrays is not None:
+                device.set_arrays(arrays)
+        return device
+
     def make_mesh(
         self,
         compute_matrices: bool = True,
         weight_method: str = "half_cotangent",
         min_points: Optional[int] = None,
+        optimesh_steps: Optional[int] = None,
+        optimesh_method: str = "cvt-block-diagonal",
+        optimesh_tolerance: float = 1e-3,
+        optimesh_verbose: bool = False,
         **meshpy_kwargs,
     ) -> None:
         """Generates and optimizes the triangular mesh.
@@ -171,7 +224,10 @@ class TransportDevice(Device):
             weight_method=weight_method,
             compute_matrices=compute_matrices,
             convex_hull=False,
-            optimesh_steps=None,
+            optimesh_steps=optimesh_steps,
+            optimesh_method=optimesh_method,
+            optimesh_tolerance=optimesh_tolerance,
+            optimesh_verbose=optimesh_verbose,
             **meshpy_kwargs,
         )
 
@@ -180,28 +236,23 @@ class TransportDevice(Device):
         if self.points is None:
             return None
         indices = mesh.boundary_vertices(self.points, self.triangles)
+        indices_list = indices.tolist()
         if not ensure_continuous:
             return indices
-        terminals = self.terminals
         boundary = self.points[indices]
-        for term in terminals:
+        for term in self.terminals.values():
+            boundary = self.points[indices]
             term_ix = indices[term.contains_points(boundary)]
             discont = np.diff(term_ix) != 1
             if np.any(discont):
-                i_discont = np.where(discont)[0][0]
-                indices = np.roll(indices, -(i_discont + 1))
+                i_discont = indices_list.index(term_ix[np.where(discont)[0][0]])
+                indices = np.roll(indices, -(i_discont + 2))
                 break
         return indices
 
     def _check_current_mapping(self, current_mapping: Dict[str, float]) -> None:
-        terminal_names = {t.name for t in self.source_terminals + self.drain_terminals}
-        if terminal_names != set(current_mapping):
+        source_names = {t.name for t in self.source_terminals}
+        if source_names != set(current_mapping):
             raise ValueError(
                 "The current mapping must have one entry for every current terminal."
-            )
-        source_currents = [current_mapping[t.name] for t in self.source_terminals]
-        drain_currents = [current_mapping[t.name] for t in self.drain_terminals]
-        if sum(source_currents) != sum(drain_currents):
-            raise ValueError(
-                "The sum of source currents must be equal to the sum of drain currents."
             )
