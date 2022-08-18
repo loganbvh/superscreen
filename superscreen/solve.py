@@ -505,17 +505,16 @@ def solve_layer(
             raise ValueError(f"Circulating current specified for unknown hole: {name}.")
     if isinstance(device, TransportDevice):
         transport_device = True
+        _term_currents = terminal_currents.copy()
+        terminal_currents = {}
+        for name, current in _term_currents.items():
+            if isinstance(current, str):
+                current = device.ureg(current)
+            if isinstance(current, pint.Quantity):
+                current = current.to(current_units).magnitude
+            terminal_currents[name] = current
     else:
         if terminal_currents:
-            _term_currents = terminal_currents.copy()
-            terminal_currents = {}
-            for name, current in _term_currents.items():
-                if isinstance(current, str):
-                    current = device.ureg(current)
-                if isinstance(current, pint.Quantity):
-                    current = current.to(current_units).magnitude
-                terminal_currents[name] = current
-        else:
             raise TypeError("Terminal currents are only allowed for TransportDevices.")
         transport_device = False
     vortices = vortices or []
