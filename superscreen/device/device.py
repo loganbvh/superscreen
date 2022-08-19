@@ -264,7 +264,7 @@ class Device:
         points: np.ndarray,
         polygon_type: Optional[str] = None,
         index: bool = False,
-        radius: float = 1e-6,
+        radius: float = 0,
     ) -> Dict[str, np.ndarray]:
         """For each layer, determines whether ``points`` lie within a polygon
         in that layer.
