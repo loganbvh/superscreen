@@ -1032,8 +1032,10 @@ class Solution:
 
         return plot_fields(self, **kwargs)
 
-    def plot_field_at_positions(self, **kwargs) -> Tuple[plt.Figure, np.ndarray]:
+    def plot_field_at_positions(
+        self, points: np.ndarray, **kwargs
+    ) -> Tuple[plt.Figure, np.ndarray]:
         """Alias for :func:`superscreen.visualization.plot_field_at_positions`."""
         from .visualization import plot_field_at_positions
 
-        return plot_field_at_positions(self, **kwargs)
+        return plot_field_at_positions(self, points, **kwargs)
