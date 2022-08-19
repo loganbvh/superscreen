@@ -1,5 +1,6 @@
 from collections import defaultdict
 import warnings
+import inspect
 import itertools
 from contextlib import contextmanager
 from typing import Optional, Union, Tuple, List, Dict, Sequence
@@ -968,6 +969,7 @@ def plot_polygon_flux(
 
 def _patch_docstring(func):
     other_func = getattr(Solution, func.__name__)
+    other_func.__signature__ = inspect.signature(func)
     other_func.__doc__ = (
         other_func.__doc__
         + "\n\n"
