@@ -573,12 +573,28 @@ def plot_currents(
         method=grid_method,
         layers=layers,
     )
+    # Create masks to set the current density to zero in holes
+    # and outside of films.
+    # This is really only required for cubic interpolation, but doesn't hurt
+    # to do in all cases.
+    points = np.stack([xgrid.ravel(), ygrid.ravel()], axis=1)
+    film_masks = device.contains_points_by_layer(
+        points,
+        polygon_type="film",
+    )
+    hole_masks = device.contains_points_by_layer(
+        points,
+        polygon_type="hole",
+    )
     jcs = {}
     Js = {}
     for layer, jc in current_densities.items():
+        mask = ~(film_masks[layer] & ~hole_masks[layer]).reshape(xgrid.shape)
         jc = jx, jy = (jc * old_units).to(units).magnitude
+        jc[:, mask] *= 0
         jcs[layer] = jc
         Js[layer] = np.sqrt(jx**2 + jy**2)
+
     clabel = "$|\\,\\vec{J}\\,|$" + f" [${units:~L}$]"
     clim_dict = setup_color_limits(
         Js,

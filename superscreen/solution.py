@@ -264,31 +264,16 @@ class Solution:
             **kwargs,
         )
         units = units or f"{self.current_units} / {self.device.length_units}"
-        # Create masks to set the current density to zero in holes
-        # and outside of films.
-        # This is really only required for cubic interpolation, but doesn't hurt
-        # to do in all cases.
-        points = np.stack([xgrid.m.ravel(), ygrid.m.ravel()], axis=1)
-        film_masks = self.device.contains_points_by_layer(
-            points,
-            polygon_type="film",
-        )
-        hole_masks = self.device.contains_points_by_layer(
-            points,
-            polygon_type="hole",
-        )
         Js = {}
         for layer, g in streams.items():
             # J = [dg/dy, -dg/dx]
             # y is axis 0 (rows), x is axis 1 (columns)
-            mask = ~(film_masks[layer] & ~hole_masks[layer]).reshape(xgrid.shape)
             dg_dy, dg_dx = np.gradient(
                 g.magnitude, ygrid[:, 0].magnitude, xgrid[0, :].magnitude
             )
             J = (np.array([dg_dy, -dg_dx]) * g.units / xgrid.units).to(units)
             if not with_units:
                 J = J.magnitude
-            J[:, mask] *= 0
             Js[layer] = J
         if not with_units:
             xgrid = xgrid.magnitude
