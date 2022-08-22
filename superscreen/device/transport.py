@@ -9,7 +9,24 @@ from .components import Layer, Polygon
 from .device import Device
 
 
-def stream_from_current_density(points, J):
+def stream_from_current_density(points: np.ndarray, J: np.ndarray) -> np.ndarray:
+    """Computes the scalar stream function corresonding to a
+    given current density :math:`J`, according to:
+
+    .. math::
+
+        g(\\vec{r})=g(\\vec{r}_0)+\\int_{\\vec{r}_0}^\\vec{r}
+        (\\hat{z}\\times\\vec{J})\\cdot\\mathrm{d}\\vec{\\ell}
+
+    Args:
+        points: Shape ``(n, 2)`` array of ``(x, y)`` positions at which to
+            compute the stream function :math:`g`.
+        J: Shape ``(n, 2)`` array of the current density ``(Jx, Jy)`` at the
+            given ``points``.s
+
+    Returns:
+        A shape ``(n, )`` array of the stream function at the given ``points``.
+    """
     # (0, 0, 1) X (Jx, Jy, 0) == (-Jy, Jx, 0)
     zhat_cross_J = J[:, [1, 0]]
     zhat_cross_J[:, 0] *= -1
@@ -18,13 +35,27 @@ def stream_from_current_density(points, J):
     return integrate.cumulative_trapezoid(integrand, initial=0)
 
 
-def terminal_current_density(points, current):
-    total_length, vectors = path_vectors(points)
-    return current * vectors / total_length
+def stream_from_terminal_current(points: np.ndarray, current: float) -> np.ndarray:
+    """Computes the terminal stream function corresponding to a given terminal current.
 
+    We assume that the current :math:`I` is uniformly distributed along the terminal
+    with a current density :math:`\\vec{J}` which is perpendicular to the terminal.
+    Then for :math:`\\vec{r}` along the terminal, the stream function is given by
 
-def stream_from_terminal_current(points, current):
-    J = terminal_current_density(points, current)
+    .. math::
+
+        g(\\vec{r})=g(\\vec{r}_0)+\\int_{\\vec{r}_0}^\\vec{r}
+        (\\hat{z}\\times\\vec{J})\\cdot\\mathrm{d}\\vec{\\ell}
+
+    Args:
+        points: A shape ``(n, 2)`` array of terminal vertex positions.
+        current: The total current sources by the terminal.
+
+    Returns:
+        A shape ``(n, )`` array of the stream function along the terminal.
+    """
+    length, unit_normals = path_vectors(points)
+    J = current * unit_normals / length
     g = stream_from_current_density(points, J)
     return g * current / g[-1]
 
