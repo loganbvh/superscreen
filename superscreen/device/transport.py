@@ -246,12 +246,8 @@ class TransportDevice(Device):
             **meshpy_kwargs,
         )
 
-    def boundary_vertices(self, ensure_continuous: bool = True) -> np.ndarray:
+    def boundary_vertices(self) -> np.ndarray:
         """An array of boundary vertex indices, ordered counterclockwise.
-
-        Args:
-            ensure_continuous: If True, rolls the array of indices so that it
-                wraps around outside of any terminals.
 
         Returns:
             An array of indices for vertices that are on the device boundary,
@@ -261,8 +257,7 @@ class TransportDevice(Device):
             return None
         indices = mesh.boundary_vertices(self.points, self.triangles)
         indices_list = indices.tolist()
-        if not ensure_continuous:
-            return indices
+        # Ensure that the indices wrap around outside of any terminals.
         boundary = self.points[indices]
         for term in self.terminals.values():
             boundary = self.points[indices]
