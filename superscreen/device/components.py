@@ -632,10 +632,6 @@ class Polygon:
             mesh=self.mesh,
         )
 
-    @property
-    def convex_hull(self):
-        return
-
     def plot(self, ax: Optional[plt.Axes] = None, **kwargs) -> plt.Axes:
         """Plots the Polygon's vertices.
 
