@@ -238,7 +238,7 @@ class TransportDevice(Device):
 
     def _check_current_mapping(self, current_mapping: Dict[str, float]) -> None:
         source_names = {t.name for t in self.source_terminals}
-        if source_names != set(current_mapping):
+        if not set(current_mapping).issubset(source_names):
             raise ValueError(
                 "The current mapping must have one entry for every current terminal."
             )
