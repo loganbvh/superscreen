@@ -3,10 +3,10 @@ from typing import List, Dict, Union, Optional
 import numpy as np
 from scipy import integrate
 
+from ..geometry import path_vectors
+from . import mesh
 from .components import Layer, Polygon
 from .device import Device
-from . import mesh
-from ..geometry import path_vectors
 
 
 def stream_from_current_density(points, J):
@@ -92,9 +92,7 @@ class TransportDevice(Device):
 
     @property
     def terminals(self) -> Dict[str, Polygon]:
-        return {
-            term.name: term for term in self.source_terminals + [self.drain_terminal]
-        }
+        return {t.name: t for t in self.source_terminals + [self.drain_terminal]}
 
     @property
     def layers(self) -> Dict[str, Layer]:
@@ -218,7 +216,16 @@ class TransportDevice(Device):
         )
 
     def boundary_vertices(self, ensure_continuous: bool = True) -> np.ndarray:
-        """An array of boundary vertex indices, ordered counterclockwise."""
+        """An array of boundary vertex indices, ordered counterclockwise.
+
+        Args:
+            ensure_continuous: If True, rolls the array of indices so that it
+                wraps around outside of any terminals.
+
+        Returns:
+            An array of indices for vertices that are on the device boundary,
+            ordered counterclockwise.
+        """
         if self.points is None:
             return None
         indices = mesh.boundary_vertices(self.points, self.triangles)
