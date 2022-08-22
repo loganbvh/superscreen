@@ -2,11 +2,11 @@ from typing import List, Dict, Union, Optional
 
 import numpy as np
 from scipy import integrate
-import scipy.linalg as la
 
 from .components import Layer, Polygon
 from .device import Device
 from . import mesh
+from ..geometry import path_vectors
 
 
 def stream_from_current_density(points, J):
@@ -18,22 +18,8 @@ def stream_from_current_density(points, J):
     return integrate.cumulative_trapezoid(integrand, initial=0)
 
 
-def unit_vector(vector):
-    """Normalizes ``vector``."""
-    return vector / la.norm(vector, axis=-1)[:, np.newaxis]
-
-
-def edge_vectors(points):
-    dr = np.diff(points, axis=0)
-    normals = np.cross(dr, [0, 0, 1])
-    unit_normals = unit_vector(normals)
-    total_length = np.linalg.norm(points[-1] - points[0])
-    unit_normals = np.concatenate([unit_normals, unit_normals[-1:]], axis=0)
-    return total_length, unit_normals[:, :2]
-
-
 def terminal_current_density(points, current):
-    total_length, vectors = edge_vectors(points)
+    total_length, vectors = path_vectors(points)
     return current * vectors / total_length
 
 
