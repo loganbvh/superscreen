@@ -505,14 +505,6 @@ def solve_layer(
             raise ValueError(f"Circulating current specified for unknown hole: {name}.")
     if isinstance(device, TransportDevice):
         transport_device = True
-        _term_currents = terminal_currents.copy()
-        terminal_currents = {}
-        for name, current in _term_currents.items():
-            if isinstance(current, str):
-                current = device.ureg(current)
-            if isinstance(current, pint.Quantity):
-                current = current.to(current_units).magnitude
-            terminal_currents[name] = current
     else:
         if terminal_currents:
             raise TypeError("Terminal currents are only allowed for TransportDevices.")
@@ -570,10 +562,6 @@ def solve_layer(
     # and Eqs 17-18 in [Kirtley2].
     for name in holes:
         current = circulating_currents.get(name, 0)
-        if isinstance(current, str):
-            current = device.ureg(current)
-        if isinstance(current, pint.Quantity):
-            current = current.to(current_units).magnitude
         ix = hole_indices[name]
         if gpu:
             g = g.at[ix].add(current)
@@ -786,6 +774,25 @@ def solve(
     else:
         dtype = device.solve_dtype
 
+    # Convert all circulating and terminal currents to floats.
+    def current_to_float(value):
+        if isinstance(value, str):
+            value = device.ureg(value)
+        if isinstance(value, pint.Quantity):
+            value = value.to(current_units).magnitude
+        return value
+
+    circulating_currents = circulating_currents or {}
+    _circ_currents = circulating_currents.copy()
+    circulating_currents = {}
+    for name, current in _circ_currents.items():
+        circulating_currents[name] = current_to_float(current)
+    terminal_currents = terminal_currents or {}
+    _term_currents = terminal_currents.copy()
+    terminal_currents = {}
+    for name, current in _term_currents.items():
+        terminal_currents[name] = current_to_float(current)
+
     points = device.points.astype(dtype, copy=False)
     weights = device.weights.astype(dtype, copy=False)
     Q = device.Q.astype(dtype, copy=False)
@@ -941,6 +948,7 @@ def solve(
         field_units=field_units,
         current_units=current_units,
         circulating_currents=circulating_currents,
+        terminal_currents=terminal_currents,
         vortices=vortices,
         solver=_solver,
     )
@@ -1093,6 +1101,7 @@ def solve(
                 field_units=field_units,
                 current_units=current_units,
                 circulating_currents=circulating_currents,
+                terminal_currents=terminal_currents,
                 vortices=vortices,
                 solver=_solver,
             )

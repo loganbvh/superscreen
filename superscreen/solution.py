@@ -84,7 +84,8 @@ class Solution:
         applied_field: The function defining the applied field
         field_units: Units of the applied field
         current_units: Units used for current quantities.
-        circulating_currents: A dict of ``{hole_name: circulating_current}``
+        circulating_currents: A dict of ``{hole_name: circulating_current}``.
+        terminal_currents: A dict of ``{terminal_name: terminal_current}``.
         vortices: A list of ``Vortex`` objects located in the ``Device``.
         solver: The solver method that generated the solution.
     """
@@ -103,6 +104,7 @@ class Solution:
         circulating_currents: Optional[
             Dict[str, Union[float, str, pint.Quantity]]
         ] = None,
+        terminal_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
         vortices: Optional[List[Vortex]] = None,
         solver: str = "superscreen.solve",
     ):
@@ -113,6 +115,7 @@ class Solution:
         self.applied_field = applied_field
         self.screening_fields = screening_fields
         self.circulating_currents = circulating_currents or {}
+        self.terminal_currents = terminal_currents or {}
         self.vortices = vortices or []
         # Make field_units and current_units "read-only" attributes.
         # The should never be changed after instantiation.
