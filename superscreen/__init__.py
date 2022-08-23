@@ -4,7 +4,6 @@ from .device import Layer, Polygon, Device, TransportDevice
 from .fluxoid import (
     make_fluxoid_polygons,
     find_fluxoid_solution,
-    find_single_fluxoid_solution,
 )
 from .io import save_solutions, load_solutions, iload_solutions
 from .parameter import Parameter, Constant
