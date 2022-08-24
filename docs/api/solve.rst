@@ -40,8 +40,6 @@ Fluxoid
 
 .. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
 
-.. autofunction:: superscreen.fluxoid.find_single_fluxoid_solution
-
 .. autofunction:: superscreen.fluxoid.find_fluxoid_solution
 
 

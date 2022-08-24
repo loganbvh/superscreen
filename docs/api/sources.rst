@@ -30,7 +30,13 @@ DipoleField
 
 .. autofunction:: superscreen.sources.DipoleField
 
+.. autofunction:: superscreen.sources.dipole_field
+
+.. autofunction:: superscreen.sources.dipole_distribution
+
 SheetCurrentField
 -----------------
 
 .. autofunction:: superscreen.sources.SheetCurrentField
+
+.. autofunction:: superscreen.sources.biot_savart_2d

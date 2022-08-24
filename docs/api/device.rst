@@ -23,6 +23,10 @@ Device
 .. autoclass:: superscreen.device.device.Device
     :members:
 
+.. autoclass:: superscreen.device.TransportDevice
+    :show-inheritance:
+    :members:
+
 Layer
 =====
 
