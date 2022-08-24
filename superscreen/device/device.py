@@ -839,18 +839,14 @@ class Device:
         """Returns a dict of ``{layer_name: {film_name: PathPatch}}``
         for visualizing the device.
         `"""
-        polygons_by_layer = defaultdict(list)
-        holes_by_layer = defaultdict(list)
-        holes = self.holes
         abstract_regions = self.abstract_regions
-        for polygon in self.polygons.values():
-            if polygon.name in holes:
-                holes_by_layer[polygon.layer].append(polygon)
-            else:
-                polygons_by_layer[polygon.layer].append(polygon)
+        polygons_by_layer = self.polygons_by_layer()
+        holes_by_layer = self.polygons_by_layer(polygon_type="hole")
         patches = defaultdict(dict)
         for layer, regions in polygons_by_layer.items():
             for region in regions:
+                if region.name in holes_by_layer[layer]:
+                    continue
                 coords = region.points.tolist()
                 codes = [Path.LINETO for _ in coords]
                 codes[0] = Path.MOVETO
