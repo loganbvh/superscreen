@@ -9,21 +9,19 @@ from ..parameter import Parameter
 
 
 def dipole_field(
-    x: Union[float, np.ndarray],
-    y: Union[float, np.ndarray],
-    z: Union[float, np.ndarray],
+    eval_coords: np.ndarray,
     r0: Union[np.ndarray, Tuple[float, float, float]] = (0, 0, 0),
     moment: Union[np.ndarray, Tuple[float, float, float]] = (0, 0, 0),
 ) -> np.ndarray:
     """Returns the 3D field from a single dipole with the given moment
     (in units of amps * meters ** 2) located at the position ``r0``, evaluated
-    at coordinates ``(x, y, z)``.
+    at coordinates ``eval_coords = [x, y, z]``.
 
     Given :math:`\\vec{r}=(x, y, z) - \\vec{r}_0`, the magnetic field is:
 
     .. math::
 
-        \\vec{B}(\\vec{r}) &= \\frac{\\mu_0}{4\\pi}
+        \\vec{B}(\\vec{r}) = \\frac{\\mu_0}{4\\pi}
             \\frac{
                 3\\hat{r}(\\hat{r}\\cdot\\vec{m}) - \\vec{m}
             }{
@@ -31,12 +29,10 @@ def dipole_field(
             }
 
     Args:
-        x: x-coordinate(s) (in meters) at which to evaluate the field.
-            Either a scalar or vector with shape ``(n, )``.
-        y: y-coordinate(s) (in meters) at which to evaluate the field.
-            Either a scalar or vector with shape ``(n, )``.
-        z: z-coordinate(s) (in meters) at which to evaluate the field. Either a scalar
-            or vector with shape ``(n, )``.
+        eval_coords: (x, y, z) coordinates (in meters) at which to
+            evaluate the field. Either a sequence of length 3
+            (for a single position) or an array of shape  ``(n, 3)``
+            (for ``n`` positions.).
         r0: Coordinates ``(x0, y0, z0)`` (in meters) of the dipole position,
             shape ``(3,)`` or ``(1, 3)``.
         moment: Dipole moment ``(mx, my, mz)`` in units of amps * meters ** 2,
@@ -48,8 +44,7 @@ def dipole_field(
         if ``x, y, z`` are vectors with shape ``(n, )``.
     """
     moment, r0 = np.atleast_1d(moment, r0)
-    x, y, z = np.atleast_1d(x, y, z)
-    r = np.stack([x, y, z], axis=1)
+    r = np.atleast_2d(eval_coords).reshape((-1, 3))
     r = r - r0
     # \sqrt{\vec{r}\cdot\vec{r}}
     norm_r = np.sqrt(np.einsum("ij, ij -> i", r, r))[:, np.newaxis]
@@ -110,7 +105,7 @@ def dipole_distribution(
     z = (z * length_units).to("m").magnitude
     if len(z) == 1:
         z = z * np.ones_like(x)
-
+    eval_coords = np.stack(np.atleast_1d(x, y, z), axis=1)
     dipole_positions, dipole_moments = np.atleast_2d(dipole_positions, dipole_moments)
     if dipole_moments.shape[0] == 1:
         # Assign each dipole the same moment
@@ -122,7 +117,7 @@ def dipole_distribution(
             f"({dipole_positions.shape[0]})."
         )
     B = sum(
-        dipole_field(x, y, z, moment=moment, r0=r0)
+        dipole_field(eval_coords, moment=moment, r0=r0)
         for moment, r0 in zip(dipole_moments, dipole_positions)
     )
     return np.atleast_2d(B)[:, index]

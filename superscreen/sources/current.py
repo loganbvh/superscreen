@@ -20,10 +20,10 @@ def biot_savart_2d(
     areas: Optional[np.ndarray] = None,
     length_units: str = "um",
     current_units: str = "uA",
-    vector: bool = False,
+    vector: bool = True,
 ) -> np.ndarray:
-    """Returns the z-component of the magnetic field (in tesla) from a sheet of current
-    located at vertical positon ``z0`` (in units of ``length_units``). The current is
+    """Returns the magnetic field (in tesla) from a sheet of current located at
+    vertical positon ``z0`` (in units of ``length_units``). The current is
     parameterized by a set of ``current_densities`` (in units of
     ``current_units / length_units``) and x-y ``positions`` (in units of
     ``length_units``), and the field is evaluated at coordinates ``(x, y, z)``.
@@ -31,17 +31,16 @@ def biot_savart_2d(
     .. math::
 
         \\mu_0H_x(\\vec{r}) &= \\frac{\\mu_0}{4\\pi}\\int_S
-        \\frac{J_y(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{z}
+        \\frac{J_y(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{z}}
         {|\\vec{r}-\\vec{r}'|^3}\\,\\mathrm{d}^2r'\\\\
-
         \\mu_0H_y(\\vec{r}) &= \\frac{\\mu_0}{4\\pi}\\int_S
-        -\\frac{J_x(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{z}
+        -\\frac{J_x(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{z}}
         {|\\vec{r}-\\vec{r}'|^3}\\,\\mathrm{d}^2r'\\\\
-
         \\mu_0H_z(\\vec{r}) &= \\frac{\\mu_0}{4\\pi}\\int_S
         \\frac{J_x(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{y}
         - J_y(\\vec{r}')(\\vec{r}-\\vec{r}')\\cdot\\hat{x}}
         {|\\vec{r}-\\vec{r}'|^3}\\,\\mathrm{d}^2r'
+
 
     where :math:`\\vec{r}=(x, y, z)` and :math:`\\vec{r}'=(x', y', z_0)`.
 
@@ -56,12 +55,19 @@ def biot_savart_2d(
             shape ``(m, 2)``.
         current_densities: 2D current density ``(Jx, Jy)``, shape``(m, 2)``.
         z0: Vertical (z) position of the current sheet.
+        areas: Vertex areas for ``positions`` in units of ``length_units**2``. If None,
+            the ``positions`` are triangulated to calculate vertex areas.
         length_units: The units for all coordinates.
         current_units: The units for current values. The ``current_densities`` are
             assumed to be in units of ``current_units / length_units``.
+        vector: Return the full vector magnetic field (shape ``(n, 3)``) rather
+            than just the z-component (shape ``(n, )``).
 
     Returns:
-        Magnetic field ``Bz`` in tesla evaluated at ``(x, y, z)``, shape ``(n, )``
+        Magnetic field in tesla evaluated at ``(x, y, z)``. If ``vector`` is True,
+        returns the vector magnetic field :math:`\\mu_0\\vec{H}` (shape ``(n, 3)``).
+        Otherwise, returns the the :math:`z`-component, :math:`\\mu_0H_z`
+        (shape ``(n,)``).
     """
     # Convert everything to base units: meters and amps / meter.
     to_meter = ureg(length_units).to("m").magnitude
