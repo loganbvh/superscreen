@@ -506,3 +506,28 @@ def test_bz_from_vector_potential(solution2, use_zs, units, with_units, return_s
     if with_units:
         Bz_from_A.ito(Bz.units)
     assert np.all(np.abs(Bz_from_A - Bz) < 0.1 * np.max(np.abs(Bz)))
+
+
+@pytest.mark.parametrize("layers", [["layer1"], None])
+@pytest.mark.parametrize("units", [None, "mT", "mA/um"])
+@pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
+def test_interp_fields(solution2, layers, units, with_units, method):
+    solution = solution2
+    positions = np.random.random(size=200).reshape((100, 2))
+    fields = solution.interp_fields(
+        positions,
+        layers=layers,
+        units=units,
+        with_units=with_units,
+        method=method,
+    )
+    if layers is None:
+        assert set(fields) == set(solution.device.layers)
+    else:
+        assert set(fields) == set(layers)
+    for value in fields.values():
+        if with_units:
+            assert isinstance(value, pint.Quantity)
+            assert isinstance(value.magnitude, np.ndarray)
+        assert value.shape == positions.shape[:1]

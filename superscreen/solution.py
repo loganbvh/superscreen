@@ -378,6 +378,8 @@ class Solution:
         Returns:
             A dict of interpolated fields for each layer.
         """
+        from .solve import convert_field
+
         valid_methods = ("nearest", "linear", "cubic")
         if method not in valid_methods:
             raise ValueError(
@@ -400,9 +402,13 @@ class Solution:
             if layer not in layers:
                 continue
             Hz_interp = interpolator(device.points, field, **kwargs)
-            Hz = (Hz_interp(positions) * device.ureg(self.field_units)).to(units)
-            if not with_units:
-                Hz = Hz.magnitude
+            Hz = convert_field(
+                Hz_interp(positions),
+                units,
+                old_units=self.field_units,
+                ureg=device.ureg,
+                with_units=with_units,
+            )
             interpolated_fields[layer] = Hz
         return interpolated_fields
 
