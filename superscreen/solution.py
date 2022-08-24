@@ -344,6 +344,7 @@ class Solution:
             Jx_interp = interpolator(xy, Jx.ravel(), **interp_kwargs)
             Jy_interp = interpolator(xy, Jy.ravel(), **interp_kwargs)
             J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
+            J[~np.isfinite(J)] = 0
             if with_units:
                 J = J * self.device.ureg(units)
             interpolated_Js[layer] = J
