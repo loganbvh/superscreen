@@ -249,6 +249,7 @@ def plot_streams_layer(
     cmap: str = "magma",
     levels: int = 101,
     colorbar: bool = True,
+    filled: bool = True,
     **kwargs,
 ) -> Tuple[plt.Axes, Optional[Colorbar]]:
     """Plots the stream function for a single layer in a Device.
@@ -266,6 +267,7 @@ def plot_streams_layer(
         cmap: Name of the matplotlib colormap to use.
         levels: Number of contour levels to used.
         colorbar: Whether to add a colorbar to the plot.
+        filled: If True, plots filled contours.
 
     Returns:
         matplotlib axis and Colorbar if one was created (None otherwise)
@@ -283,8 +285,8 @@ def plot_streams_layer(
     if isinstance(units, str):
         units = device.ureg(units).units
     stream = (solution.streams[layer] * device.ureg(solution.current_units)).to(units)
-
-    im = ax.tricontourf(x, y, triangles, stream.magnitude, cmap=cmap, levels=levels)
+    plot_func = ax.tricontourf if filled else ax.tricontour
+    im = plot_func(x, y, triangles, stream.magnitude, cmap=cmap, levels=levels)
     ax.set_xlabel(f"$x$ [${length_units:~L}$]")
     ax.set_ylabel(f"$y$ [${length_units:~L}$]")
     ax.set_title(f"$g$ ({layer})")
@@ -306,6 +308,7 @@ def plot_streams(
     cmap: str = "magma",
     levels: int = 101,
     colorbar: bool = True,
+    filled: bool = True,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the stream function for multiple layers in a Device.
@@ -322,6 +325,7 @@ def plot_streams(
         cmap: Name of the matplotlib colormap to use.
         levels: Number of contour levels to used.
         colorbar: Whether to add a colorbar to each subplot.
+        filled: If True, plots filled contours.
 
     Returns:
         matplotlib figure and axes
@@ -342,6 +346,7 @@ def plot_streams(
             cmap=cmap,
             levels=levels,
             colorbar=colorbar,
+            filled=filled,
         )
         used_axes.append(ax)
         if cbar is not None:
