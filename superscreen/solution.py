@@ -18,7 +18,6 @@ import dill
 import pint
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.tri import Triangulation, LinearTriInterpolator
 from scipy import interpolate
 from scipy.spatial import distance
 
@@ -26,6 +25,7 @@ from .about import version_dict
 from .device import Device, Polygon
 from .fem import in_polygon
 from .parameter import Constant
+from .sources.current import biot_savart_2d
 
 
 logger = logging.getLogger(__name__)
@@ -320,10 +320,13 @@ class Solution:
             )
         if method == "nearest":
             interpolator = interpolate.NearestNDInterpolator
+            interp_kwargs = dict()
         elif method == "linear":
             interpolator = interpolate.LinearNDInterpolator
+            interp_kwargs = dict(fill_value=0)
         else:  # "cubic"
             interpolator = interpolate.CloughTocher2DInterpolator
+            interp_kwargs = dict(fill_value=0)
         if units is None:
             units = f"{self.current_units} / {self.device.length_units}"
         positions = np.atleast_2d(positions)
@@ -338,13 +341,70 @@ class Solution:
         xy = np.stack([xgrid.ravel(), ygrid.ravel()], axis=1)
         interpolated_Js = {}
         for layer, (Jx, Jy) in Jgrids.items():
-            Jx_interp = interpolator(xy, Jx.ravel())
-            Jy_interp = interpolator(xy, Jy.ravel())
+            Jx_interp = interpolator(xy, Jx.ravel(), **interp_kwargs)
+            Jy_interp = interpolator(xy, Jy.ravel(), **interp_kwargs)
             J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
             if with_units:
                 J = J * self.device.ureg(units)
             interpolated_Js[layer] = J
         return interpolated_Js
+
+    def interp_fields(
+        self,
+        positions: np.ndarray,
+        *,
+        layers: Optional[Union[str, List[str]]] = None,
+        method: str = "linear",
+        units: Optional[str] = None,
+        with_units: bool = False,
+        **kwargs,
+    ):
+        """Interpolates the fields in one or more layers.
+
+        Additional keyword arguments are passed to the relevant interpolator:
+        :class``scipy.interpolate.NearestNDInterpolator`,
+        :class:`scipy.interpolate.LinearNDInterpolator`, or
+        :class:`scipy.interpolate.CloughTocher2DInterpolator`.
+
+        Args:
+            positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
+                the fields.
+            layers: Name(s) of the layer(s) for which to interpolate fields.
+            method: Interpolation method to use: 'nearest', 'linear', or 'cubic'.
+            units: The desired units for the current density. Defaults to
+                ``self.field_units``.
+            with_units: Whether to return arrays of pint.Quantities with units attached.
+
+        Returns:
+            A dict of interpolated fields for each layer.
+        """
+        valid_methods = ("nearest", "linear", "cubic")
+        if method not in valid_methods:
+            raise ValueError(
+                f"Interpolation method must be one of {valid_methods} (got {method})."
+            )
+        if method == "nearest":
+            interpolator = interpolate.NearestNDInterpolator
+        elif method == "linear":
+            interpolator = interpolate.LinearNDInterpolator
+        else:  # "cubic"
+            interpolator = interpolate.CloughTocher2DInterpolator
+        device = self.device
+        if units is None:
+            units = self.field_units
+        if layers is None:
+            layers = list(device.layers)
+        positions = np.atleast_2d(positions)
+        interpolated_fields = {}
+        for layer, field in self.fields.items():
+            if layer not in layers:
+                continue
+            Hz_interp = interpolator(device.points, field, **kwargs)
+            Hz = (Hz_interp(positions) * device.ureg(self.field_units)).to(units)
+            if not with_units:
+                Hz = Hz.magnitude
+            interpolated_fields[layer] = Hz
+        return interpolated_fields
 
     def polygon_flux(
         self,
@@ -578,7 +638,7 @@ class Solution:
         Args:
             positions: Shape (m, 2) array of (x, y) coordinates, or (m, 3) array
                 of (x, y, z) coordinates at which to calculate the magnetic field.
-                A single list like [x, y] or [x, y, z] is also allowed.
+                A single sequence like [x, y] or [x, y, z] is also allowed.
             zs: z coordinates at which to calculate the field. If positions has shape
                 (m, 3), then this argument is not allowed. If zs is a scalar, then
                 the fields are calculated in a plane parallel to the x-y plane.
@@ -605,11 +665,7 @@ class Solution:
         dtype = device.solve_dtype
         ureg = device.ureg
         points = device.points.astype(dtype, copy=False)
-        triangles = device.triangles
-        areas = device.weights
-
         units = units or self.field_units
-
         # In case something like a list [x, y] or [x, y, z] is given
         positions = np.atleast_2d(positions)
         # If positions includes z coordinates, peel those off here
@@ -623,21 +679,15 @@ class Solution:
         elif isinstance(zs, (int, float, np.generic)):
             # constant zs
             zs = zs * np.ones(positions.shape[0], dtype=dtype)
+        zs = zs.squeeze()
         if not isinstance(zs, np.ndarray):
             raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
-        if zs.ndim == 1:
-            # We need zs to be shape (m, 1)
-            zs = zs[:, np.newaxis]
-
-        rho2 = distance.cdist(positions, points, metric="sqeuclidean").astype(
-            dtype, copy=False
+        Hz_applied = self.applied_field(
+            positions[:, 0], positions[:, 1], zs[:, np.newaxis]
         )
-        Hz_applied = self.applied_field(positions[:, 0], positions[:, 1], zs)
         if vector:
-            H_applied = np.stack(
-                [np.zeros_like(Hz_applied), np.zeros_like(Hz_applied), Hz_applied],
-                axis=1,
-            )
+            zeros = np.zeros_like(Hz_applied)
+            H_applied = np.stack([zeros, zeros, Hz_applied], axis=1)
         else:
             H_applied = Hz_applied
         H_applied = convert_field(
@@ -647,75 +697,38 @@ class Solution:
             ureg=ureg,
             with_units=with_units,
         )
-
         fields = {}
         # Compute the fields at the specified positions from the currents in each layer
         for name, layer in device.layers.items():
-            dz = zs - layer.z0
-            if np.all(dz == 0):
-                # Interpolate field in the plane of an existing layer
-                tri = Triangulation(points[:, 0], points[:, 1], triangles=triangles)
-                Hz_interp = LinearTriInterpolator(tri, self.screening_fields[name])
-                Hz = np.asarray(Hz_interp(positions[:, 0], positions[:, 1]))
-                # Convert to {self.current_units} / {device.length_units}
-                Hz = convert_field(
-                    Hz,
-                    f"{self.current_units} / {device.length_units}",
-                    old_units=self.field_units,
-                    ureg=ureg,
-                    with_units=False,
-                )
-            else:
-                if np.any(dz == 0):
-                    raise ValueError(
-                        f"Cannot calculate fields in the same plane as layer {name}."
-                    )
-                # g has units of [current]
-                g = self.streams[name]
-                # Q is the dipole kernel for the z component, Hz
-                # Q has units of [length]^(2*(1-5/2)) = [length]^(-3)
-                Q = (
-                    (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
-                ).astype(dtype, copy=False)
-                # tri_areas has units of [length]^2
-                # So here Hz is in units of [current] * [length]^(-1)
-                Hz = np.einsum("ij, j -> i", Q, areas * g, dtype=dtype)
-            if vector:
-                if np.any(dz == 0):
-                    raise ValueError(
-                        f"Cannot calculate fields in the same plane as layer {name}."
-                    )
-                # See Eq. 15 of Kirtley RSI 2016, arXiv:1605.09483
-                # Pairwise difference between all x positions
-                d = np.subtract.outer(positions[:, 0], points[:, 0], dtype=dtype)
-                # Kernel for x component, Hx
-                Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
-                    dtype, copy=False
-                )
-                Hx = np.einsum("ij, j -> i", Q, areas * g)
-
-                # Pairwise difference between all y positions
-                d = np.subtract.outer(positions[:, 1], points[:, 1], dtype=dtype)
-                # Kernel for y component, Hy
-                Q = ((3 * dz * d) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))).astype(
-                    dtype, copy=False
-                )
-                Hy = np.einsum("ij, j -> i", Q, areas * g, dtype=dtype)
-
-                H = np.stack([Hx, Hy, Hz], axis=1)
-            else:
-                H = Hz
+            if np.all((zs - layer.z0) == 0):
+                for film in device.films.values():
+                    if film.layer == name and film.contains_points(positions).any():
+                        raise ValueError(
+                            "Use Solution.interp_fields() to interpolate "
+                            "fields within a layer."
+                        )
+            H = biot_savart_2d(
+                positions[:, 0],
+                positions[:, 1],
+                zs,
+                positions=points,
+                areas=device.weights,
+                current_densities=self.current_densities[name],
+                z0=layer.z0,
+                length_units=device.length_units,
+                current_units=self.current_units,
+                vector=vector,
+            )
             fields[name] = convert_field(
                 H,
                 units,
-                old_units=f"{self.current_units} / {device.length_units}",
+                old_units="tesla",
                 ureg=ureg,
                 with_units=with_units,
             )
+        fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
         if return_sum:
-            fields = sum(fields.values()) + np.atleast_1d(H_applied).squeeze()
-        else:
-            fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
+            return sum(fields.values())
         return fields
 
     def vector_potential_at_position(
@@ -974,18 +987,22 @@ class Solution:
             return True
         if not isinstance(other, Solution):
             return False
+
         if not (
-            self.device == other.device
-            and self.field_units == other.field_units
-            and self.current_units == other.current_units
-            and self.circulating_currents == other.circulating_currents
-            and self.applied_field == other.applied_field
-            and self.vortices == other.vortices
+            (self.device == other.device)
+            and (self.field_units == other.field_units)
+            and (self.current_units == other.current_units)
+            and (self.circulating_currents == other.circulating_currents)
+            and (
+                getattr(self, "terminal_currents", None)
+                == getattr(other, "terminal_currents", None)
+            )
+            and (self.applied_field == other.applied_field)
+            and (self.vortices == other.vortices)
         ):
             return False
         if require_same_timestamp and (self.time_created != other.time_created):
             return False
-
         # Then check the arrays, which will take longer
         for name, array in self.streams.items():
             if not np.allclose(array, other.streams[name]):
@@ -996,7 +1013,6 @@ class Solution:
         for name, array in self.fields.items():
             if not np.allclose(array, other.fields[name]):
                 return False
-
         return True
 
     def __eq__(self, other) -> bool:
