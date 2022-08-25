@@ -191,6 +191,13 @@ using the following recipe:
     
 4. Repeat steps 1-3 until the stream functions and fields converge.
 
+
+Applied bias currents
+=====================
+
+For devcies composed of a single film in a single layer, a bias current can be applied through one or more terminals or current contacts.
+See `Terminal currents <notebooks/terminal-currents.ipynb>`_ for more details.
+
 ---------------------------------------------------------------
 
 Finite Element Implementation
