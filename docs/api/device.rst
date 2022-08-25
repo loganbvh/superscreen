@@ -23,6 +23,9 @@ Device
 .. autoclass:: superscreen.device.device.Device
     :members:
 
+TransportDevice
+===============
+
 .. autoclass:: superscreen.device.TransportDevice
     :show-inheritance:
     :members:
