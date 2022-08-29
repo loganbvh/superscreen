@@ -501,8 +501,9 @@ class Device:
 
     def translate(
         self,
-        dx: float,
-        dy: float,
+        *,
+        dx: float = 0,
+        dy: float = 0,
         dz: float = 0,
         inplace: bool = False,
     ) -> "Device":
