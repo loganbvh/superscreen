@@ -343,7 +343,6 @@ class Polygon:
 
     def translate(
         self,
-        *,
         dx: float = 0.0,
         dy: float = 0.0,
         inplace: bool = False,
