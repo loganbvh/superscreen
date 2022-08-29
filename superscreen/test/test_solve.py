@@ -296,30 +296,22 @@ def test_plot_mutual_inductance(mutual_inductance_matrix):
 @pytest.mark.parametrize("gpu", [False, True])
 def test_fluxoid_single(device, gpu):
 
-    from scipy.optimize import RootResults
-
-    with pytest.raises(ValueError):
-        solution, result = sc.find_fluxoid_solution(device, fluxoids=dict())
-
     _ = sc.make_fluxoid_polygons(device, interp_points=None)
     _ = sc.make_fluxoid_polygons(device, interp_points=101)
 
     fluxoids = {hole: 0 for hole in device.holes}
-    solution, result = sc.find_fluxoid_solution(
+    solution = sc.find_fluxoid_solution(
         device, fluxoids=fluxoids, gpu=(HAS_JAX and gpu)
     )
     assert isinstance(solution, sc.Solution)
-    assert isinstance(result, RootResults)
     fluxoid = solution.hole_fluxoid(list(device.holes)[0])
     assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
 
 
 def test_fluxoid_multi(two_rings):
 
-    from scipy.optimize import OptimizeResult
-
     fluxoids = {hole: 0 for hole in two_rings.holes}
-    solution, result = sc.find_fluxoid_solution(
+    solution = sc.find_fluxoid_solution(
         two_rings,
         fluxoids=fluxoids,
         applied_field=sc.sources.ConstantField(0.1),
@@ -327,7 +319,6 @@ def test_fluxoid_multi(two_rings):
         current_units="mA",
     )
     assert isinstance(solution, sc.Solution)
-    assert isinstance(result, OptimizeResult)
     for hole_name in two_rings.holes:
         fluxoid = solution.hole_fluxoid(hole_name)
         assert np.isclose(

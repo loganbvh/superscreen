@@ -74,12 +74,14 @@ def test_plot_polygon_flux(solutions, diff, absolute, logy, units):
 
 @pytest.mark.parametrize("layers", [None, "layer0"])
 @pytest.mark.parametrize("units", [None, "mA"])
-def test_plot_streams(solution, layers, units):
+@pytest.mark.parametrize("filled", [False, True])
+def test_plot_streams(solution, layers, units, filled):
     with non_gui_backend():
         fig, ax = sc.plot_streams(
             solution,
             layers=layers,
             units=units,
+            filled=filled,
         )
         plt.close(fig)
 

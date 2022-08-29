@@ -18,13 +18,12 @@ from .. import fem
 from ..units import ureg
 from ..parameter import Parameter
 from .components import Layer, Polygon
-from .mesh import generate_mesh, optimize_mesh
-
+from . import mesh
 
 logger = logging.getLogger(__name__)
 
 
-class Device(object):
+class Device:
     """An object representing a device composed of multiple layers of
     thin film superconductor.
 
@@ -47,6 +46,12 @@ class Device(object):
         "Q",
         "gradx",
         "grady",
+    )
+
+    POLYGONS = (
+        "films",
+        "holes",
+        "abstract_regions",
     )
 
     ureg = ureg
@@ -217,7 +222,80 @@ class Device(object):
     @property
     def polygons(self) -> Dict[str, Polygon]:
         """A dict of ``{name: polygon}`` for all Polygons in the device."""
-        return {**self.films, **self.holes, **self.abstract_regions}
+        polygons = {}
+        for attr_name in self.POLYGONS:
+            polygons.update(getattr(self, attr_name))
+        return polygons
+
+    def polygons_by_layer(
+        self, polygon_type: Optional[str] = None
+    ) -> Dict[str, List[Polygon]]:
+        """Returns a dict of ``{layer_name: list of polygons in layer}``.
+
+        Args:
+            polygon_type: One of 'film', 'hole', or 'all', specifying which types of
+                polygons to include.
+
+        Returns:
+           A dict of ``{layer_name: list of polygons in layer of the given type}``.
+        """
+        valid_types = ("film", "hole", "all")
+        if polygon_type is None:
+            polygon_type = "all"
+        polygon_type = polygon_type.lower()
+        if polygon_type not in valid_types:
+            raise ValueError(
+                f"Invalid polygon type ({polygon_type}). Expected one of {valid_types!r}."
+            )
+        if polygon_type == "film":
+            all_polygons = self.films.values()
+        elif polygon_type == "hole":
+            all_polygons = self.holes.values()
+        else:
+            # Films + holes + abstract regions
+            all_polygons = self.polygons.values()
+        polygons = {}
+        for layer in self.layers:
+            polygons[layer] = [p for p in all_polygons if p.layer == layer]
+        return polygons
+
+    def contains_points_by_layer(
+        self,
+        points: np.ndarray,
+        polygon_type: Optional[str] = None,
+        index: bool = False,
+        radius: float = 0,
+    ) -> Dict[str, np.ndarray]:
+        """For each layer, determines whether ``points`` lie within a polygon
+        in that layer.
+
+        Args:
+            points: Shape ``(n, 2)`` array of x, y coordinates.
+            polygon_type: One of 'film', 'hole', or 'all', specifying which types of
+                polygons to include.
+            index: If True, then return the indices of the points in ``points``
+                that lie within the polygon. Otherwise, returns a shape ``(n, )``
+                boolean array.
+            radius: An additional margin on ``polygon.path``.
+                See :meth:`matplotlib.path.Path.contains_points`.
+
+        Returns:
+            A dict of ``{layer_name: contains_points}``. If index is True, then
+            ``contains_points`` is an array of indices of the points in ``points``
+            that lie within any polygon in the layer. Otherwise, ``contains_points``
+            is a shape ``(n, )`` boolean array indicating whether each point lies
+            within a polygon in the layer.
+        """
+        polygons_by_layer = self.polygons_by_layer(polygon_type)
+        in_polygons = {}
+        for layer, polygons in polygons_by_layer.items():
+            contains_points = np.logical_or.reduce(
+                [p.contains_points(points, radius=radius) for p in polygons]
+            )
+            if index:
+                contains_points = np.where(contains_points)[0]
+            in_polygons[layer] = contains_points
+        return in_polygons
 
     @property
     def poly_points(self) -> np.ndarray:
@@ -228,7 +306,8 @@ class Device(object):
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are duplicate points,
         # meshpy.triangle will segfault.
-        points = np.unique(points, axis=0)
+        _, ix = np.unique(points, return_index=True, axis=0)
+        points = points[np.sort(ix)]
         return points
 
     @property
@@ -422,8 +501,8 @@ class Device(object):
 
     def translate(
         self,
-        dx: float,
-        dy: float,
+        dx: float = 0,
+        dy: float = 0,
         dz: float = 0,
         inplace: bool = False,
     ) -> "Device":
@@ -471,7 +550,9 @@ class Device(object):
 
     def make_mesh(
         self,
+        bounding_polygon: Optional[str] = None,
         compute_matrices: bool = True,
+        convex_hull: bool = True,
         weight_method: str = "half_cotangent",
         min_points: Optional[int] = None,
         optimesh_steps: Optional[int] = None,
@@ -480,11 +561,12 @@ class Device(object):
         optimesh_verbose: bool = False,
         **meshpy_kwargs,
     ) -> None:
-        """Computes or refines the triangular mesh.
+        """Generates and optimizes the triangular mesh.
 
         Args:
             compute_matrices: Whether to compute the field-independent matrices
                 (weights, Q, Laplace operator) needed for Brandt simulations.
+            convex_hull: If True, mesh the entire convex hull of the device's polygons.
             weight_method: Weight methods for computing the Laplace operator:
                 one of "uniform", "half_cotangent", or "inv_euclidian".
             min_points: Minimum number of vertices in the mesh. If None, then
@@ -499,10 +581,15 @@ class Device(object):
         """
         logger.info("Generating mesh...")
         poly_points = self.poly_points
-        points, triangles = generate_mesh(
+        if bounding_polygon is None:
+            boundary = None
+        else:
+            boundary = self.polygons[bounding_polygon].points
+        points, triangles = mesh.generate_mesh(
             poly_points,
             min_points=min_points,
-            convex_hull=True,
+            convex_hull=convex_hull,
+            boundary=boundary,
             **meshpy_kwargs,
         )
         if optimesh_steps:
@@ -510,7 +597,7 @@ class Device(object):
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=UserWarning)
-                    points, triangles = optimize_mesh(
+                    points, triangles = mesh.optimize_mesh(
                         points,
                         triangles,
                         optimesh_steps,
@@ -752,18 +839,14 @@ class Device(object):
         """Returns a dict of ``{layer_name: {film_name: PathPatch}}``
         for visualizing the device.
         `"""
-        polygons_by_layer = defaultdict(list)
-        holes_by_layer = defaultdict(list)
-        holes = self.holes
         abstract_regions = self.abstract_regions
-        for polygon in self.polygons.values():
-            if polygon.name in holes:
-                holes_by_layer[polygon.layer].append(polygon)
-            else:
-                polygons_by_layer[polygon.layer].append(polygon)
+        polygons_by_layer = self.polygons_by_layer()
+        holes_by_layer = self.polygons_by_layer(polygon_type="hole")
         patches = defaultdict(dict)
         for layer, regions in polygons_by_layer.items():
             for region in regions:
+                if region.name in holes_by_layer[layer]:
+                    continue
                 coords = region.points.tolist()
                 codes = [Path.LINETO for _ in coords]
                 codes[0] = Path.MOVETO

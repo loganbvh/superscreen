@@ -1,10 +1,14 @@
 from typing import Optional, Tuple
 import logging
 
+from matplotlib.tri import Triangulation
 import numpy as np
 from scipy import spatial
 from meshpy import triangle
 import optimesh
+from shapely.geometry import MultiLineString
+from shapely.geometry.polygon import orient
+from shapely.ops import polygonize
 
 
 logger = logging.getLogger(__name__)
@@ -14,6 +18,7 @@ def generate_mesh(
     coords: np.ndarray,
     min_points: Optional[int] = None,
     convex_hull: bool = False,
+    boundary: Optional[np.ndarray] = None,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Generates a Delaunay mesh for a given set of polygon vertex coordinates.
@@ -41,8 +46,15 @@ def generate_mesh(
     # [(x0, y0), (x1, y1)]
     if convex_hull:
         facets = spatial.ConvexHull(coords).simplices
+        if boundary is not None:
+            raise ValueError(
+                "Cannot have both boundary is not None and convex_hull = True."
+            )
     else:
         indices = np.arange(coords.shape[0], dtype=int)
+        if boundary is not None:
+            boundary = list(map(tuple, boundary))
+            indices = [i for i in indices if tuple(coords[i]) in boundary]
         facets = np.stack([indices, np.roll(indices, -1)], axis=1)
 
     mesh_info = triangle.MeshInfo()
@@ -108,3 +120,28 @@ def optimize_mesh(
         **kwargs,
     )
     return points, triangles
+
+
+def boundary_vertices(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Returns an array of boundary vertex indices, ordered counterclockwise.
+
+    Args:
+        points: Shape ``(n, 2)`` array of vertex coordinates.
+        triangles: Shape ``(m, 3)`` array of triangle indices.
+
+    Returns:
+        An array of boundary vertex indices, ordered counterclockwise.
+    """
+    tri = Triangulation(points[:, 0], points[:, 1], triangles)
+    boundary_edges = set()
+    for i, neighbors in enumerate(tri.neighbors):
+        for k in range(3):
+            if neighbors[k] == -1:
+                boundary_edges.add((triangles[i, k], triangles[i, (k + 1) % 3]))
+    edges = MultiLineString([points[edge, :] for edge in boundary_edges])
+    polygons = list(polygonize(edges))
+    assert len(polygons) == 1, polygons
+    polygon = orient(polygons[0])
+    points_list = [tuple(xy) for xy in points]
+    indices = np.array([points_list.index(xy) for xy in polygon.exterior.coords])
+    return indices[:-1]

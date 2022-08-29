@@ -43,7 +43,7 @@ SuperScreen
 the magnetic response of 2D superconductors and thin film superconducting devices of arbitrary geometry.
 Using a matrix inversion method introduced by Brandt [Brandt-PRB-2005]_, ``SuperScreen`` solves
 the coupled London and Maxwell's equations in and around superconducting thin films in the presence of
-inhomogeneous applied magnetic fields and trapped flux.
+inhomogeneous applied magnetic fields, trapped flux, and bias currents.
 
 .. tip::
 
@@ -105,6 +105,7 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
 
    notebooks/polygons.ipynb
    notebooks/field-sources.ipynb
+   notebooks/terminal-currents.ipynb
    notebooks/io.ipynb
    notebooks/gpu.ipynb
    notebooks/parallel.ipynb
