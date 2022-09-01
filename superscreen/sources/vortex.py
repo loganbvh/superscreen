@@ -12,19 +12,22 @@ def monopole(
     *,
     r0: Tuple[float, float, float] = (0, 0, 0),
     nPhi0: Union[int, float] = 1,
+    vector: bool = False,
 ) -> Union[float, np.ndarray]:
-    """Field :math:`\\mu_0H_z` from an isolated (monopole)
+    """Field :math:`\\mu_0\\vec{H}` from a monopole
     in units of ``Phi_0 / (length_units)**2``.
 
     .. math::
 
-        \\mu_0H_z(\\vec{r}-\\vec{r}_0) = \\frac{n\\Phi_0}{2\\pi}
-            \\frac{(\\vec{r}-\\vec{r}_0)\\cdot\\hat{z}}{|(\\vec{r}-\\vec{r}_0)|^3}
+        \\mu_0\\vec{H}(\\vec{r}-\\vec{r}_0) = \\frac{n\\Phi_0}{2\\pi}
+            \\frac{(\\vec{r}-\\vec{r}_0)}{|(\\vec{r}-\\vec{r}_0)|^3}
 
     Args:
         x, y, z: Position coordinates.
         r0 Monopole position
         nPhi0: Number of flux quanta contained in the monopole.
+        vector: If True, return the vector magnetic field. Otherwise, return only
+            the :math:`z`-component.
 
     Returns:
         The field at the given coordinates in units of ``Phi_0 / (length_units)**2``.
@@ -33,12 +36,21 @@ def monopole(
     xp = x - x0
     yp = y - y0
     zp = z - z0
-    Hz0 = zp / (xp**2 + yp**2 + zp**2) ** (3 / 2) / (2 * np.pi)
-    return nPhi0 * Hz0
+    prefactor = 1 / ((2 * np.pi) * (xp**2 + yp**2 + zp**2) ** (3 / 2))
+    Hz0 = zp * prefactor
+    if vector:
+        Hx0 = xp * prefactor
+        Hy0 = yp * prefactor
+        Hz = np.stack([Hx0, Hy0, Hz0], axis=1)
+    else:
+        Hz = Hz0
+    return nPhi0 * Hz
 
 
 def MonopoleField(
-    r0: Tuple[float, float, float] = (0, 0, 0), nPhi0: Union[int, float] = 1
+    r0: Tuple[float, float, float] = (0, 0, 0),
+    nPhi0: Union[int, float] = 1,
+    vector: bool = False,
 ) -> Parameter:
     """Returns a Parameter that computes the z-component of the field from a monopole
     (monopole) located at position ``(x0, y0, z0)`` containing a total of
@@ -52,12 +64,14 @@ def MonopoleField(
     Args:
         r0: Coordinates of the monopole position.
         nPhi0: Number of flux quanta contained in the monopole.
+        vector: If True, return the vector magnetic field. Otherwise, return only
+            the :math:`z`-component.
 
     Returns:
-        A Parameter that returns the out-of-plane field in units of
+        A Parameter that returns the field in units of
         ``Phi_0 / (length_units)**2``.
     """
-    return Parameter(monopole, r0=r0, nPhi0=nPhi0)
+    return Parameter(monopole, r0=r0, nPhi0=nPhi0, vector=vector)
 
 
 VortexField = MonopoleField
