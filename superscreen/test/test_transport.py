@@ -22,6 +22,27 @@ def plus_device():
         term.name = name
         terminals.append(term)
     drain, *sources = terminals
+
+    with pytest.raises(ValueError):
+        device = sc.TransportDevice(
+            "plus",
+            film=plus,
+            layer=layer,
+            source_terminals=None,
+            drain_terminal=drain,
+            length_units="um",
+        )
+
+    with pytest.raises(ValueError):
+        device = sc.TransportDevice(
+            "plus",
+            film=plus,
+            layer=layer,
+            source_terminals=sources,
+            drain_terminal=None,
+            length_units="um",
+        )
+
     device = sc.TransportDevice(
         "plus",
         film=plus,

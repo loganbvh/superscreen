@@ -92,15 +92,19 @@ class TransportDevice(Device):
         *,
         layer: Layer,
         film: Polygon,
-        source_terminals: List[Polygon],
-        drain_terminal: Polygon,
+        source_terminals: Optional[List[Polygon]] = None,
+        drain_terminal: Optional[Polygon] = None,
         holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float64",
     ):
-        self.source_terminals = source_terminals
+        self.source_terminals = source_terminals or []
         self.drain_terminal = drain_terminal
+        if self.source_terminals and self.drain_terminal is None:
+            raise ValueError("Cannot have source terminals without a drain terminal.")
+        if self.drain_terminal and not self.source_terminals:
+            raise ValueError("Cannot have a drain terminal without source terminals.")
         all_terminals = list(self.terminals.values())
         for terminal in all_terminals:
             if terminal.name is None:
@@ -123,6 +127,8 @@ class TransportDevice(Device):
 
     @property
     def terminals(self) -> Dict[str, Polygon]:
+        if self.drain_terminal is None:
+            return {}
         return {t.name: t for t in self.source_terminals + [self.drain_terminal]}
 
     @property
