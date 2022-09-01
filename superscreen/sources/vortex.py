@@ -48,7 +48,9 @@ def monopole(
 
 
 def MonopoleField(
-    r0: Tuple[float, float, float] = (0, 0, 0), nPhi0: Union[int, float] = 1
+    r0: Tuple[float, float, float] = (0, 0, 0),
+    nPhi0: Union[int, float] = 1,
+    vector: bool = False,
 ) -> Parameter:
     """Returns a Parameter that computes the z-component of the field from a monopole
     (monopole) located at position ``(x0, y0, z0)`` containing a total of
@@ -62,12 +64,14 @@ def MonopoleField(
     Args:
         r0: Coordinates of the monopole position.
         nPhi0: Number of flux quanta contained in the monopole.
+        vector: If True, return the vector magnetic field. Otherwise, return only
+            the :math:`z`-component.
 
     Returns:
-        A Parameter that returns the out-of-plane field in units of
+        A Parameter that returns the field in units of
         ``Phi_0 / (length_units)**2``.
     """
-    return Parameter(monopole, r0=r0, nPhi0=nPhi0, vector=False)
+    return Parameter(monopole, r0=r0, nPhi0=nPhi0, vector=vector)
 
 
 VortexField = MonopoleField

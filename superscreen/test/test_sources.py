@@ -24,20 +24,28 @@ def test_constant_field(shape):
 
 @pytest.mark.parametrize("shape", [(), (10,), (100,)])
 @pytest.mark.parametrize("vortex_position", [(0, 0, 0), (1, 0, 1), (5, -5, 4)])
-def test_vortex_field(shape, vortex_position):
+@pytest.mark.parametrize("vector", [False, True])
+def test_vortex_field(shape, vortex_position, vector):
     size = int(np.prod(shape))
     x = np.random.random(size).reshape(shape)
     y = np.random.random(size).reshape(shape)
     z = np.random.random(size).reshape(shape)
 
-    param = sc.sources.VortexField(r0=vortex_position)
+    param = sc.sources.VortexField(r0=vortex_position, vector=vector)
     field = param(x, y, z)
     assert isinstance(param, sc.Parameter)
-    if shape == ():
-        assert isinstance(field, float)
+    if vector:
+        if shape == ():
+            assert field.shape == (3,)
+        else:
+            assert field.shape == shape + (3,)
+        assert np.all(np.linalg.norm(np.atleast_2d(field), axis=1) != 0)
     else:
-        assert field.shape == shape
-    assert np.all(field != 0)
+        if shape == ():
+            assert isinstance(field, float)
+        else:
+            assert field.shape == shape
+        assert np.all(field != 0)
 
 
 @pytest.mark.parametrize(
