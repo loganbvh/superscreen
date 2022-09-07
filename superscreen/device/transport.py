@@ -92,15 +92,19 @@ class TransportDevice(Device):
         *,
         layer: Layer,
         film: Polygon,
-        source_terminals: List[Polygon],
-        drain_terminal: Polygon,
+        source_terminals: Optional[List[Polygon]] = None,
+        drain_terminal: Optional[Polygon] = None,
         holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float64",
     ):
-        self.source_terminals = source_terminals
+        self.source_terminals = source_terminals or []
         self.drain_terminal = drain_terminal
+        if self.source_terminals and self.drain_terminal is None:
+            raise ValueError("Cannot have source terminals without a drain terminal.")
+        if self.drain_terminal and not self.source_terminals:
+            raise ValueError("Cannot have a drain terminal without source terminals.")
         all_terminals = list(self.terminals.values())
         for terminal in all_terminals:
             if terminal.name is None:
@@ -123,6 +127,8 @@ class TransportDevice(Device):
 
     @property
     def terminals(self) -> Dict[str, Polygon]:
+        if self.drain_terminal is None:
+            return {}
         return {t.name: t for t in self.source_terminals + [self.drain_terminal]}
 
     @property
@@ -231,6 +237,11 @@ class TransportDevice(Device):
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
+            optimesh_steps: Maximum number of optimesh steps. If None, then no
+                optimization is done.
+            optimesh_method: Name of the optimization method to use.
+            optimesh_tolerance: Optimesh quality tolerance.
+            optimesh_verbose: Whether to use verbose mode in optimesh.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         return super().make_mesh(
