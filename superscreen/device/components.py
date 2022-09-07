@@ -29,6 +29,8 @@ class Layer:
 
     Args:
         name: Name of the layer.
+        Lambda: The effective magnetic penetration depth of the superconducting
+            film(s) in the layer.
         thickness: Thickness of the superconducting film(s) located in the layer.
         london_lambda: London penetration depth of the superconducting film(s)
             located in the layer.
@@ -567,6 +569,7 @@ class Polygon:
 
 
         Args:
+            distance: The amount by which to inflate or deflate the polygon.
             join_style: One of "round" (1), "mitre" (2), or "bevel" (3).
                 See the `shapely documentation`_.
             mitre_limit: See the `shapely documentation`_.
@@ -613,6 +616,7 @@ class Polygon:
                 then an unaltered copy of the polygon is returned.
             degree: The degree of the spline with which to iterpolate.
                 Defaults to 1 (linear spline).
+            smooth: Smoothing condition.
 
         """
         if num_points is None:

@@ -106,6 +106,9 @@ def optimize_mesh(
         points: Mesh vertex coordinates.
         triangles: Mesh triangle indices.
         steps: Number of optimesh steps to perform.
+        method: See ``optimesh`` documentation.
+        tolerance: See ``optimesh`` documentation.
+        verbose: See ``optimesh`` documentation.
 
     Returns:
         Optimized mesh vertex coordinates and triangle indices.

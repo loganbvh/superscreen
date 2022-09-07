@@ -50,7 +50,7 @@ def zip_solution(solution: Solution, directory: os.PathLike) -> str:
     """Save a Solution to a zip archive in the given directory.
 
     Args:
-        Solution: The Solution to save.
+        solution: The Solution to save.
         directory: The directory in which to save the Solution.
 
     Returns:

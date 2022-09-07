@@ -237,6 +237,11 @@ class TransportDevice(Device):
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
+            optimesh_steps: Maximum number of optimesh steps. If None, then no
+                optimization is done.
+            optimesh_method: Name of the optimization method to use.
+            optimesh_tolerance: Optimesh quality tolerance.
+            optimesh_verbose: Whether to use verbose mode in optimesh.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         return super().make_mesh(
