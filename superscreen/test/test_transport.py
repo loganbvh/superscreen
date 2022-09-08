@@ -56,6 +56,27 @@ def plus_device():
 
 
 @pytest.fixture()
+def plus_device_no_terminals():
+    layer = sc.Layer("base", Lambda=1)
+    width, height = 10, 2
+    points = sc.geometry.box(width, height)
+    bar = sc.Polygon("plus", points=points)
+    plus = bar.union(bar.rotate(90))
+    plus.name = "plus"
+    plus.layer = layer.name
+    device = sc.TransportDevice(
+        "plus",
+        film=plus,
+        layer=layer,
+        source_terminals=None,
+        drain_terminal=None,
+        length_units="um",
+    )
+    device.make_mesh(min_points=2000, optimesh_steps=20)
+    return device
+
+
+@pytest.fixture()
 def holey_device():
     width = 1
     height = width * 2
@@ -195,3 +216,13 @@ def test_holey_device(holey_device, gpu):
         currents.append(np.sum(J * dr * unit_normals))
     for actual, target in zip(currents, target_currents):
         assert np.isclose(actual, target, rtol=1e-2, atol=1e-2)
+
+
+def test_no_terminals(plus_device_no_terminals):
+    device = plus_device_no_terminals
+    solutions = sc.solve(
+        device=device,
+        applied_field=sc.sources.ConstantField(1),
+        field_units="mT",
+    )
+    assert len(solutions) == 1

@@ -197,6 +197,9 @@ class TransportDevice(Device):
             A new Device instance, copied from self
         """
         source_terminals = [term.copy() for term in self.source_terminals]
+        drain_terminal = self.drain_terminal
+        if drain_terminal is not None:
+            drain_terminal = drain_terminal.copy()
         holes = [hole.copy() for hole in self.holes.values()]
         abstract_regions = [region.copy() for region in self.abstract_regions.values()]
 
@@ -205,7 +208,7 @@ class TransportDevice(Device):
             layer=self.layer.copy(),
             film=self.film.copy(),
             source_terminals=source_terminals,
-            drain_terminal=self.drain_terminal.copy(),
+            drain_terminal=drain_terminal,
             holes=holes,
             abstract_regions=abstract_regions,
             length_units=self.length_units,
