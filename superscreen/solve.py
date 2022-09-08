@@ -316,9 +316,10 @@ def _solve_for_terminal_current_stream(
     device._check_current_mapping(terminal_currents)
     terminal_currents = terminal_currents.copy()
     # The drain terminal must sink all current
-    terminal_currents[device.drain_terminal.name] = -sum(
-        terminal_currents.get(term.name, 0) for term in device.source_terminals
-    )
+    if device.drain_terminal is not None:
+        terminal_currents[device.drain_terminal.name] = -sum(
+            terminal_currents.get(term.name, 0) for term in device.source_terminals
+        )
     boundary_indices = device.boundary_vertices()
     on_boundary = np.zeros(points.shape[0], dtype=bool)
     boundary_points = points[boundary_indices]
