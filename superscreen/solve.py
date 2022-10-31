@@ -1242,28 +1242,3 @@ def solve_many(
 
     solutions, paths = parallel_methods[parallel_method](**kwargs)
     return solutions, paths
-
-
-def _patch_docstring(func):
-    func.__doc__ = (
-        func.__doc__
-        + "\n"
-        + "\n".join(
-            [
-                line
-                for line in solve_many.__doc__.splitlines()
-                if "parallel_method:" not in line
-            ][2:]
-        )
-    )
-    annotations = solve_many.__annotations__.copy()
-    _ = annotations.pop("parallel_method", None)
-    func.__annotations__.update(annotations)
-
-
-# Set docstrings for functions in parallel.py based on solve_many.
-# Hide import after definition of solve_many to avoid circular import.
-from .parallel import solve_many_mp, solve_many_ray, solve_many_serial  # noqa: E402
-
-for func in (solve_many_serial, solve_many_mp, solve_many_ray):
-    _patch_docstring(func)

@@ -614,3 +614,27 @@ def solve_many_ray(
         save_context.cleanup()
 
     return solutions, paths
+
+
+# Set docstrings for functions in parallel.py based on solve_many.
+def _patch_docstring(func):
+    from .solve import solve_many
+
+    func.__doc__ = (
+        func.__doc__
+        + "\n"
+        + "\n".join(
+            [
+                line
+                for line in solve_many.__doc__.splitlines()
+                if "parallel_method:" not in line
+            ][2:]
+        )
+    )
+    annotations = solve_many.__annotations__.copy()
+    _ = annotations.pop("parallel_method", None)
+    func.__annotations__.update(annotations)
+
+
+for func in (solve_many_serial, solve_many_mp, solve_many_ray):
+    _patch_docstring(func)
