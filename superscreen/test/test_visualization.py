@@ -1,6 +1,6 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import matplotlib.pyplot as plt
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend

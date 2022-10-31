@@ -1,20 +1,20 @@
-from collections import defaultdict
-import warnings
 import inspect
 import itertools
+import warnings
+from collections import defaultdict
 from contextlib import contextmanager
-from typing import Optional, Union, Tuple, List, Dict, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-import pint
-import numpy as np
-from scipy import interpolate
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
+import pint
 from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+from scipy import interpolate
 
-from .solve import convert_field
 from .solution import Solution
+from .solve import convert_field
 
 
 @contextmanager

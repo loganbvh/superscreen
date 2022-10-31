@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from scipy import integrate

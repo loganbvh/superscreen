@@ -1,8 +1,8 @@
+import contextlib
 import os
 import shutil
 import tempfile
 from datetime import datetime
-import contextlib
 
 import matplotlib.pyplot as plt
 import numpy as np

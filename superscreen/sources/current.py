@@ -1,12 +1,12 @@
-from typing import Union, Optional
+from typing import Optional, Union
 
 import numpy as np
 from scipy.constants import mu_0
 from scipy.spatial import Delaunay
 
-from ..units import ureg
 from ..fem import mass_matrix
 from ..parameter import Parameter
+from ..units import ureg
 
 
 def biot_savart_2d(

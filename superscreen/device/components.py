@@ -1,19 +1,18 @@
-from copy import deepcopy
 import logging
-from typing import Optional, Union, Tuple, Iterable
+from copy import deepcopy
+from typing import Iterable, Optional, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import path
-import matplotlib.pyplot as plt
 from scipy import interpolate
-from shapely import geometry as geo
 from shapely import affinity
+from shapely import geometry as geo
 from shapely.validation import explain_validity
 
 from ..geometry import close_curve
 from ..parameter import Parameter
 from .mesh import generate_mesh, optimize_mesh
-
 
 logger = logging.getLogger(__name__)
 

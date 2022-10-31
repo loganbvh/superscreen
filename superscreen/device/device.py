@@ -1,24 +1,24 @@
-import os
 import json
 import logging
-from copy import deepcopy
+import os
+import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Optional, Union, List, Tuple, Dict, Any
-import warnings
+from copy import deepcopy
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import dill
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.path import Path
-from matplotlib.patches import PathPatch
+import numpy as np
 import scipy.sparse as sp
+from matplotlib.patches import PathPatch
+from matplotlib.path import Path
 
 from .. import fem
-from ..units import ureg
 from ..parameter import Parameter
-from .components import Layer, Polygon
+from ..units import ureg
 from . import mesh
+from .components import Layer, Polygon
 
 logger = logging.getLogger(__name__)
 
@@ -634,7 +634,7 @@ class Device:
                 or "inv_euclidian".
         """
 
-        from ..solve import C_vector, q_matrix, Q_matrix
+        from ..solve import C_vector, Q_matrix, q_matrix
 
         points = self.points
         triangles = self.triangles

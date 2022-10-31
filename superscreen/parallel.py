@@ -1,24 +1,23 @@
-import os
-import time
-import shutil
-import logging
-import itertools
-import tempfile
-import warnings
 import contextlib
+import itertools
+import logging
 import multiprocessing as mp
-from typing import Union, Callable, Optional, Dict, Tuple, List, Any
+import os
+import shutil
+import tempfile
+import time
+import warnings
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import ray
-import pint
 import joblib
 import numpy as np
+import pint
+import ray
 
-from .solve import solve
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution, Vortex
-
+from .solve import solve
 
 logger = logging.getLogger(__name__)
 

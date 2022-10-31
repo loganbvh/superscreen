@@ -1,13 +1,13 @@
+import contextlib
 import copy
 import pickle
 import tempfile
-import contextlib
 
-import pytest
-import numpy as np
-import shapely
-import scipy.sparse as sp
 import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+import scipy.sparse as sp
+import shapely
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend

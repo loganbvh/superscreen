@@ -1,9 +1,9 @@
+import datetime
+import json
 import os
 import shutil
-import json
-import datetime
 import tempfile
-from typing import Union, List, Dict, Iterator
+from typing import Dict, Iterator, List, Union
 
 import numpy as np
 

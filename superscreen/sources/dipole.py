@@ -1,11 +1,11 @@
 import itertools
-from typing import Union, Tuple, Optional
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from scipy.constants import mu_0
 
-from ..units import ureg
 from ..parameter import Parameter
+from ..units import ureg
 
 
 def dipole_field(
