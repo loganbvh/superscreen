@@ -70,7 +70,7 @@ def find_fluxoid_solution(
             :func:`superscreen.solve.solve`.
 
     Returns:
-        The optimized :class:`superscreen.solution.Solution`.
+        The optimized :class:`superscreen.Solution`.
     """
     fluxoids = fluxoids or {}
     holes = list(device.holes)

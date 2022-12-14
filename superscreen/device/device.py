@@ -446,7 +446,7 @@ class Device:
             origin: (x, y) coorindates of the origin.
 
         Returns:
-            The scaled :class:`superscreen.device.device.Device`.
+            The scaled :class:`superscreen.Device`.
         """
         if not (
             isinstance(origin, tuple)
@@ -469,7 +469,7 @@ class Device:
             origin: (x, y) coorindates of the origin.
 
         Returns:
-            The rotated :class:`superscreen.device.device.Device`.
+            The rotated :class:`superscreen.Device`.
         """
         if not (
             isinstance(origin, tuple)
@@ -492,7 +492,7 @@ class Device:
                 about which to mirror the layers.
 
         Returns:
-            The mirrored :class:`superscreen.device.device.Device`.
+            The mirrored :class:`superscreen.Device`.
         """
         device = self.copy(with_arrays=True, copy_arrays=True)
         for layer in device.layers.values():
@@ -555,10 +555,7 @@ class Device:
         convex_hull: bool = True,
         weight_method: str = "half_cotangent",
         min_points: Optional[int] = None,
-        optimesh_steps: Optional[int] = None,
-        optimesh_method: str = "cvt-block-diagonal",
-        optimesh_tolerance: float = 1e-3,
-        optimesh_verbose: bool = False,
+        smooth: int = 0,
         **meshpy_kwargs,
     ) -> None:
         """Generates and optimizes the triangular mesh.
@@ -572,11 +569,7 @@ class Device:
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
-            optimesh_steps: Maximum number of optimesh steps. If None, then no
-                optimization is done.
-            optimesh_method: Name of the optimization method to use.
-            optimesh_tolerance: Optimesh quality tolerance.
-            optimesh_verbose: Whether to use verbose mode in optimesh.
+            smooth: Number of Laplacian smoothing iterations to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         logger.info("Generating mesh...")
@@ -592,25 +585,9 @@ class Device:
             boundary=boundary,
             **meshpy_kwargs,
         )
-        if optimesh_steps:
-            logger.info(f"Optimizing mesh with {points.shape[0]} vertices.")
-            try:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", category=UserWarning)
-                    points, triangles = mesh.optimize_mesh(
-                        points,
-                        triangles,
-                        optimesh_steps,
-                        method=optimesh_method,
-                        tolerance=optimesh_tolerance,
-                        verbose=optimesh_verbose,
-                    )
-            except np.linalg.LinAlgError as e:
-                err = (
-                    "LinAlgError encountered in optimesh. Try reducing min_points "
-                    "or increasing the number of points in the device's important polygons."
-                )
-                raise RuntimeError(err) from e
+        if smooth:
+            logger.info(f"Smoothin mesh with {points.shape[0]} vertices.")
+            points, triangles = mesh.smooth_mesh(points, triangles, smooth)
         logger.info(
             f"Finished generating mesh with {points.shape[0]} points and "
             f"{triangles.shape[0]} triangles."

@@ -51,7 +51,7 @@ def plus_device():
         drain_terminal=drain,
         length_units="um",
     )
-    device.make_mesh(min_points=2000, optimesh_steps=20)
+    device.make_mesh(min_points=2000, smooth=20)
     return device
 
 
@@ -72,7 +72,7 @@ def plus_device_no_terminals():
         drain_terminal=None,
         length_units="um",
     )
-    device.make_mesh(min_points=2000, optimesh_steps=20)
+    device.make_mesh(min_points=2000, smooth=20)
     return device
 
 
@@ -127,7 +127,7 @@ def holey_device():
         drain_terminal=drain_terminal,
         length_units=length_units,
     ).translate(dx=dx, dy=dy)
-    device.make_mesh(min_points=2000, optimesh_steps=20)
+    device.make_mesh(min_points=2000, smooth=20)
     return device
 
 

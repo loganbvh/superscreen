@@ -46,7 +46,7 @@ def device():
         holes=holes,
         abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_points=5000, optimesh_steps=200)
+    device.make_mesh(min_points=5000, smooth=200)
 
     return device
 

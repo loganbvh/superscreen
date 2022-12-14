@@ -20,34 +20,34 @@ Devices
 Device
 ======
 
-.. autoclass:: superscreen.device.device.Device
+.. autoclass:: superscreen.Device
     :members:
 
 TransportDevice
 ===============
 
-.. autoclass:: superscreen.device.TransportDevice
+.. autoclass:: superscreen.TransportDevice
     :show-inheritance:
     :members:
 
 Layer
 =====
 
-.. autoclass:: superscreen.device.components.Layer
+.. autoclass:: superscreen.Layer
     :members:
 
 Polygon
 =======
 
-.. autoclass:: superscreen.device.components.Polygon
+.. autoclass:: superscreen.Polygon
     :members:
 
 Meshing
 -------
 
-.. autofunction:: superscreen.device.mesh.generate_mesh
+.. autofunction:: superscreen.device.generate_mesh
 
-.. autofunction:: superscreen.device.mesh.optimize_mesh
+.. autofunction:: superscreen.device.smooth_mesh
 
 Parameters
 ----------
@@ -55,7 +55,7 @@ Parameters
 Parameter
 =========
 
-.. autoclass:: superscreen.parameter.Parameter
+.. autoclass:: superscreen.Parameter
     :members:
 
 CompositeParameter
@@ -69,7 +69,7 @@ CompositeParameter
 Constant
 ========
 
-.. autoclass:: superscreen.parameter.Constant
+.. autoclass:: superscreen.Constant
     :members:
     :show-inheritance:
     :inherited-members:
