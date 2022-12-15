@@ -125,9 +125,9 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    :maxdepth: 2
    :caption: About SuperScreen
 
+   about/changelog.rst
    about/license.rst
    about/contributing.rst
-   about/changelog.rst
    about/references.rst
 
 .. Indices and tables
