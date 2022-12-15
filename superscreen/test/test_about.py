@@ -1,5 +1,4 @@
 import pytest
-
 from IPython.display import HTML
 
 from superscreen.about import version_dict, version_table

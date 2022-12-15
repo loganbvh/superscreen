@@ -1,10 +1,10 @@
+import contextlib
 import os
 import tempfile
-import contextlib
 
+import joblib
 import pytest
 import ray
-import joblib
 
 import superscreen as sc
 
@@ -198,7 +198,6 @@ def test_solve_many(
             directory=directory,
             **solve_kwargs,
         )
-        solver = "superscreen.solve_many:ray:2"
         solutions, paths = solutions_ray, paths_ray
         if save:
             assert paths is not None
@@ -215,13 +214,11 @@ def test_solve_many(
             if keep_only_final_solution:
                 for s in solutions:
                     assert isinstance(s, sc.Solution)
-                    assert s.solver == solver
             else:
                 for lst in solutions:
                     assert isinstance(lst, list)
                 for s in solutions[0]:
                     assert isinstance(s, sc.Solution)
-                    assert s.solver == solver
         else:
             assert solutions is None
 

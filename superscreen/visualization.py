@@ -1,20 +1,20 @@
-from collections import defaultdict
-import warnings
 import inspect
 import itertools
+import warnings
+from collections import defaultdict
 from contextlib import contextmanager
-from typing import Optional, Union, Tuple, List, Dict, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-import pint
-import numpy as np
-from scipy import interpolate
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
+import pint
 from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+from scipy import interpolate
 
-from .solve import convert_field
 from .solution import Solution
+from .solve import convert_field
 
 
 @contextmanager
@@ -84,6 +84,7 @@ def auto_range_iqr(
 def auto_grid(
     num_plots: int,
     max_cols: int = 3,
+    delaxes: bool = True,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Creates a grid of at least ``num_plots`` subplots
@@ -94,6 +95,7 @@ def auto_grid(
     Args:
         num_plots: Total number of plots that will be populated.
         max_cols: Maximum number of columns in the grid.
+        delaxes: Whether to remove unused axes.
 
     Returns:
         matplotlib figure and axes
@@ -103,6 +105,10 @@ def auto_grid(
     fig, axes = plt.subplots(nrows, ncols, **kwargs)
     if not isinstance(axes, (list, np.ndarray)):
         axes = np.array([axes])
+    if delaxes:
+        flat_axes = list(axes.flat)
+        for ax in flat_axes[num_plots:]:
+            fig.delaxes(ax)
     return fig, axes
 
 
@@ -990,7 +996,6 @@ def plot_polygon_flux(
 
 def _patch_docstring(func):
     other_func = getattr(Solution, func.__name__)
-    other_func.__signature__ = inspect.signature(func)
     other_func.__doc__ = (
         other_func.__doc__
         + "\n\n"

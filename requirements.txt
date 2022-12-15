@@ -5,7 +5,6 @@ jupyter
 matplotlib
 meshpy
 numpy
-optimesh
 pandas
 pint
 pre-commit

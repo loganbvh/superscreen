@@ -16,6 +16,19 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.8.0
+-------------
+
+Release date: 2022-12-15
+
+Changes
+=======
+
+- Removed dependency on ``optimesh``, as it is not longer open source.
+
+  - :meth:`superscreen.Device.make_mesh` and :meth:`superscreen.Polygon.make_mesh` now take an integer argument, ``smooth``, which specifies the number of Laplacian mesh smoothing iterations to perform.
+
+
 Version 0.7.0
 -------------
 
@@ -24,11 +37,11 @@ Release date: 2022-08-29
 Changes
 =======
 
-- Added support for GPU-acceleration in :func:`superscreen.solve.solve`, with `JAX <https://github.com/google/jax>`_
+- Added support for GPU-acceleration in :func:`superscreen.solve`, with `JAX <https://github.com/google/jax>`_
   as an optional dependency (`#75 <https://github.com/loganbvh/superscreen/pull/75>`_).
-- Added :class:`superscreen.device.transport.TransportDevice`, a subclass of :class:`superscreen.device.device.Device` on which one can define
+- Added :class:`superscreen.TransportDevice`, a subclass of :class:`superscreen.Device` on which one can define
   source/drain terminals for current biasing (`#78 <https://github.com/loganbvh/superscreen/pull/78>`_).
-- Updated :meth:`superscreen.solution.Solution.field_at_position` to use the 2D Biot-Savart directly,
+- Updated :meth:`superscreen.Solution.field_at_position` to use the 2D Biot-Savart directly,
   via :meth:`superscreen.sources.biot_savart_2d` (`#78 <https://github.com/loganbvh/superscreen/pull/78>`_).
 - Updated :meth:`superscreen.fluxoid.find_fluxoid_solution` to use the mutual inductance matrix to solve for fluxoid states,
   which is much more efficient than the previous least-squares method, especially for multiple holes

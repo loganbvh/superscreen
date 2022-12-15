@@ -1,12 +1,11 @@
 import logging
-from typing import Optional, Union, List, Dict
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from .solve import solve
 from .device import Device
 from .solution import Solution
-
+from .solve import solve
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ def find_fluxoid_solution(
             :func:`superscreen.solve.solve`.
 
     Returns:
-        The optimized :class:`superscreen.solution.Solution`.
+        The optimized :class:`superscreen.Solution`.
     """
     fluxoids = fluxoids or {}
     holes = list(device.holes)

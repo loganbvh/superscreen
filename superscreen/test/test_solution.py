@@ -1,8 +1,8 @@
+import contextlib
 import os
 import shutil
 import tempfile
 from datetime import datetime
-import contextlib
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -234,16 +234,14 @@ def test_field_at_positions(
 
     if isinstance(zs, str):
         zs = solution2.device.layers[zs].z0
-        with pytest.raises(ValueError):
-            # Cannot evaluate field in layer
-            H = solution2.field_at_position(
-                positions,
-                zs=zs,
-                vector=vector,
-                units=units,
-                with_units=with_units,
-                return_sum=return_sum,
-            )
+        H = solution2.field_at_position(
+            positions,
+            zs=zs,
+            vector=vector,
+            units=units,
+            with_units=with_units,
+            return_sum=return_sum,
+        )
         with pytest.raises(ValueError):
             # Both zs and shape (n, 3) positions
             H = solution2.field_at_position(

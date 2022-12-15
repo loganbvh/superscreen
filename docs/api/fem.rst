@@ -19,7 +19,7 @@ The weight matrix, mass matrix, and Laplacian operator are all sparse, meaning t
 entries are zero. In order to save memory, functions that generate these arrays give
 the option to return a `scipy.sparse matrix <https://docs.scipy.org/doc/scipy/reference/sparse.html>`_.
 All matrices are converted to dense `numpy arrays <https://numpy.org/doc/stable/reference/arrays.ndarray.html>`_
-when simulating a :class:`superscreen.device.device.Device`, however.
+when simulating a :class:`superscreen.Device`, however.
 
 .. automodule:: superscreen.fem
     :members:

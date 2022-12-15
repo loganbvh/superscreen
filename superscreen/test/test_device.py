@@ -1,13 +1,13 @@
+import contextlib
 import copy
 import pickle
 import tempfile
-import contextlib
 
-import pytest
-import numpy as np
-import shapely
-import scipy.sparse as sp
 import matplotlib.pyplot as plt
+import numpy as np
+import pytest
+import scipy.sparse as sp
+import shapely
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend
@@ -109,10 +109,8 @@ def test_polygon_join():
         square1.name = None
         sc.Device._validate_polygons([square1], "label")
 
-    for min_points, optimesh_steps in [(None, None), (500, None), (500, 10)]:
-        points, triangles = square1.make_mesh(
-            min_points=min_points, optimesh_steps=optimesh_steps
-        )
+    for min_points, smooth in [(0, 0), (500, 0), (500, 10)]:
+        points, triangles = square1.make_mesh(min_points=min_points, smooth=smooth)
         if min_points:
             assert points.shape[0] > min_points
 
@@ -376,13 +374,13 @@ def test_draw_device(device, legend, subplots):
 
 
 @pytest.mark.parametrize(
-    ", ".join(["min_points", "optimesh_steps"]),
+    ", ".join(["min_points", "smooth"]),
     [(None, None), (None, 20), (1200, None), (1200, 20)],
 )
 @pytest.mark.parametrize(
     "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
 )
-def test_make_mesh(device, min_points, optimesh_steps, weight_method):
+def test_make_mesh(device, min_points, smooth, weight_method):
     if weight_method == "invalid":
         context = pytest.raises(ValueError)
     else:
@@ -391,7 +389,7 @@ def test_make_mesh(device, min_points, optimesh_steps, weight_method):
     with context:
         device.make_mesh(
             min_points=min_points,
-            optimesh_steps=optimesh_steps,
+            smooth=smooth,
             weight_method=weight_method,
         )
 

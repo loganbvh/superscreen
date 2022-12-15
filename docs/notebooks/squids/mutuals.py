@@ -2,11 +2,10 @@ import argparse
 import logging
 
 import matplotlib.pyplot as plt
+
 import superscreen as sc
 
-from . import huber
-from . import hypres
-from . import ibm
+from . import huber, hypres, ibm
 
 
 def get_mutual(squid, label, iterations, fc_lambda=None):
@@ -46,10 +45,10 @@ if __name__ == "__main__":
         help="Number of solver iterations.",
     )
     parser.add_argument(
-        "--optimesh-steps",
+        "--smooth",
         type=int,
         default=40,
-        help="Number of optimesh steps to perform.",
+        help="Number of Laplacian smoothing steps to perform.",
     )
     parser.add_argument(
         "--fc-lambda",
@@ -73,7 +72,7 @@ if __name__ == "__main__":
         squid = make_squid()
         squid.make_mesh(
             min_points=args.min_points,
-            optimesh_steps=args.optimesh_steps,
+            smooth=args.smooth,
         )
         squid.solve_dtype = args.solve_dtype
         M = get_mutual(

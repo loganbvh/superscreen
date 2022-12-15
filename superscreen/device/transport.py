@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from scipy import integrate
@@ -224,10 +224,7 @@ class TransportDevice(Device):
         compute_matrices: bool = True,
         weight_method: str = "half_cotangent",
         min_points: Optional[int] = None,
-        optimesh_steps: Optional[int] = None,
-        optimesh_method: str = "cvt-block-diagonal",
-        optimesh_tolerance: float = 1e-3,
-        optimesh_verbose: bool = False,
+        smooth: int = 0,
         **meshpy_kwargs,
     ) -> None:
         """Generates and optimizes the triangular mesh.
@@ -240,11 +237,7 @@ class TransportDevice(Device):
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
-            optimesh_steps: Maximum number of optimesh steps. If None, then no
-                optimization is done.
-            optimesh_method: Name of the optimization method to use.
-            optimesh_tolerance: Optimesh quality tolerance.
-            optimesh_verbose: Whether to use verbose mode in optimesh.
+            smooth: Number of Laplacian smoothing steps to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         return super().make_mesh(
@@ -253,10 +246,7 @@ class TransportDevice(Device):
             weight_method=weight_method,
             compute_matrices=compute_matrices,
             convex_hull=False,
-            optimesh_steps=optimesh_steps,
-            optimesh_method=optimesh_method,
-            optimesh_tolerance=optimesh_tolerance,
-            optimesh_verbose=optimesh_verbose,
+            smooth=smooth,
             **meshpy_kwargs,
         )
 

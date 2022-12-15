@@ -13,29 +13,27 @@ of Brandt's method, as described :ref:`here <background>`.
 Solve
 -----
 
-.. autofunction:: superscreen.solve.solve_layer
-
-.. autofunction:: superscreen.solve.solve
+.. autofunction:: superscreen.solve
 
 Solve Many
 ----------
 
-.. autofunction:: superscreen.solve.solve_many
+.. autofunction:: superscreen.solve_many
 
 
 Solution
 --------
 
-.. autoclass:: superscreen.solution.Solution
+.. autoclass:: superscreen.Solution
     :members:
 
 Fluxoid
 -------
 
-.. autoclass:: superscreen.solution.Fluxoid
+.. autoclass:: superscreen.Fluxoid
     :show-inheritance:
 
-.. autoclass:: superscreen.solution.Vortex
+.. autoclass:: superscreen.Vortex
     :show-inheritance:
 
 .. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
@@ -62,6 +60,8 @@ Supporting Functions
 
 Brandt Core
 ===========
+
+.. autofunction:: superscreen.solve.solve_layer
 
 .. autofunction:: superscreen.solve.q_matrix
 

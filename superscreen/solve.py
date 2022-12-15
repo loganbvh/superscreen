@@ -1,24 +1,16 @@
-import os
-import logging
-import tempfile
-import itertools
 import contextlib
+import itertools
+import logging
+import os
+import tempfile
 from collections import defaultdict
-from typing import (
-    Union,
-    Callable,
-    Optional,
-    Tuple,
-    List,
-    Dict,
-    Any,
-)
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import pint
 import psutil
-import numpy as np
-import scipy.sparse as sp
 import scipy.linalg as la
+import scipy.sparse as sp
 from scipy.spatial import distance
 
 try:
@@ -27,15 +19,14 @@ try:
     import jax.scipy.linalg as jla
 
     HAS_JAX = True
-except (ModuleNotFoundError, ImportError):
+except (ModuleNotFoundError, ImportError, RuntimeError):
     HAS_JAX = False
 
+from .device import Device
+from .device.transport import TransportDevice, stream_from_terminal_current
 from .parameter import Constant, Parameter
 from .solution import Solution, Vortex
 from .sources import ConstantField
-from .device import Device
-from .device.transport import TransportDevice, stream_from_terminal_current
-
 
 lambda_str = "\u03bb"
 Lambda_str = "\u039b"
@@ -1251,29 +1242,3 @@ def solve_many(
 
     solutions, paths = parallel_methods[parallel_method](**kwargs)
     return solutions, paths
-
-
-def _patch_docstring(func):
-    func.__doc__ = (
-        func.__doc__
-        + "\n"
-        + "\n".join(
-            [
-                line
-                for line in solve_many.__doc__.splitlines()
-                if "parallel_method:" not in line
-            ][2:]
-        )
-    )
-    annotations = solve_many.__annotations__.copy()
-    _ = annotations.pop("parallel_method", None)
-    func.__annotations__.update(annotations)
-
-
-# Set docstrings for functions in parallel.py based on solve_many.
-# Hide import after definition of solve_many to avoid circular import.
-from .parallel import solve_many_serial, solve_many_mp, solve_many_ray  # noqa: E402
-
-
-for func in (solve_many_serial, solve_many_mp, solve_many_ray):
-    _patch_docstring(func)

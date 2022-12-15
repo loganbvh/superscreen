@@ -1,23 +1,14 @@
-import os
 import json
 import logging
+import os
 import zipfile
 from datetime import datetime
-from typing import (
-    Optional,
-    Union,
-    Callable,
-    Dict,
-    Tuple,
-    List,
-    Any,
-    NamedTuple,
-)
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import dill
-import pint
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pint
 from scipy import interpolate
 from scipy.spatial import distance
 
@@ -26,7 +17,6 @@ from .device import Device, Polygon
 from .fem import in_polygon
 from .parameter import Constant
 from .sources.current import biot_savart_2d
-
 
 logger = logging.getLogger(__name__)
 
@@ -708,24 +698,33 @@ class Solution:
         # Compute the fields at the specified positions from the currents in each layer
         for name, layer in device.layers.items():
             if np.all((zs - layer.z0) == 0):
+                H = np.zeros_like(H_applied)
                 for film in device.films.values():
                     if film.layer == name and film.contains_points(positions).any():
-                        raise ValueError(
-                            "Use Solution.interp_fields() to interpolate "
-                            "fields within a layer."
-                        )
-            H = biot_savart_2d(
-                positions[:, 0],
-                positions[:, 1],
-                zs,
-                positions=points,
-                areas=device.weights,
-                current_densities=self.current_densities[name],
-                z0=layer.z0,
-                length_units=device.length_units,
-                current_units=self.current_units,
-                vector=vector,
-            )
+                        # raise ValueError(
+                        #     "Use Solution.interp_fields() to interpolate "
+                        #     "fields within a layer."
+                        # )
+                        Hz = self.interp_fields(
+                            positions, layers=name, units=units, with_units=False
+                        )[name]
+                        if vector:
+                            H[:, 2] += Hz
+                        else:
+                            H += Hz
+            else:
+                H = biot_savart_2d(
+                    positions[:, 0],
+                    positions[:, 1],
+                    zs,
+                    positions=points,
+                    areas=device.weights,
+                    current_densities=self.current_densities[name],
+                    z0=layer.z0,
+                    length_units=device.length_units,
+                    current_units=self.current_units,
+                    vector=vector,
+                )
             fields[name] = convert_field(
                 H,
                 units,

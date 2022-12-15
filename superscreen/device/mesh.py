@@ -1,15 +1,13 @@
-from typing import Optional, Tuple
 import logging
+from typing import Optional, Tuple
 
-from matplotlib.tri import Triangulation
 import numpy as np
-from scipy import spatial
+from matplotlib.tri import Triangulation
 from meshpy import triangle
-import optimesh
+from scipy import spatial
 from shapely.geometry import MultiLineString
 from shapely.geometry.polygon import orient
 from shapely.ops import polygonize
-
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +39,13 @@ def generate_mesh(
     # duplicates this way:
     _, ix = np.unique(coords, return_index=True, axis=0)
     coords = coords[np.sort(ix)]
+    xmin = coords[:, 0].min()
+    dx = np.ptp(coords[:, 0])
+    ymin = coords[:, 1].min()
+    dy = np.ptp(coords[:, 1])
+    r0 = np.array([[xmin, ymin]]) + np.array([[dx, dy]]) / 2
+    # Center the coordinates at (0, 0) to avoid floating point issues.
+    coords = coords - r0
     # Facets is a shape (m, 2) array of edge indices.
     # coords[facets] is a shape (m, 2, 2) array of edge coordinates:
     # [(x0, y0), (x1, y1)]
@@ -53,6 +58,7 @@ def generate_mesh(
     else:
         indices = np.arange(coords.shape[0], dtype=int)
         if boundary is not None:
+            boundary = np.asarray(boundary) - r0
             boundary = list(map(tuple, boundary))
             indices = [i for i in indices if tuple(coords[i]) in boundary]
         facets = np.stack([indices, np.roll(indices, -1)], axis=1)
@@ -62,66 +68,85 @@ def generate_mesh(
     mesh_info.set_facets(facets)
     kwargs = kwargs.copy()
 
+    max_vol = dx * dy / 100
+    kwargs["max_volume"] = max_vol
+
+    mesh = triangle.build(mesh_info=mesh_info, **kwargs)
+    points = np.array(mesh.points) + r0
+    triangles = np.array(mesh.elements)
     if min_points is None:
-        mesh = triangle.build(mesh_info=mesh_info, **kwargs)
-        points = np.array(mesh.points)
+        return points, triangles
+
+    num_points = 0
+    i = 1
+    while num_points < min_points:
+        kwargs["max_volume"] = max_vol
+        mesh = triangle.build(
+            mesh_info=mesh_info,
+            **kwargs,
+        )
+        points = np.array(mesh.points) + r0
         triangles = np.array(mesh.elements)
-    else:
-        max_vol = 1
-        num_points = 0
-        i = 1
-        while num_points < min_points:
-            kwargs["max_volume"] = max_vol
-            mesh = triangle.build(
-                mesh_info=mesh_info,
-                **kwargs,
-            )
-            points = np.array(mesh.points)
-            triangles = np.array(mesh.elements)
-            num_points = points.shape[0]
-            logger.debug(
-                f"Iteration {i}: Made mesh with {points.shape[0]} points and "
-                f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
-                f"Target number of points: {min_points}."
-            )
-            max_vol *= 0.9
-            i += 1
+        num_points = points.shape[0]
+        logger.debug(
+            f"Iteration {i}: Made mesh with {points.shape[0]} points and "
+            f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
+            f"Target number of points: {min_points}."
+        )
+        max_vol *= 0.9
+        i += 1
     return points, triangles
 
 
-def optimize_mesh(
-    points: np.ndarray,
-    triangles: np.ndarray,
-    steps: int,
-    method: str = "cvt-block-diagonal",
-    tolerance: float = 1e-3,
-    verbose: bool = False,
-    **kwargs,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Optimizes an existing mesh using ``optimesh``.
-
-    See ``optimesh`` documentation for additional options.
+def get_edges(triangles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Finds the edges from a list of triangle indices.
 
     Args:
-        points: Mesh vertex coordinates.
-        triangles: Mesh triangle indices.
-        steps: Number of optimesh steps to perform.
-        method: See ``optimesh`` documentation.
-        tolerance: See ``optimesh`` documentation.
-        verbose: See ``optimesh`` documentation.
+        triangles: The triangle indices, shape ``(n, 3)``.
 
     Returns:
-        Optimized mesh vertex coordinates and triangle indices.
+        A tuple containing an integer array of edges and a boolean array
+        indicating whether each edge on in the boundary.
     """
-    points, triangles = optimesh.optimize_points_cells(
-        points,
-        triangles,
-        method,
-        tolerance,
-        steps,
-        verbose=verbose,
-        **kwargs,
-    )
+    edges = np.concatenate([triangles[:, e] for e in [(0, 1), (1, 2), (2, 0)]])
+    edges = np.sort(edges, axis=1)
+    edges, counts = np.unique(edges, return_counts=True, axis=0)
+    return edges, counts == 1
+
+
+def smooth_mesh(
+    points: np.ndarray, triangles: np.ndarray, iterations: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
+    to the arithmetic average of its neighboring points.
+
+    Args:
+        points: Shape ``(n, 2)`` array of vertex coordinates.
+        triangles: Shape ``(m, 3)`` array of triangle indices.
+        iterations: The number of smoothing iterations to perform.
+
+    Returns:
+        Smoothed mesh vertex coordinates and triangle indices.
+    """
+    edges, _ = get_edges(triangles)
+    n = points.shape[0]
+    shape = (n, 2)
+    boundary = boundary_vertices(points, triangles)
+    for _ in range(iterations):
+        num_neighbors = np.bincount(edges.ravel(), minlength=shape[0])
+        new_points = np.zeros(shape)
+        vals = points[edges[:, 1]].T
+        new_points += np.array(
+            [np.bincount(edges[:, 0], val, minlength=n) for val in vals]
+        ).T
+        vals = points[edges[:, 0]].T
+        new_points += np.array(
+            [np.bincount(edges[:, 1], val, minlength=n) for val in vals]
+        ).T
+        new_points /= num_neighbors[:, np.newaxis]
+        # reset boundary points
+        new_points[boundary] = points[boundary]
+        points = new_points
     return points, triangles
 
 

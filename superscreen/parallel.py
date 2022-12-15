@@ -1,24 +1,23 @@
-import os
-import time
-import shutil
-import logging
-import itertools
-import tempfile
-import warnings
 import contextlib
+import itertools
+import logging
 import multiprocessing as mp
-from typing import Union, Callable, Optional, Dict, Tuple, List, Any
+import os
+import shutil
+import tempfile
+import time
+import warnings
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import ray
-import pint
 import joblib
 import numpy as np
+import pint
+import ray
 
-from .solve import solve
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution, Vortex
-
+from .solve import solve
 
 logger = logging.getLogger(__name__)
 
@@ -615,3 +614,27 @@ def solve_many_ray(
         save_context.cleanup()
 
     return solutions, paths
+
+
+# Set docstrings for functions in parallel.py based on solve_many.
+def _patch_docstring(func):
+    from .solve import solve_many
+
+    func.__doc__ = (
+        func.__doc__
+        + "\n"
+        + "\n".join(
+            [
+                line
+                for line in solve_many.__doc__.splitlines()
+                if "parallel_method:" not in line
+            ][2:]
+        )
+    )
+    annotations = solve_many.__annotations__.copy()
+    _ = annotations.pop("parallel_method", None)
+    func.__annotations__.update(annotations)
+
+
+for func in (solve_many_serial, solve_many_mp, solve_many_ray):
+    _patch_docstring(func)

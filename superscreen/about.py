@@ -1,22 +1,22 @@
+import inspect
 import os
 import sys
 import time
-import inspect
-from typing import Optional, Dict
+from typing import Dict, Optional
 
-import joblib
-import ray
-import numpy
-import scipy
 import IPython
-from IPython.display import HTML
+import joblib
 import matplotlib
+import numpy
+import ray
+import scipy
+from IPython.display import HTML
 
 try:
     import jax
 
     jax_version = jax.__version__
-except (ModuleNotFoundError, ImportError):
+except (ModuleNotFoundError, ImportError, RuntimeError):
     jax_version = None
 
 import superscreen

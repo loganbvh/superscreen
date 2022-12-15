@@ -21,7 +21,7 @@ Click the badge below and navigate to `docs/notebooks/` to try `SuperScreen` int
 
 """
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 DESCRIPTION = "SuperScreen: simulate Meissner screening in 2D superconducting devices."
 LONG_DESCRIPTION = __doc__
@@ -41,7 +41,6 @@ INSTALL_REQUIRES = [
     "matplotlib",
     "meshpy",
     "numpy",
-    "optimesh",
     "pandas",
     "pint",
     "pre-commit",
