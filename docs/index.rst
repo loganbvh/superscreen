@@ -35,8 +35,9 @@ SuperScreen
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
 
-.. image:: https://zenodo.org/badge/376110557.svg
-   :target: https://zenodo.org/badge/latestdoi/376110557
+.. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.5733507.svg
+   :target: https://doi.org/10.5281/zenodo.5733507
+   :alt: Zenodo
 
 
 `SuperScreen <https://github.com/loganbvh/superscreen>`_ is an open-source Python package for simulating
