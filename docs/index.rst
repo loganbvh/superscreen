@@ -18,8 +18,8 @@ SuperScreen
    :target: https://pypi.org/project/superscreen/
    :alt: PyPI
 
-.. image:: https://img.shields.io/github/workflow/status/loganbvh/superscreen/lint-and-test/main
-   :alt: GitHub Workflow Status (branch)
+.. image:: https://img.shields.io/github/actions/workflow/status/loganbvh/superscreen/lint-and-test.yml?branch=main
+   :alt: GitHub Workflow Status
 
 .. image:: https://readthedocs.org/projects/superscreen/badge/?version=latest
    :target: https://superscreen.readthedocs.io/en/latest/?badge=latest
