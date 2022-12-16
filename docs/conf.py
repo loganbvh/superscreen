@@ -37,6 +37,9 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_rtd_theme",
     "nbsphinx",
+    # https://github.com/spatialaudio/nbsphinx/issues/24
+    # https://github.com/spatialaudio/nbsphinx/issues/687
+    "IPython.sphinxext.ipython_console_highlighting",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
