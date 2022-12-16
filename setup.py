@@ -53,6 +53,7 @@ INSTALL_REQUIRES = [
 
 EXTRAS_REQUIRE = {
     "docs": [
+        "IPython",
         "sphinx",
         "sphinx_rtd_theme",
         "sphinx-autodoc-typehints",
