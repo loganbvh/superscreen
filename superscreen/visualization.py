@@ -1,4 +1,3 @@
-import inspect
 import itertools
 import warnings
 from collections import defaultdict
@@ -370,8 +369,7 @@ def plot_fields(
     dataset: str = "fields",
     normalize: bool = False,
     units: Optional[str] = None,
-    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-    grid_method: str = "cubic",
+    shading: str = "gouraud",
     max_cols: int = 3,
     cmap: str = "cividis",
     colorbar: bool = True,
@@ -396,9 +394,7 @@ def plot_fields(
         normalize: Whether to normalize the fields by the applied field.
         units: Units in which to plot the fields. Defaults to solution.field_units.
             This argument is ignored if normalize is True.
-        grid_shape: Shape of the desired rectangular grid. If a single integer n
-            is given, then the grid will be square, shape = (n, n).
-        grid_method: Interpolation method to use (see scipy.interpolate.griddata).
+        shading: May be ``"flat"`` or ``"gouraud"``. The latter does some interpolation.
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
@@ -433,12 +429,8 @@ def plot_fields(
         layers = [layers]
 
     fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
-    xgrid, ygrid, fields = solution.grid_data(
-        dataset=dataset,
-        grid_shape=grid_shape,
-        method=grid_method,
-        layers=layers,
-    )
+    x, y = device.points.T
+    fields = getattr(solution, dataset)
     if dataset == "fields":
         clabel = "$H_z$"
     else:
@@ -449,7 +441,7 @@ def plot_fields(
     if normalize:
         for layer, field in fields.items():
             z0 = device.layers[layer].z0
-            field /= solution.applied_field(xgrid, ygrid, z0)
+            field /= solution.applied_field(x, y, z0)
         clabel = clabel + " / $H_{applied}$"
     else:
         for layer in layers:
@@ -476,20 +468,20 @@ def plot_fields(
         field = fields[layer]
         layer_vmin, layer_vmax = clim_dict[layer]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.pcolormesh(xgrid, ygrid, field, shading="auto", cmap=cmap, norm=norm)
+        im = ax.tripcolor(x, y, field, shading=shading, cmap=cmap, norm=norm)
         ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-        ax.set_xlim(xgrid.min(), xgrid.max())
-        ax.set_ylim(ygrid.min(), ygrid.max())
+        ax.set_xlim(x.min(), x.max())
+        ax.set_ylim(y.min(), y.max())
         used_axes.append(ax)
         if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
             coords, paths, cross_sections = cross_section(
-                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
-                field.ravel(),
+                np.stack([x, y]).T,
+                field,
                 cross_section_coords=cross_section_coords,
             )
             for i, (coord, path, cross) in enumerate(
@@ -675,8 +667,7 @@ def plot_field_at_positions(
     zs: Optional[Union[float, np.ndarray]] = None,
     vector: bool = False,
     units: Optional[str] = None,
-    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-    grid_method: str = "cubic",
+    shading: str = "gouraud",
     cmap: str = "cividis",
     colorbar: bool = True,
     auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
@@ -704,9 +695,7 @@ def plot_field_at_positions(
         vector: Whether to return the full vector magnetic field or just the z component.
         units: Units in which to plot the fields. Defaults to solution.field_units.
             This argument is ignored if normalize is True.
-        grid_shape: Shape of the desired rectangular grid. If a single integer n
-            is given, then the grid will be square, shape = (n, n).
-        grid_method: Interpolation method to use (see scipy.interpolate.griddata).
+        shading: May be ``"flat"`` or ``"gouraud"``. The latter does some interpolation.
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
@@ -749,23 +738,13 @@ def plot_field_at_positions(
     if not isinstance(axes, (list, np.ndarray)):
         axes = [axes]
     x, y, *_ = positions.T
-    xs = np.linspace(x.min(), x.max(), grid_shape[1])
-    ys = np.linspace(y.min(), y.max(), grid_shape[0])
-    xgrid, ygrid = np.meshgrid(xs, ys)
-    # Shape grid_shape or (grid_shape + (3, ))
-    fields = interpolate.griddata(
-        positions[:, :2],
-        fields,
-        (xgrid, ygrid),
-        method=grid_method,
-    )
     clabels = [f"{label} [${units:~L}$]" for label in ["$H_x$ ", "$H_y$ ", "$H_z$ "]]
     if "[mass]" in units.dimensionality:
         # We want flux density, B = mu0 * H
         clabels = ["$\\mu_0$" + clabel for clabel in clabels]
     if not vector:
         clabels = clabels[-1:]
-    fields_dict = {label: fields[:, :, i] for i, label in enumerate(clabels)}
+    fields_dict = {label: fields[:, i] for i, label in enumerate(clabels)}
     clim_dict = setup_color_limits(
         fields_dict,
         vmin=vmin,
@@ -778,19 +757,19 @@ def plot_field_at_positions(
         field = fields_dict[label]
         layer_vmin, layer_vmax = clim_dict[label]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.pcolormesh(xgrid, ygrid, field, shading="auto", cmap=cmap, norm=norm)
+        im = ax.tripcolor(x, y, field, shading=shading, cmap=cmap, norm=norm)
         ax.set_title(f"{label.split('[')[0].strip()}")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-        ax.set_xlim(xgrid.min(), xgrid.max())
-        ax.set_ylim(ygrid.min(), ygrid.max())
+        ax.set_xlim(x.min(), x.max())
+        ax.set_ylim(y.min(), y.max())
         if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
             coords, paths, cross_sections = cross_section(
-                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
-                field.ravel(),
+                np.array([x, y]).T,
+                field,
                 cross_section_coords=cross_section_coords,
             )
             for i, (coord, path, cross) in enumerate(
