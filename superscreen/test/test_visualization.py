@@ -175,7 +175,7 @@ def test_plot_currents_and_fields(
     with non_gui_backend():
         fig, ax = sc.plot_currents(
             solution,
-            grid_shape=(50, 50),
+            grid_shape=(100, 100),
             layers=layers,
             units=units,
             cross_section_coords=cross_section_coords,
@@ -188,7 +188,6 @@ def test_plot_currents_and_fields(
 
         fig, ax = sc.plot_fields(
             solution,
-            grid_shape=(50, 50),
             layers=layers,
             units=units,
             cross_section_coords=cross_section_coords,
@@ -226,7 +225,6 @@ def test_plot_field_at_positions(
             positions,
             zs=zs,
             vector=vector,
-            grid_shape=(50, 50),
             units=units,
             cross_section_coords=cross_section_coords,
             auto_range_cutoff=auto_range_cutoff,

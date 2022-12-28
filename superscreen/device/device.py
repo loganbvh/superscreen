@@ -739,7 +739,7 @@ class Device:
         legend: bool = True,
         figsize: Optional[Tuple[float, float]] = None,
         mesh: bool = False,
-        mesh_kwargs: Optional[Dict[str, Any]] = None,
+        mesh_kwargs: Dict[str, Any] = dict(color="k", lw=0.5),
         **kwargs,
     ) -> Tuple[plt.Figure, plt.Axes]:
         """Plot all of the device's polygons.
