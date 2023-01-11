@@ -929,7 +929,7 @@ class Device:
                 handles = []
             j = 0
             for name, patch in patches[layer].items():
-                if name in exclude:
+                if name in exclude or name in self.holes:
                     continue
                 patch.set_facecolor(f"C{i}")
                 patch.set_alpha(alpha)
