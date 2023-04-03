@@ -691,7 +691,7 @@ class Solution:
             units,
             old_units=self.field_units,
             ureg=ureg,
-            with_units=with_units,
+            with_units=True,
         )
         fields = {}
         # Compute the fields at the specified positions from the currents in each layer
@@ -711,6 +711,8 @@ class Solution:
                             H[:, 2] += Hz
                         else:
                             H += Hz
+                        # Subtract off the applied field to get just the screening field.
+                        H -= H_applied.to("tesla").magnitude
             else:
                 H = biot_savart_2d(
                     positions[:, 0],
@@ -731,7 +733,10 @@ class Solution:
                 ureg=ureg,
                 with_units=with_units,
             )
-        fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
+        if with_units:
+            fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
+        else:
+            fields["applied_field"] = np.atleast_1d(H_applied).squeeze().magnitude
         if return_sum:
             return sum(fields.values())
         return fields
