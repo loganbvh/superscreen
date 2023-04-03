@@ -23,7 +23,6 @@ def ray_initialized():
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
@@ -82,7 +81,6 @@ def test_solve_many(
     num_cpus,
     ray_initialized,
 ):
-
     applied_field = sc.sources.ConstantField(0)
 
     circulating_currents = [{"ring1_hole": f"{i} uA"} for i in range(2)]

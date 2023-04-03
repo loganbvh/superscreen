@@ -10,11 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pint
 from scipy import interpolate
-from scipy.spatial import distance
 
 from .about import version_dict
 from .device import Device, Polygon
-from .fem import in_polygon
+from .fem import cdist_batched, in_polygon
 from .parameter import Constant
 from .sources.current import biot_savart_2d
 
@@ -706,7 +705,7 @@ class Solution:
                         #     "fields within a layer."
                         # )
                         Hz = self.interp_fields(
-                            positions, layers=name, units=units, with_units=False
+                            positions, layers=name, units="tesla", with_units=False
                         )[name]
                         if vector:
                             H[:, 2] += Hz
@@ -745,6 +744,7 @@ class Solution:
         units: Optional[str] = None,
         with_units: bool = True,
         return_sum: bool = True,
+        batch_size: int = 0,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Calculates the vector potential due to currents in the device at any
         point(s) in space. Note that this only considers the vector potential
@@ -774,6 +774,8 @@ class Solution:
                 with units attached.
             return_sum: Whether to return the sum of the potential from all layers in
                 the device, or a dict of ``{layer_name: potential_from_layer}``.
+            batch_size: The maximum size of each batch of positions.
+                See :func:`superscreen.fem.cdist_batched`.
 
         Returns:
             An np.ndarray if return_sum is True, otherwise a dict of
@@ -806,9 +808,9 @@ class Solution:
         if zs.ndim == 1:
             # We need zs to be shape (m, 1)
             zs = zs[:, np.newaxis]
-        rho2 = distance.cdist(positions, points, metric="sqeuclidean").astype(
-            dtype, copy=False
-        )
+        rho2 = cdist_batched(
+            positions, points, batch_size=batch_size, metric="sqeuclidean"
+        ).astype(dtype, copy=False)
         # Compute the vector potential at the specified positions
         # from the currents in each layer
         vector_potentials = {}

@@ -20,7 +20,6 @@ import superscreen.geometry as geo
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer1", london_lambda=0.5, thickness=0.05, z0=0.5),
     ]
@@ -113,7 +112,6 @@ def two_rings():
 @pytest.mark.parametrize("inhomogeneous", [False, True])
 @pytest.mark.parametrize("gpu", [False, True])
 def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, gpu):
-
     applied_field = sc.sources.ConstantField(0)
 
     circulating_currents = {
@@ -175,7 +173,6 @@ def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, 
 
 
 def test_invalid_vortex_args(device):
-
     with pytest.raises(TypeError):
         _ = sc.solve(device=device, vortices=[0, 1, 2])
 
@@ -202,7 +199,6 @@ def test_invalid_vortex_args(device):
 
 
 def test_mutual_inductance_errors(two_rings):
-
     with pytest.raises(ValueError):
         _ = two_rings.mutual_inductance_matrix(
             hole_polygon_mapping={"invalid": None},
@@ -295,7 +291,6 @@ def test_plot_mutual_inductance(mutual_inductance_matrix):
 
 @pytest.mark.parametrize("gpu", [False, True])
 def test_fluxoid_single(device, gpu):
-
     _ = sc.make_fluxoid_polygons(device, interp_points=None)
     _ = sc.make_fluxoid_polygons(device, interp_points=101)
 
@@ -309,7 +304,6 @@ def test_fluxoid_single(device, gpu):
 
 
 def test_fluxoid_multi(two_rings):
-
     fluxoids = {hole: 0 for hole in two_rings.holes}
     solution = sc.find_fluxoid_solution(
         two_rings,
