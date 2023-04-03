@@ -4,7 +4,6 @@ import superscreen as sc
 
 
 def huber_geometry(interp_points=101):
-
     ri_pl = 1.7
     ro_pl = 2.7
     w_pl_center = 1.18
@@ -141,7 +140,7 @@ def huber_geometry(interp_points=101):
     }
 
     if interp_points is not None:
-        from scipy.interpolate import splprep, splev
+        from scipy.interpolate import splev, splprep
 
         new_polygons = {}
         for name, points in polygons.items():
@@ -155,7 +154,6 @@ def huber_geometry(interp_points=101):
 
 
 def make_squid():
-
     interp_points = 151
 
     # See Nick Koshnick thesis

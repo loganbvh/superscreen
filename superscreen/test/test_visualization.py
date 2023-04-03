@@ -8,7 +8,6 @@ from superscreen.visualization import non_gui_backend
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
@@ -31,7 +30,6 @@ def device():
 
 @pytest.fixture(scope="module")
 def solutions(device):
-
     applied_field = sc.sources.ConstantField(1)
 
     solutions = sc.solve(
@@ -141,7 +139,6 @@ def test_cross_section(solution, cross_section_coords, interp_method):
 
 
 def test_cross_section_bad_shape(solution):
-
     dataset_coords = solution.device.points
     dataset_values = solution.fields[list(solution.device.layers)[0]]
     cross_section_coords = np.stack([np.ones(101)] * 3, axis=1)

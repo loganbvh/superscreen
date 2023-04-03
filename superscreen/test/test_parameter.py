@@ -59,7 +59,6 @@ def test_parameter_against_func():
     ],
 )
 def test_parameter_math(func, args):
-
     param1 = sc.Parameter(func, sigma=10)
     param2 = sc.Parameter(func, sigma=0.1)
     print(param1, param2)
@@ -137,7 +136,6 @@ def test_bad_composite_parameter():
 
 @pytest.mark.parametrize("func", [func_2d, func_3d])
 def test_pickle_parameter(func):
-
     param1 = sc.Parameter(func, sigma=10)
     param2 = sc.Parameter(func, sigma=0.1)
 

@@ -11,7 +11,6 @@ import superscreen as sc
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=sc.Constant(2), thickness=0.05, z0=0.5),
@@ -34,7 +33,6 @@ def device():
 
 @pytest.fixture(scope="module")
 def solutions(device):
-
     applied_field = sc.sources.ConstantField(1)
 
     solutions = sc.solve(
@@ -51,7 +49,6 @@ def solutions(device):
 @pytest.mark.parametrize("to_zip", [False, True])
 @pytest.mark.parametrize("return_paths", [False, True])
 def test_save_and_load_solutions(solutions, return_paths, to_zip):
-
     with tempfile.TemporaryDirectory() as directory:
         paths = sc.save_solutions(
             solutions,

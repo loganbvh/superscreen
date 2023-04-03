@@ -52,7 +52,6 @@ def test_polygon_on_boundary(radius=1):
 
 
 def test_polygon_join():
-
     square1 = sc.Polygon(points=sc.geometry.box(1))
     square2 = sc.Polygon(points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5))
     square3 = sc.geometry.box(1, center=(-0.25, 0.25))
@@ -123,7 +122,6 @@ def test_plot_polygon():
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
@@ -216,7 +214,6 @@ def test_layer_bad_init():
 
 @pytest.fixture(scope="module")
 def device_with_mesh():
-
     with pytest.raises(ValueError):
         _ = sc.Polygon("poly", layer="", points=sc.geometry.circle(1).T)
 
@@ -408,7 +405,6 @@ def test_make_mesh(device, min_points, smooth, weight_method):
 @pytest.mark.parametrize("save_mesh", [False, True])
 @pytest.mark.parametrize("compressed", [False, True])
 def test_device_to_file(device, device_with_mesh, save_mesh, compressed):
-
     with tempfile.TemporaryDirectory() as directory:
         device.to_file(directory, save_mesh=save_mesh, compressed=compressed)
         loaded_device = sc.Device.from_file(directory)
@@ -421,7 +417,6 @@ def test_device_to_file(device, device_with_mesh, save_mesh, compressed):
 
 
 def test_pickle_device(device, device_with_mesh):
-
     loaded_device = pickle.loads(pickle.dumps(device))
     loaded_device_with_mesh = pickle.loads(pickle.dumps(device_with_mesh))
 

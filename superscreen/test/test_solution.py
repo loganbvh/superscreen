@@ -24,7 +24,6 @@ def make_tempdir(**kwargs):
 
 @pytest.fixture(scope="module")
 def device():
-
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
@@ -57,7 +56,6 @@ def device():
 
 @pytest.fixture(scope="module")
 def solution1(device):
-
     applied_field = sc.sources.ConstantField(1)
 
     solutions = sc.solve(
@@ -74,7 +72,6 @@ def solution1(device):
 
 @pytest.fixture(scope="module")
 def solution2(device):
-
     applied_field = sc.sources.ConstantField(0)
 
     circulating_currents = {
@@ -93,7 +90,6 @@ def solution2(device):
 
 
 def test_solution_equals(solution1, solution2):
-
     assert solution1 == solution1
     assert solution2 == solution2
     assert solution1 != solution2
@@ -105,7 +101,6 @@ def test_solution_equals(solution1, solution2):
 )
 @pytest.mark.parametrize("with_units", [False, True])
 def test_grid_data(solution1, dataset, with_units):
-
     with pytest.raises(ValueError):
         _ = solution1.grid_data("invalid_dataset")
 
@@ -155,7 +150,6 @@ def test_grid_data(solution1, dataset, with_units):
 @pytest.mark.parametrize("units", [None, "mA / um"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_current_density(solution1, units, with_units):
-
     xgrid, ygrid, current_density = solution1.grid_current_density(
         grid_shape=(20, 20),
         units=units,
@@ -189,7 +183,6 @@ def test_current_density(solution1, units, with_units):
 @pytest.mark.parametrize("units", [None, "Phi_0", "mT * um**2"])
 @pytest.mark.parametrize("with_units", [False, True])
 def test_polygon_flux(solution2, units, with_units):
-
     with pytest.raises(ValueError):
         _ = solution2.polygon_flux(polygons="invalid_polygon")
 
@@ -231,7 +224,6 @@ def test_polygon_flux(solution2, units, with_units):
 def test_field_at_positions(
     solution2, positions, zs, vector, units, with_units, return_sum
 ):
-
     if isinstance(zs, str):
         zs = solution2.device.layers[zs].z0
         H = solution2.field_at_position(
@@ -303,7 +295,6 @@ def test_field_at_positions(
 @pytest.mark.parametrize("save_mesh", [False, True])
 @pytest.mark.parametrize("compressed", [False, True])
 def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
-
     with make_tempdir() as directory:
         solution1.to_file(
             directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
@@ -347,7 +338,6 @@ def test_fluxoid_simply_connected(
     center,
     polygon_shape,
 ):
-
     ureg = solution1.device.ureg
     if polygon_shape == "circle":
         coords = sc.geometry.circle(1.5, points=501, center=center)
