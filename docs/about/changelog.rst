@@ -16,6 +16,16 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.8.1
+-------------
+
+Release date: 2023-04-03
+
+Changes
+=======
+
+- Evaluating the magnetic field within a ``Layer`` is no longer supported in :meth:`superscreen.Solution.field_at_position` and must be done using :meth:`superscreen.Solution.interp_fields` (`#91 <https://github.com/loganbvh/superscreen/pull/91>`_).
+
 Version 0.8.0
 -------------
 
