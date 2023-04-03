@@ -210,7 +210,6 @@ def test_polygon_flux(solution2, units, with_units):
 @pytest.mark.parametrize(
     "positions, zs",
     [
-        (np.array([[-1, 1], [1, -1]]), "layer1"),
         (np.array([[-1, 1, -2], [1, -1, 2]]), None),
         (np.array([[-1, 1], [1, -1]]), 2),
         (np.array([[-1, 1], [1, -1]]), np.array([2, 2])),
@@ -224,35 +223,6 @@ def test_polygon_flux(solution2, units, with_units):
 def test_field_at_positions(
     solution2, positions, zs, vector, units, with_units, return_sum
 ):
-    if isinstance(zs, str):
-        zs = solution2.device.layers[zs].z0
-        H = solution2.field_at_position(
-            positions,
-            zs=zs,
-            vector=vector,
-            units=units,
-            with_units=with_units,
-            return_sum=return_sum,
-        )
-        with pytest.raises(ValueError):
-            # Both zs and shape (n, 3) positions
-            H = solution2.field_at_position(
-                np.stack(
-                    [
-                        positions[:, 0],
-                        positions[:, 1],
-                        0.111 + zs * np.ones(positions.shape[0]),
-                    ],
-                    axis=1,
-                ),
-                zs=zs,
-                vector=vector,
-                units=units,
-                with_units=with_units,
-                return_sum=return_sum,
-            )
-        return
-
     H = solution2.field_at_position(
         positions,
         zs=zs,

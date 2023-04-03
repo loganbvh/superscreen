@@ -700,17 +700,10 @@ class Solution:
                 H = np.zeros_like(H_applied)
                 for film in device.films.values():
                     if film.layer == name and film.contains_points(positions).any():
-                        # raise ValueError(
-                        #     "Use Solution.interp_fields() to interpolate "
-                        #     "fields within a layer."
-                        # )
-                        Hz = self.interp_fields(
-                            positions, layers=name, units="tesla", with_units=False
-                        )[name]
-                        if vector:
-                            H[:, 2] += Hz
-                        else:
-                            H += Hz
+                        raise ValueError(
+                            "Use Solution.interp_fields() to interpolate "
+                            "fields within a layer."
+                        )
             else:
                 H = biot_savart_2d(
                     positions[:, 0],
