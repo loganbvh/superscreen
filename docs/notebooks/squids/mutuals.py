@@ -22,7 +22,6 @@ def get_mutual(squid, label, iterations, fc_lambda=None):
 
 
 if __name__ == "__main__":
-
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser()
