@@ -691,7 +691,7 @@ class Solution:
             units,
             old_units=self.field_units,
             ureg=ureg,
-            with_units=True,
+            with_units=with_units,
         )
         fields = {}
         # Compute the fields at the specified positions from the currents in each layer
@@ -700,19 +700,10 @@ class Solution:
                 H = np.zeros_like(H_applied)
                 for film in device.films.values():
                     if film.layer == name and film.contains_points(positions).any():
-                        # raise ValueError(
-                        #     "Use Solution.interp_fields() to interpolate "
-                        #     "fields within a layer."
-                        # )
-                        Hz = self.interp_fields(
-                            positions, layers=name, units="tesla", with_units=False
-                        )[name]
-                        if vector:
-                            H[:, 2] += Hz
-                        else:
-                            H += Hz
-                        # Subtract off the applied field to get just the screening field.
-                        H -= H_applied.to("tesla").magnitude
+                        raise ValueError(
+                            "Use Solution.interp_fields() to interpolate "
+                            "fields within a layer."
+                        )
             else:
                 H = biot_savart_2d(
                     positions[:, 0],
@@ -733,10 +724,7 @@ class Solution:
                 ureg=ureg,
                 with_units=with_units,
             )
-        if with_units:
-            fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
-        else:
-            fields["applied_field"] = np.atleast_1d(H_applied).squeeze().magnitude
+        fields["applied_field"] = np.atleast_1d(H_applied).squeeze()
         if return_sum:
             return sum(fields.values())
         return fields
