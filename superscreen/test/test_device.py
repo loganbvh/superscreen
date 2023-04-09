@@ -48,7 +48,7 @@ def test_polygon_on_boundary(radius=1):
     assert polygon.on_boundary(bigger, radius=0.1).all()
     assert not polygon.on_boundary(smaller, radius=0.001).any()
     assert not polygon.on_boundary(bigger, radius=0.001).any()
-    assert polygon.on_boundary(smaller, index=True).dtype is np.dtype(int)
+    assert issubclass(polygon.on_boundary(smaller, index=True).dtype.type, np.integer)
 
 
 def test_polygon_join():
