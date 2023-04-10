@@ -22,7 +22,7 @@ Click the badge below and navigate to `docs/notebooks/` to try `SuperScreen` int
 
 ## Install `SuperScreen`
 
-`SuperScreen` requires `python >=3.7, <3.11`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the [documentation](https://superscreen.readthedocs.io/en/latest/).
+`SuperScreen` requires `python >="3.7", <"3.11"`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the [documentation](https://superscreen.readthedocs.io/en/latest/).
 
 ### Install via `pip`
 
