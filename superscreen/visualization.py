@@ -13,7 +13,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from scipy import interpolate
 
 from .solution import Solution
-from .solve import convert_field
+from .solver import convert_field
 
 
 @contextmanager
@@ -430,6 +430,7 @@ def plot_fields(
 
     fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
     x, y = device.points.T
+    tri = device.triangles
     fields = getattr(solution, dataset)
     if dataset == "fields":
         clabel = "$H_z$"
@@ -468,7 +469,15 @@ def plot_fields(
         field = fields[layer]
         layer_vmin, layer_vmax = clim_dict[layer]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.tripcolor(x, y, field, shading=shading, cmap=cmap, norm=norm)
+        im = ax.tripcolor(
+            x,
+            y,
+            field,
+            triangles=tri,
+            shading=shading,
+            cmap=cmap,
+            norm=norm,
+        )
         ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
