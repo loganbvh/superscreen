@@ -368,7 +368,7 @@ class Solution:
         Returns:
             A dict of interpolated fields for each layer.
         """
-        from .solve import convert_field
+        from .solver import convert_field
 
         valid_methods = ("nearest", "linear", "cubic")
         if method not in valid_methods:
@@ -421,7 +421,7 @@ class Solution:
         Returns:
             A dict of ``{polygon_name: polygon_flux}``
         """
-        from .solve import convert_field
+        from .solver import convert_field
 
         films = list(self.device.films)
         holes = list(self.device.holes)
@@ -655,7 +655,7 @@ class Solution:
             array(s) will contain pint.Quantities. ``field_from_layer`` will have
             shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
         """
-        from .solve import convert_field
+        from .solver import convert_field
 
         device = self.device
         dtype = device.solve_dtype

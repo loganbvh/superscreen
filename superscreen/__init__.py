@@ -5,7 +5,7 @@ from .fluxoid import find_fluxoid_solution, make_fluxoid_polygons
 from .io import iload_solutions, load_solutions, save_solutions
 from .parameter import Constant, Parameter
 from .solution import Fluxoid, Solution, Vortex
-from .solve import convert_field, solve, solve_many
+from .solver import convert_field, solve, solve_many
 from .units import ureg
 from .version import __version__, __version_info__
 from .visualization import (

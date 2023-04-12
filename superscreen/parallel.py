@@ -17,7 +17,7 @@ import ray
 from .device import Device
 from .parameter import Parameter
 from .solution import Solution, Vortex
-from .solve import solve
+from .solver import solve
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +187,7 @@ def solve_many_serial(
     cache_memory_cutoff: float = np.inf,
     log_level: Optional[int] = None,
     gpu: bool = False,
+    # Unused arguments, kept to preserve the function signature.
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
 ):
@@ -618,7 +619,7 @@ def solve_many_ray(
 
 # Set docstrings for functions in parallel.py based on solve_many.
 def _patch_docstring(func):
-    from .solve import solve_many
+    from .solver import solve_many
 
     func.__doc__ = (
         func.__doc__
