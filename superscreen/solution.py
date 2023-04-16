@@ -2,7 +2,17 @@ import logging
 import os
 from contextlib import nullcontext
 from datetime import datetime
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import h5py
 import matplotlib.pyplot as plt
@@ -758,7 +768,15 @@ class Solution:
         path_or_group: Union[os.PathLike, h5py.Group],
         device_path: Optional[str] = None,
         compress: bool = True,
-    ):
+    ) -> None:
+        """Save the Solution to an HDF5 file.
+
+        path_or_group: An HDF5 file path or an open h5py.Group in which to save
+            the Solution.
+        device_path: Path within the HDF5 file in which the Solution's Device
+            is saved. If None, the Device will be saved at ``"/device"``.
+        compress: Save the mesh in a compressed format.
+        """
         if isinstance(path_or_group, h5py.Group):
             save_context = nullcontext(path_or_group)
         else:
@@ -791,7 +809,16 @@ class Solution:
     @staticmethod
     def from_hdf5(
         path_or_group: Union[os.PathLike, h5py.Group],
-    ):
+    ) -> "Solution":
+        """Load a Solution from and HDF5 file.
+
+        Args:
+            path_or_group: An HDF5 file path or an open h5py.Group from which to load
+                the Solution.
+
+        Returns:
+            The loaded Solution
+        """
         if isinstance(path_or_group, h5py.Group):
             read_context = nullcontext(path_or_group)
         else:
@@ -824,6 +851,56 @@ class Solution:
             solution._version_info = version_info
 
         return solution
+
+    @staticmethod
+    def save_solutions(
+        solutions: Sequence["Solution"],
+        path_or_group: Union[os.PathLike, h5py.Group],
+        compress: bool = True,
+    ) -> None:
+        """Save a series of Solutions to an HDF5 file.
+
+        Args:
+            solutions: A series of Solutions to save.
+            path_or_group: An HDF5 file path or an open h5py.Group in which to save
+                the Solutions.
+            compress: Save the meshes in a compressed format.
+        """
+        if isinstance(path_or_group, h5py.Group):
+            save_context = nullcontext(path_or_group)
+        else:
+            save_context = h5py.File(path_or_group, "x")
+        with save_context as h5group:
+            for i, solution in enumerate(solutions):
+                solution.to_hdf5(
+                    h5group.create_group(str(i)),
+                    device_path="/device" if i else None,
+                    compress=compress,
+                )
+
+    @staticmethod
+    def load_solutions(
+        path_or_group: Union[os.PathLike, h5py.Group]
+    ) -> List["Solution"]:
+        """Load a series of Solutions from an HDF5 file.
+
+        Args:
+            path_or_group: An HDF5 file path or an open h5py.Group from which to load
+                the Solutions.
+
+        Returns:
+            A list of loaded Solutions.
+        """
+        if isinstance(path_or_group, h5py.Group):
+            read_context = nullcontext(path_or_group)
+        else:
+            read_context = h5py.File(path_or_group, "x")
+        solutions = []
+        with read_context as h5group:
+            groups = sorted((key for key in h5group if key.isdigit()), key=int)
+            for group in groups:
+                solutions.append(Solution.from_hdf5(h5group[group]))
+        return solutions
 
     def equals(
         self,
