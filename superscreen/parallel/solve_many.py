@@ -90,15 +90,17 @@ def solve_many(
         of Solutions (the final iteration for each setup). If directory is True,
         paths is a list of paths to the saved solutions, otherwise paths is None.
     """
-    from .. import parallel
+    from ._multiprocessing import solve_many_mp
+    from ._ray import solve_many_ray
+    from ._serial import solve_many_serial
 
     parallel_methods = {
-        None: parallel.solve_many_serial,
-        False: parallel.solve_many_serial,
-        "serial": parallel.solve_many_serial,
-        "multiprocessing": parallel.solve_many_mp,
-        "mp": parallel.solve_many_mp,
-        "ray": parallel.solve_many_ray,
+        None: solve_many_serial,
+        False: solve_many_serial,
+        "serial": solve_many_serial,
+        "multiprocessing": solve_many_mp,
+        "mp": solve_many_mp,
+        "ray": solve_many_ray,
     }
 
     if parallel_method not in parallel_methods:

@@ -1,3 +1,2 @@
-from ._multiprocessing import solve_many_mp
-from ._serial import solve_many_serial
+from .solve_many import solve_many
 from .utils import cpu_count

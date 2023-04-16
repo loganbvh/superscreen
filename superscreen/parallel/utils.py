@@ -1,7 +1,6 @@
 import itertools
 import logging
 import os
-import shutil
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import joblib
@@ -139,17 +138,9 @@ def load_solutions(
     return solutions
 
 
-def cleanup(directory: str, iterations: int) -> None:
-    final = os.path.join(directory, str(iterations))
-    for f in os.listdir(final):
-        shutil.move(os.path.join(final, f), directory)
-    for j in range(iterations + 1):
-        shutil.rmtree(os.path.join(directory, str(j)))
-
-
 # Set docstrings for functions in parallel.py based on solve_many.
 def patch_docstring(func):
-    from ..solver import solve_many
+    from ..parallel import solve_many
 
     func.__doc__ = (
         func.__doc__

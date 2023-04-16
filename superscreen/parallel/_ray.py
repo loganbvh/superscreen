@@ -126,7 +126,6 @@ def solve_many_ray(
                     check_inversion=check_inversion,
                     log_level=log_level,
                     return_solutions=False,
-                    keep_only_final_solution=keep_only_final_solution,
                     cache_kernels=cache_kernels,
                     _solver=solver,
                 )
