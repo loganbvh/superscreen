@@ -4,9 +4,10 @@ import numpy as np
 from scipy import integrate
 
 from ..geometry import path_vectors
-from . import mesh
-from .components import Layer, Polygon
+from . import utils
 from .device import Device
+from .layer import Layer
+from .polygon import Polygon
 
 
 def stream_from_current_density(points: np.ndarray, J: np.ndarray) -> np.ndarray:
@@ -259,7 +260,7 @@ class TransportDevice(Device):
         """
         if self.points is None:
             return None
-        indices = mesh.boundary_vertices(self.points, self.triangles)
+        indices = utils.boundary_vertices(self.points, self.triangles)
         indices_list = indices.tolist()
         # Ensure that the indices wrap around outside of any terminals.
         boundary = self.points[indices]
