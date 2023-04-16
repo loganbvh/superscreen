@@ -8,6 +8,27 @@ from matplotlib.path import Path
 from scipy.spatial.distance import cdist
 
 
+def triangle_areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Calculates the area of each triangle.
+
+    Args:
+        points: Shape (n, 2) array of x, y coordinates of vertices
+        triangles: Shape (m, 3) array of triangle indices
+
+    Returns:
+        Shape (m, ) array of triangle areas
+    """
+    xy = points[triangles]
+    # s1 = xy[:, 2, :] - xy[:, 1, :]
+    # s2 = xy[:, 0, :] - xy[:, 2, :]
+    # s3 = xy[:, 1, :] - xy[:, 0, :]
+    # which can be simplified to
+    # s = xy[:, [2, 0, 1]] - xy[:, [1, 2, 0]]  # 3D
+    s = xy[:, [2, 0]] - xy[:, [1, 2]]  # 2D
+    a = np.linalg.det(s)
+    return a * 0.5
+
+
 def in_polygon(
     poly_points: np.ndarray,
     query_points: np.ndarray,
@@ -45,27 +66,6 @@ def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
         Shape (m, 2) array of triangle centroid (center of mass) coordinates
     """
     return points[triangles].sum(axis=1) / 3
-
-
-def areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """Calculates the area of each triangle.
-
-    Args:
-        points: Shape (n, 2) array of x, y coordinates of vertices
-        triangles: Shape (m, 3) array of triangle indices
-
-    Returns:
-        Shape (m, ) array of triangle areas
-    """
-    xy = points[triangles]
-    # s1 = xy[:, 2, :] - xy[:, 1, :]
-    # s2 = xy[:, 0, :] - xy[:, 2, :]
-    # s3 = xy[:, 1, :] - xy[:, 0, :]
-    # which can be simplified to
-    # s = xy[:, [2, 0, 1]] - xy[:, [1, 2, 0]]  # 3D
-    s = xy[:, [2, 0]] - xy[:, [1, 2]]  # 2D
-    a = np.linalg.det(s)
-    return a * 0.5
 
 
 def adjacency_matrix(
@@ -258,7 +258,7 @@ def mass_matrix(
     else:
         mass = np.zeros((N, N), dtype=float)
 
-    tri_areas = areas(points, triangles)
+    tri_areas = triangle_areas(points, triangles)
 
     for a, t in zip(tri_areas / 3, triangles):
         mass[t[0], t[0]] += a
@@ -338,7 +338,7 @@ def gradient_triangles(
         x and y gradient matrices, both of which have shape ``(m, n)``
     """
     if triangle_areas is None:
-        triangle_areas = areas(points, triangles)
+        triangle_areas = triangle_areas(points, triangles)
     # Shape (triangles.shape[0], 3, 2)
     xy = points[triangles]
     edges = np.roll(xy, 2, axis=1) - np.roll(xy, 1, axis=1)
@@ -392,7 +392,7 @@ def gradient_vertices(
         x and y gradient matrices, both of which have shape ``(n, n)``
     """
     if triangle_areas is None:
-        triangle_areas = areas(points, triangles)
+        triangle_areas = triangle_areas(points, triangles)
     n = points.shape[0]
     Gx, Gy = gradient_triangles(points, triangles, triangle_areas=triangle_areas)
     # Use numpy arrays for fast slicing even though the operators are sparse.
@@ -417,6 +417,29 @@ def gradient_vertices(
         gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
         gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])
     return sp.csr_matrix(gx), sp.csr_matrix(gy)
+
+
+def gradient_edges(
+    points: np.ndarray,
+    edges: np.ndarray,
+    edge_lengths: np.ndarray,
+) -> sp.csr_matrix:
+    """Build the gradient for a function living on the sites onto the edges.
+
+    Args:
+        points: Mesh vertex positions
+        edges: Mesh edge indices.
+        edge_lengths: Mesh edge lengths.
+
+    Returns:
+        The gradient matrix.
+    """
+    edge_indices = np.arange(len(edges))
+    weights = 1 / edge_lengths
+    rows = np.concatenate([edge_indices, edge_indices])
+    cols = np.concatenate([edges[:, 1], edges[:, 0]])
+    values = np.concatenate([weights, -weights])
+    return sp.csr_matrix((values, (rows, cols)), shape=(len(edges), len(points)))
 
 
 def cdist_batched(

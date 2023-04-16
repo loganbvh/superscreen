@@ -186,3 +186,14 @@ def close_curve(points: np.ndarray) -> np.ndarray:
     if not np.allclose(points[0], points[-1]):
         points = np.concatenate([points, points[:1]], axis=0)
     return points
+
+
+def ensure_unique(coords: np.ndarray) -> np.ndarray:
+    # Coords is a shape (n, 2) array of vertex coordinates.
+    coords = np.asarray(coords)
+    # Remove duplicate coordinates, otherwise triangle.build() will segfault.
+    # By default, np.unique() does not preserve order, so we have to remove
+    # duplicates this way:
+    _, ix = np.unique(coords, return_index=True, axis=0)
+    coords = coords[np.sort(ix)]
+    return coords
