@@ -1,15 +1,14 @@
-import contextlib
 import os
 import tempfile
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import pint
 
 from ..device import Device
 from ..device.mesh import Mesh
 from ..parameter import Parameter
+from ..solution import Solution
 from ..solver import solve
 from . import utils
 
@@ -38,16 +37,15 @@ def solve_many_serial(
     check_inversion: bool = False,
     iterations: int = 1,
     product: bool = False,
-    directory: Optional[str] = None,
+    save_path: Optional[os.PathLike] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
-    cache_memory_cutoff: float = np.inf,
+    cache_kernels: bool = True,
     log_level: Optional[int] = None,
-    gpu: bool = False,
     # Unused arguments, kept to preserve the function signature.
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
-):
+) -> Tuple[Optional[List[Solution]], Optional[str]]:
     """Solve many models in a single process."""
 
     solver = "superscreen.solve_many:serial:1"
@@ -61,28 +59,16 @@ def solve_many_serial(
         layer_update_kwargs=layer_update_kwargs,
         product=product,
     )
-
     meshes = {name: mesh.to_dict() for name, mesh in device.meshes.items()}
-
     t0 = time.perf_counter()
-
     logger.info(f"Solving {len(models)} models serially with 1 process.")
-
-    solutions = None
-    paths = []
-
-    if directory is None:
-        save_context = tempfile.TemporaryDirectory()
-    else:
-        save_context = contextlib.nullcontext(directory)
-
-    with save_context as savedir:
+    with tempfile.TemporaryDirectory() as savedir:
         for i, model in enumerate(models):
             device_copy, applied_field, circulating_currents, vortices = model
-            path = os.path.join(savedir, str(i))
             device_copy.meshes = {name: Mesh.from_dict(d) for name, d in meshes.items()}
             _ = solve(
                 device=device_copy,
+                save_path=os.path.join(savedir, f"solutions-{i}.h5"),
                 applied_field=applied_field,
                 circulating_currents=circulating_currents,
                 vortices=vortices,
@@ -92,22 +78,20 @@ def solve_many_serial(
                 check_inversion=check_inversion,
                 log_level=log_level,
                 return_solutions=False,
-                cache_memory_cutoff=cache_memory_cutoff,
-                directory=path,
-                gpu=gpu,
+                cache_kernels=cache_kernels,
                 _solver=solver,
             )
-            paths.append(path)
-            if keep_only_final_solution:
-                utils.cleanup(path, iterations)
-        if return_solutions:
-            solutions = utils.load_solutions(
-                directory=savedir,
-                num_models=len(models),
-                iterations=iterations,
-                device=device,
-                keep_only_final_solution=keep_only_final_solution,
-            )
+
+        solutions = utils.load_solutions(
+            directory=savedir,
+            num_models=len(models),
+            device=device,
+            keep_only_final_solution=keep_only_final_solution,
+        )
+        if save_path is not None:
+            Solution.save_solutions(solutions, save_path)
+        if not return_solutions:
+            solutions = None
 
     t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
@@ -117,11 +101,7 @@ def solve_many_serial(
         f"{elapsed_seconds:.3f} seconds ({seconds_per_model:.3f} seconds per model)."
     )
 
-    if directory is None:
-        paths = None
-        save_context.cleanup()
-
-    return solutions, paths
+    return solutions, save_path
 
 
 utils.patch_docstring(solve_many_serial)

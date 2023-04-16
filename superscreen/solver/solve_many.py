@@ -1,7 +1,7 @@
 import logging
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import pint
 
 from ..device import Device
@@ -30,14 +30,13 @@ def solve_many(
     check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
-    directory: Optional[str] = None,
+    save_path: Optional[os.PathLike] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
-    cache_memory_cutoff: float = np.inf,
+    cache_kernels: bool = True,
     log_level: int = logging.INFO,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
-    gpu: bool = False,
 ) -> Tuple[Optional[Union[List[Solution], List[List[Solution]]]], Optional[List[str]]]:
     """Solves many models involving the same device, optionally in parallel using
     multiple processes.
@@ -125,22 +124,14 @@ def solve_many(
         check_inversion=check_inversion,
         iterations=iterations,
         product=product,
-        directory=directory,
+        save_path=save_path,
         return_solutions=return_solutions,
         keep_only_final_solution=keep_only_final_solution,
-        cache_memory_cutoff=cache_memory_cutoff,
+        cache_kernels=cache_kernels,
         log_level=log_level,
         use_shared_memory=use_shared_memory,
         num_cpus=num_cpus,
     )
 
-    if parallel_method in serial_methods:
-        kwargs["gpu"] = gpu
-    elif gpu:
-        raise ValueError(
-            "Running solve_many() with gpu = True requires serial execution "
-            "(i.e., parallel method in {None, False, 'serial'})."
-        )
-
-    solutions, paths = parallel_methods[parallel_method](**kwargs)
-    return solutions, paths
+    solutions, path = parallel_methods[parallel_method](**kwargs)
+    return solutions, path

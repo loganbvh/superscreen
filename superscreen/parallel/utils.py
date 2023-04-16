@@ -123,22 +123,19 @@ def load_solutions(
     *,
     directory: str,
     num_models: int,
-    iterations: int,
     device: Device,
     keep_only_final_solution: bool,
 ) -> Union[List[Solution], List[List[Solution]]]:
     solutions = []
     for i in range(num_models):
+        h5_path = os.path.join(directory, f"solutions-{i}.h5")
+        model_solutions = Solution.load_solutions(h5_path)
+        for s in model_solutions:
+            s.device = device
         if keep_only_final_solution:
-            solution = Solution.from_file(os.path.join(directory, str(i)))
-            solution.device = device
-            solutions.append(solution)
+            solutions.append(model_solutions[-1])
         else:
-            solutions.append([])
-            for j in range(iterations):
-                solution = Solution.from_file(os.path.join(directory, str(i), str(j)))
-                solution.device = device
-                solutions[-1].append(solution)
+            solutions.append(model_solutions)
     return solutions
 
 

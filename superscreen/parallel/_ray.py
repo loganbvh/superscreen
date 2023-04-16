@@ -1,18 +1,17 @@
-import contextlib
 import copy
 import logging
 import os
 import tempfile
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import pint
 import ray
 
 from ..device import Device
 from ..device.mesh import Mesh
 from ..parameter import Parameter
+from ..solution import Solution
 from ..solver import solve
 from . import utils
 
@@ -26,19 +25,11 @@ logger = utils.logger
 @ray.remote
 def solve_single_ray(*, meshes, **kwargs):
     """Solve a single setup (ray)."""
-    keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     kwargs["device"].meshes = {name: Mesh.from_dict(d) for name, d in meshes.items()}
-
     log_level = kwargs.pop("log_level", None)
     if log_level is not None:
         logging.basicConfig(level=log_level)
-
     _ = solve(**kwargs)
-
-    if keep_only_final_solution:
-        utils.cleanup(kwargs["directory"], kwargs["iterations"])
-
-    return kwargs["directory"]
 
 
 def solve_many_ray(
@@ -59,14 +50,14 @@ def solve_many_ray(
     check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
-    directory: Optional[str] = None,
+    save_path: Optional[os.PathLike] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
-    cache_memory_cutoff: float = np.inf,
+    cache_kernels: bool = True,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
-):
+) -> Tuple[Optional[List[Solution]], Optional[str]]:
     """Solve many models in parallel using ray."""
 
     models = utils.create_models(
@@ -117,24 +108,15 @@ def solve_many_ray(
         f"{num_cpus} process(es) {shared_mem_str}."
     )
 
-    solutions = None
-    paths = None
-
-    if directory is None:
-        save_context = tempfile.TemporaryDirectory()
-    else:
-        save_context = contextlib.nullcontext(directory)
-        paths = []
-
     result_ids = []
-    with save_context as savedir:
+    with tempfile.TemporaryDirectory() as savedir:
         for i, model in enumerate(models):
             device_copy, applied_field, circulating_currents, vortices = model
-            path = os.path.join(savedir, str(i))
             result_ids.append(
                 solve_single_ray.remote(
                     meshes=meshes_ref,
                     device=device_copy,
+                    save_path=os.path.join(savedir, f"solutions-{i}.h5"),
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
                     vortices=vortices,
@@ -145,20 +127,21 @@ def solve_many_ray(
                     log_level=log_level,
                     return_solutions=False,
                     keep_only_final_solution=keep_only_final_solution,
-                    cache_memory_cutoff=cache_memory_cutoff,
-                    directory=path,
+                    cache_kernels=cache_kernels,
                     _solver=solver,
                 )
             )
-        paths = ray.get(result_ids)
-        if return_solutions:
-            solutions = utils.load_solutions(
-                directory=savedir,
-                num_models=len(models),
-                iterations=iterations,
-                device=device,
-                keep_only_final_solution=keep_only_final_solution,
-            )
+        _ = ray.get(result_ids)
+        solutions = utils.load_solutions(
+            directory=savedir,
+            num_models=len(models),
+            device=device,
+            keep_only_final_solution=keep_only_final_solution,
+        )
+        if save_path is not None:
+            Solution.save_solutions(solutions, save_path)
+        if not return_solutions:
+            solutions = None
 
     t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
@@ -172,11 +155,7 @@ def solve_many_ray(
     if initialized_ray:
         ray.shutdown()
 
-    if directory is None:
-        paths = None
-        save_context.cleanup()
-
-    return solutions, paths
+    return solutions, save_path
 
 
 utils.patch_docstring(solve_many_ray)

@@ -1,4 +1,3 @@
-import contextlib
 import multiprocessing as mp
 import os
 import tempfile
@@ -13,6 +12,7 @@ import scipy.sparse as sp
 from ..device import Device
 from ..device.mesh import Mesh
 from ..parameter import Parameter
+from ..solution import Solution
 from ..solver import solve
 from . import utils
 
@@ -126,23 +126,14 @@ def init(shared_meshes):
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     """Solve a single setup (multiprocessing)."""
     use_shared_memory = kwargs.pop("use_shared_memory")
-    keep_only_final_solution = kwargs.pop("keep_only_final_solution")
     device: Device = kwargs["device"]
-
     if use_shared_memory:
         meshes = meshes_to_shared_arrays(init_meshes)
     else:
         meshes = init_meshes
-
     device.meshes = meshes
     kwargs["device"] = device
-
     _ = solve(**kwargs)
-
-    if keep_only_final_solution:
-        utils.cleanup(kwargs["directory"], kwargs["iterations"])
-
-    return kwargs["directory"]
 
 
 def solve_many_mp(
@@ -163,14 +154,14 @@ def solve_many_mp(
     check_inversion: bool = False,
     iterations: int = 0,
     product: bool = False,
-    directory: Optional[str] = None,
+    save_path: Optional[os.PathLike] = None,
     return_solutions: bool = False,
     keep_only_final_solution: bool = False,
-    cache_memory_cutoff: float = np.inf,
+    cache_kernels: bool = True,
     log_level: Optional[int] = None,
     use_shared_memory: bool = True,
     num_cpus: Optional[int] = None,
-) -> List[str]:
+) -> Tuple[Optional[List[Solution]], Optional[str]]:
     """Solve many models in parallel using multiprocessing."""
     models = utils.create_models(
         device,
@@ -196,25 +187,15 @@ def solve_many_mp(
     num_cpus = min(len(models), num_cpus)
     solver = f"superscreen.solve_many:multiprocessing:{num_cpus}"
 
-    solutions = None
-    paths = None
-
-    if directory is None:
-        save_context = tempfile.TemporaryDirectory()
-    else:
-        save_context = contextlib.nullcontext(directory)
-
-    with save_context as savedir:
+    with tempfile.TemporaryDirectory() as savedir:
         kwargs = []
         for i, model in enumerate(models):
             device_copy, applied_field, circulating_currents, vortices = model
-            path = os.path.join(savedir, str(i))
             kwargs.append(
                 dict(
                     device=device_copy,
-                    directory=os.path.join(savedir, path),
+                    save_path=os.path.join(savedir, f"solutions-{i}.h5"),
                     return_solutions=return_solutions,
-                    keep_only_final_solution=keep_only_final_solution,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
                     vortices=vortices,
@@ -223,7 +204,7 @@ def solve_many_mp(
                     iterations=iterations,
                     check_inversion=check_inversion,
                     log_level=log_level,
-                    cache_memory_cutoff=cache_memory_cutoff,
+                    cache_kernels=cache_kernels,
                     _solver=solver,
                     use_shared_memory=use_shared_memory,
                 )
@@ -239,17 +220,20 @@ def solve_many_mp(
         with mp.Pool(
             processes=num_cpus, initializer=init, initargs=(shared_meshes,)
         ) as pool:
-            paths = pool.map(solve_single_mp, kwargs)
+            pool.map(solve_single_mp, kwargs)
             pool.close()
             pool.join()
-        if return_solutions:
-            solutions = utils.load_solutions(
-                directory=savedir,
-                num_models=len(models),
-                iterations=iterations,
-                device=device,
-                keep_only_final_solution=keep_only_final_solution,
-            )
+
+        solutions = utils.load_solutions(
+            directory=savedir,
+            num_models=len(models),
+            device=device,
+            keep_only_final_solution=keep_only_final_solution,
+        )
+        if save_path is not None:
+            Solution.save_solutions(solutions, save_path)
+        if not return_solutions:
+            solutions = None
 
     t1 = time.perf_counter()
     elapsed_seconds = t1 - t0
@@ -260,11 +244,7 @@ def solve_many_mp(
         f"({seconds_per_model:.3f} seconds per model)."
     )
 
-    if directory is None:
-        paths = None
-        save_context.cleanup()
-
-    return solutions, paths
+    return solutions, save_path
 
 
 utils.patch_docstring(solve_many_mp)
