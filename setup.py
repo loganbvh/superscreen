@@ -61,9 +61,6 @@ EXTRAS_REQUIRE = {
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
     ],
-    "jax": [
-        "jax[cpu]",
-    ],
 }
 
 CLASSIFIERS = """\

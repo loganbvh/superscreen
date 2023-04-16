@@ -4,13 +4,6 @@ from typing import Dict, NamedTuple, Optional, Tuple, Union
 import numpy as np
 import scipy.linalg as la
 
-try:
-    import jax
-    import jax.numpy as jnp
-    import jax.scipy.linalg as jla
-except (ModuleNotFoundError, ImportError, RuntimeError):
-    jax = None
-
 from ..device import Device, TransportDevice
 from ..device.transport import stream_from_terminal_current
 from .utils import FilmInfo, FilmSolution
@@ -116,7 +109,6 @@ def solve_for_terminal_current_stream(
     film_info: FilmInfo,
     film_system: LinearSystem,
     terminal_currents: Dict[str, float],
-    gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     1. Solve for the stream function in the film assuming no applied field and
@@ -148,17 +140,16 @@ def solve_for_terminal_current_stream(
     on_boundary[boundary_indices] = True
     npoints = len(points)
 
-    if gpu:
-        g = jnp.zeros(npoints)
-        Ha_eff = jnp.zeros(npoints)
-    else:
-        g = np.zeros(npoints)
-        Ha_eff = np.zeros(npoints)
+    # if gpu:
+    #     g = jnp.zeros(npoints)
+    #     Ha_eff = jnp.zeros(npoints)
+    # ix_points = np.arange(npoints, dtype=int)
+    g = np.zeros(npoints)
+    Ha_eff = np.zeros(npoints)
 
     if not any(terminal_currents.values()):
         return g, on_boundary
 
-    ix_points = np.arange(npoints, dtype=int)
     Lambda = 1e10 * np.ones_like(Lambda)
 
     def min_index(terminal):
@@ -176,27 +167,24 @@ def solve_for_terminal_current_stream(
         remaining_boundary = boundary_indices[(ix_boundary[-1] + 1) :]
         ix_terminal = boundary_indices[ix_boundary]
         stream = stream_from_terminal_current(points[ix_terminal], -current)
-        if gpu:
-            g = g.at[ix_terminal].add(stream)
-            g = g.at[remaining_boundary].add(stream[-1])
-        else:
-            g[ix_terminal] += stream
-            g[remaining_boundary] += stream[-1]
+        # if gpu:
+        #     g = g.at[ix_terminal].add(stream)
+        #     g = g.at[remaining_boundary].add(stream[-1])
+        g[ix_terminal] += stream
+        g[remaining_boundary] += stream[-1]
     # The stream function on the "reference boundary" (i.e., the boundary
     # immediately after the output terminal in a CCW direction) should be zero.
     g_ref = g[ix_terminal.max()]
     ix = boundary_indices
-    if gpu:
-        g = g.at[ix].add(-g_ref)
-    else:
-        g[ix] += -g_ref
+    # if gpu:
+    #     g = g.at[ix].add(-g_ref)
+    g[ix] += -g_ref
     A = _build_system_1d(
         Q, weights, Lambda, laplacian, grad_Lambda_term, ix, inhomogeneous=inhomogeneous
     )
-    if gpu:
-        Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
-    else:
-        Ha_eff += -(A @ g[ix])
+    # if gpu:
+    #     Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
+    Ha_eff += -(A @ g[ix])
     # First solve for the stream function inside the film, ignoring the
     # presence of holes completely.
     film = device.film
@@ -214,14 +202,13 @@ def solve_for_terminal_current_stream(
         inhomogeneous=inhomogeneous,
     )
     h = -Ha_eff[ix1d]
-    if gpu:
-        lu_piv = jla.lu_factor(-A)
-        gf = jla.lu_solve(lu_piv, h)
-        g = g.at[ix1d].set(gf)
-    else:
-        lu_piv = la.lu_factor(-A)
-        gf = la.lu_solve(lu_piv, h)
-        g[ix1d] = gf
+    # if gpu:
+    #     lu_piv = jla.lu_factor(-A)
+    #     gf = jla.lu_solve(lu_piv, h)
+    #     g = g.at[ix1d].set(gf)
+    lu_piv = la.lu_factor(-A)
+    gf = la.lu_solve(lu_piv, h)
+    g[ix1d] = gf
 
     holes = {
         name: hole for name, hole in device.holes.items() if hole.layer == film.layer
@@ -231,16 +218,14 @@ def solve_for_terminal_current_stream(
 
     # Set the stream function in each hole to the average value
     # obtained when ignoring holes.
-    if gpu:
-        Ha_eff = jnp.zeros(points.shape[0])
-    else:
-        Ha_eff = np.zeros(points.shape[0])
+    # if gpu:
+    #     Ha_eff = jnp.zeros(points.shape[0])
+    Ha_eff = np.zeros(points.shape[0])
     for name in holes:
         ix = hole_indices[name]
-        if gpu:
-            g = g.at[ix].set(jnp.average(g[ix], weights=weights[ix, 0]))
-        else:
-            g[ix] = np.average(g[ix], weights=weights[ix, 0])
+        # if gpu:
+        #     g = g.at[ix].set(jnp.average(g[ix], weights=weights[ix, 0]))
+        g[ix] = np.average(g[ix], weights=weights[ix, 0])
         A = _build_system_1d(
             Q,
             weights,
@@ -250,19 +235,17 @@ def solve_for_terminal_current_stream(
             ix,
             inhomogeneous=inhomogeneous,
         )
-        if gpu:
-            Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
-        else:
-            Ha_eff += -(A @ g[ix])
+        # if gpu:
+        #     Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
+        Ha_eff += -(A @ g[ix])
 
     ix = boundary_indices
     A = _build_system_1d(
         Q, weights, Lambda, laplacian, grad_Lambda_term, ix, inhomogeneous=inhomogeneous
     )
-    if gpu:
-        Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
-    else:
-        Ha_eff += -(A @ g[ix])
+    # if gpu:
+    #     Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[ix]))
+    Ha_eff += -(A @ g[ix])
 
     # Solve for the stream function inside the superconducting film again,
     # now with the new boundary conditions for the holes.
@@ -284,14 +267,13 @@ def solve_for_terminal_current_stream(
         inhomogeneous=inhomogeneous,
     )
     h = -Ha_eff[ix1d]
-    if gpu:
-        lu_piv = jla.lu_factor(-A)
-        gf = jla.lu_solve(lu_piv, h)
-        g = g.at[ix1d].set(gf)
-    else:
-        lu_piv = la.lu_factor(-A)
-        gf = la.lu_solve(lu_piv, h)
-        g[ix1d] = gf
+    # if gpu:
+    #     lu_piv = jla.lu_factor(-A)
+    #     gf = jla.lu_solve(lu_piv, h)
+    #     g = g.at[ix1d].set(gf)
+    lu_piv = la.lu_factor(-A)
+    gf = la.lu_solve(lu_piv, h)
+    g[ix1d] = gf
     return g, on_boundary
 
 
@@ -306,7 +288,6 @@ def solve_film(
     vortex_flux: float,
     field_from_other_films: Optional[np.ndarray] = None,
     check_inversion: bool = False,
-    gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Computes the stream function and magnetic field within a single layer of a ``Device``.
 
@@ -330,10 +311,9 @@ def solve_film(
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
-        gpu: Solve on a GPU if available (requires JAX and CUDA).
 
     Returns:
-        stream function, current density, film screening field
+        A FilmSolution containing the results
     """
     if isinstance(device, TransportDevice):
         transport_device = True
@@ -359,10 +339,10 @@ def solve_film(
 
     g = np.zeros_like(Hz_applied)
     Ha_eff = np.zeros_like(Hz_applied)
-    if gpu:
-        g = jax.device_put(g)
-        ix_points = np.arange(len(Ha_eff), dtype=int)
-        Ha_eff = jax.device_put(Ha_eff)
+    # if gpu:
+    #     g = jax.device_put(g)
+    #     ix_points = np.arange(len(Ha_eff), dtype=int)
+    #     Ha_eff = jax.device_put(Ha_eff)
 
     # Set the boundary conditions for all holes:
     # 1. g[hole] = I_circ_hole
@@ -373,12 +353,11 @@ def solve_film(
         indices = system.indices
         A = system.A
         current = circulating_currents.get(name, 0)
-        if gpu:
-            g = g.at[indices].add(current)
-            Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[indices]))
-        else:
-            g[indices] += current  # g[hole] = I_circ
-            Ha_eff += -(A @ g[indices])
+        # if gpu:
+        #     g = g.at[indices].add(current)
+        #     Ha_eff = Ha_eff.at[ix_points].add(-(A @ g[indices]))
+        g[indices] += current  # g[hole] = I_circ
+        Ha_eff += -(A @ g[indices])
 
     if transport_device:
         g_transport, on_boundary = solve_for_terminal_current_stream(
@@ -386,23 +365,20 @@ def solve_film(
             film_info,
             film_system,
             terminal_currents,
-            gpu=gpu,
         )
-        if gpu:
-            g = g.at[ix_points].add(g_transport)
-        else:
-            g += g_transport
+        # if gpu:
+        #     g = g.at[ix_points].add(g_transport)
+        g += g_transport
 
     indices = film_system.indices
     A = film_system.A
     lu_piv = film_system.lu_piv
     h = Hz_applied[indices] - Ha_eff[indices]
-    if gpu:
-        gf = jla.lu_solve(lu_piv, h)
-        g = g.at[indices].add(gf)
-    else:
-        gf = la.lu_solve(lu_piv, h)
-        g[indices] += gf
+    # if gpu:
+    #     gf = jla.lu_solve(lu_piv, h)
+    #     g = g.at[indices].add(gf)
+    gf = la.lu_solve(lu_piv, h)
+    g[indices] += gf
 
     if check_inversion:
         # Validate solution
@@ -416,10 +392,9 @@ def solve_film(
     for vortex in film_info.vortices:
         if K is None:
             # Compute K only once if needed
-            if gpu:
-                K = -jla.lu_solve(lu_piv, jnp.eye(A.shape[0]))
-            else:
-                K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
+            # if gpu:
+            #     K = -jla.lu_solve(lu_piv, jnp.eye(A.shape[0]))
+            K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
         # Index of the mesh vertex that is closest to the vortex position:
         # in the film-specific sub-mesh
         j_film = np.argmin(la.norm(points[indices] - [[vortex.x, vortex.y]], axis=1))
@@ -427,10 +402,9 @@ def solve_film(
         j_device = np.argmin(la.norm(points - [[vortex.x, vortex.y]], axis=1))
         # Eq. 28 in [Brandt]
         g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
-        if gpu:
-            g = g.at[indices].add(g_vortex)
-        else:
-            g[indices] += g_vortex
+        # if gpu:
+        #     g = g.at[indices].add(g_vortex)
+        g[indices] += g_vortex
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     J = np.array([grad_y @ g, -(grad_x @ g)]).T
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]

@@ -7,12 +7,6 @@ import h5py
 import numpy as np
 import pint
 
-try:
-    import jax
-    import jax.numpy as jnp
-except (ModuleNotFoundError, ImportError, RuntimeError):
-    jax = None
-
 from ..device import Device
 from ..fem import cdist_batched
 from ..solution import Solution, Vortex
@@ -37,7 +31,6 @@ def solve(
     return_solutions: bool = True,
     save_path: Optional[os.PathLike] = None,
     cache_kernels: bool = True,
-    gpu: bool = False,
     log_level: int = logging.INFO,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
@@ -77,7 +70,6 @@ def solve(
         save_path: Path to an HDF5 file in which to save the results.
         cache_kernels: Cache the film-to-film kernels in memory. This is much
             faster than not caching, but uses more memory.
-        gpu: Solve on a GPU if available (requires JAX and CUDA).
         log_level: Logging level to use, if any.
         _solver: Name of the solver method used.
 
@@ -93,20 +85,8 @@ def solve(
         raise ValueError(
             "The device does not have a mesh. Call device.make_mesh() to generate it."
         )
-    if gpu:
-        if jax is None:
-            raise ValueError("Running solve(..., gpu=True) requires JAX.")
-        jax_device = jax.devices()[0]
-        logger.info(f"Using JAX with device {jax_device}.")
-        if "cpu" in jax_device.device_kind:
-            logger.warning("No GPU found. Using JAX on the CPU.")
-            _solver = _solver + ":jax:cpu"
-        else:
-            _solver = _solver + ":jax:gpu"
-        dtype = np.float32
-    else:
-        dtype = device.solve_dtype
 
+    dtype = device.solve_dtype
     circulating_currents = circulating_currents or {}
     circulating_currents = utils.currents_to_floats(
         circulating_currents, device.ureg, current_units
@@ -137,7 +117,6 @@ def solve(
         circulating_currents=circulating_currents,
         terminal_currents=terminal_currents,
         dtype=dtype,
-        gpu=gpu,
     )
 
     film_systems, hole_systems = build_linear_systems(device, film_info)
@@ -177,7 +156,6 @@ def solve(
             film_info=film_info[film_name],
             field_conversion=field_conversion_magnitude,
             vortex_flux=vortex_flux,
-            gpu=gpu,
             check_inversion=check_inversion,
         )
 
@@ -216,12 +194,11 @@ def solve(
 
     for i in range(iterations):
         # Calculate the screening fields at each layer from every other layer
-        zeros = jnp.zeros if gpu else np.zeros
         other_screening_fields = {
-            name: zeros(len(mesh.sites), dtype=dtype)
+            name: np.zeros(len(mesh.sites), dtype=dtype)
             for name, mesh in device.meshes.items()
         }
-        for film, other_film in itertools.product(device.films, repeat=2):
+        for other_film, film in itertools.product(device.films, repeat=2):
             if film == other_film:
                 continue
             layer = device.layers[film_info[film].layer]
@@ -271,7 +248,6 @@ def solve(
                 film_info=film_info[film_name],
                 field_conversion=field_conversion_magnitude,
                 vortex_flux=vortex_flux,
-                gpu=gpu,
                 check_inversion=check_inversion,
             )
 
