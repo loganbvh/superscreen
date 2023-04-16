@@ -8,10 +8,10 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pint
-from matplotlib.colorbar import Colorbar
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from scipy import interpolate
 
+from .device.mesh import Mesh
 from .solution import Solution
 from .solver import convert_field
 
@@ -187,6 +187,22 @@ def setup_color_limits(
     return clims
 
 
+def make_lims(vals: np.ndarray, buffer: float = 0.0) -> Tuple[float, float]:
+    """Create axis limits with a buffer.
+
+    Args:
+        vals: The axis coordinates
+        buffer: Axis limit buffer in units of the peak-to-peak of the coordinates.
+
+    Returns:
+        vmin, vmax
+    """
+    vmin = np.min(vals)
+    vmax = np.max(vals)
+    dv = vmax - vmin
+    return vmin - buffer * dv, vmax + buffer * dv
+
+
 def cross_section(
     dataset_coords: np.ndarray,
     dataset_values: np.ndarray,
@@ -246,74 +262,19 @@ def cross_section(
     return cross_section_coords, paths, cross_sections
 
 
-def plot_streams_layer(
-    solution: Solution,
-    layer: str,
-    units: Optional[str] = None,
-    ax: Optional[plt.Axes] = None,
-    cmap: str = "magma",
-    levels: int = 101,
-    colorbar: bool = True,
-    filled: bool = True,
-    **kwargs,
-) -> Tuple[plt.Axes, Optional[Colorbar]]:
-    """Plots the stream function for a single layer in a Device.
-
-    Additional keyword arguments are passed to plt.subplots() if ax is None.
-
-    Args:
-        solution: The Solution from which to extract the stream function.
-        layer: Name of the layer in solution.device.layers for which to plot
-            the stream function.
-        units: Units in which to plot the stream function. Defaults to
-            solution.current_units.
-        ax: matplotlib axis on which to plot the data. If None is provided,
-            a new figure is created.
-        cmap: Name of the matplotlib colormap to use.
-        levels: Number of contour levels to used.
-        colorbar: Whether to add a colorbar to the plot.
-        filled: If True, plots filled contours.
-
-    Returns:
-        matplotlib axis and Colorbar if one was created (None otherwise)
-    """
-    if ax is None:
-        fig, ax = plt.subplots(**kwargs)
-    else:
-        fig = ax.figure
-    device = solution.device
-    length_units = device.ureg(device.length_units).units
-    x = device.points[:, 0]
-    y = device.points[:, 1]
-    triangles = device.triangles
-    units = units or solution.current_units
-    if isinstance(units, str):
-        units = device.ureg(units).units
-    stream = (solution.streams[layer] * device.ureg(solution.current_units)).to(units)
-    plot_func = ax.tricontourf if filled else ax.tricontour
-    im = plot_func(x, y, triangles, stream.magnitude, cmap=cmap, levels=levels)
-    ax.set_xlabel(f"$x$ [${length_units:~L}$]")
-    ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-    ax.set_title(f"$g$ ({layer})")
-    ax.set_aspect("equal")
-    cbar = None
-    if colorbar:
-        ax_divider = make_axes_locatable(ax)
-        cax = ax_divider.append_axes("right", size="8%", pad="4%")
-        cbar = fig.colorbar(im, cax=cax)
-        cbar.set_label(f"$g$ [${units:~L}$]")
-    return ax, cbar
-
-
 def plot_streams(
     solution: Solution,
-    layers: Optional[Union[List[str], str]] = None,
+    films: Optional[Union[List[str], str]] = None,
     units: Optional[str] = None,
     max_cols: int = 3,
-    cmap: str = "magma",
-    levels: int = 101,
+    cmap: str = "coolwarm",
     colorbar: bool = True,
-    filled: bool = True,
+    shading: str = "flat",
+    auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
+    share_color_scale: bool = False,
+    symmetric_color_scale: bool = True,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the stream function for multiple layers in a Device.
@@ -322,37 +283,78 @@ def plot_streams(
 
     Args:
         solution: The Solution from which to extract stream functions.
-        layers: Name(s) of layer(s) for which to plot the stream function.
-            By default, the stream function is plotted for all layers in the Device.
+        films: Name(s) of films(s) for which to plot the stream function.
+            By default, the stream function is plotted for all films in the Device.
         units: Units in which to plot the stream function. Defaults to
             solution.current_units.
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
-        levels: Number of contour levels to used.
         colorbar: Whether to add a colorbar to each subplot.
-        filled: If True, plots filled contours.
+        shading: May be ``"flat"`` or ``"gouraud"``. The latter does some interpolation.
+        auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
+        share_color_scale: Whether to force all layers to use the same color scale.
+        symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
+        vmin: Color scale minimum to use for all layers
+        vmax: Color scale maximum to use for all layers
 
     Returns:
         matplotlib figure and axes
     """
     device = solution.device
-    if layers is None:
-        layers = list(device.layers)
-    if isinstance(layers, str):
-        layers = [layers]
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
+    meshes = device.meshes
+    length_units = device.ureg(device.length_units).units
+    units = units or solution.current_units
+    if isinstance(units, str):
+        units = device.ureg(units).units
+    if films is None:
+        films = list(device.films)
+    if isinstance(films, str):
+        films = [films]
+    fig, axes = auto_grid(len(films), max_cols=max_cols, **kwargs)
+    streams = {}
+    for film in films:
+        stream = solution.film_solutions[film].stream
+        stream = stream * device.ureg(solution.current_units)
+        streams[film] = stream.to(units).magnitude
+    clim_dict = setup_color_limits(
+        streams,
+        vmin=vmin,
+        vmax=vmax,
+        share_color_scale=share_color_scale,
+        symmetric_color_scale=symmetric_color_scale,
+        auto_range_cutoff=auto_range_cutoff,
+    )
     used_axes = []
-    for ax, layer in zip(fig.axes, layers):
-        ax, cbar = plot_streams_layer(
-            solution,
-            layer,
-            units=units,
-            ax=ax,
+    for ax, film in zip(fig.axes, films):
+        stream = streams[film]
+        mesh = meshes[film]
+        film_vmin, film_vmax = clim_dict[film]
+        norm = mpl.colors.Normalize(vmin=film_vmin, vmax=film_vmax)
+        x = mesh.sites[:, 0]
+        y = mesh.sites[:, 1]
+        tri = mesh.elements
+        im = ax.tripcolor(
+            x,
+            y,
+            stream,
+            triangles=tri,
+            shading=shading,
             cmap=cmap,
-            levels=levels,
-            colorbar=colorbar,
-            filled=filled,
+            norm=norm,
         )
+        ax.set_xlabel(f"$x$ [${length_units:~L}$]")
+        ax.set_ylabel(f"$y$ [${length_units:~L}$]")
+        ax.set_title(f"$g$ ({film!r})")
+        ax.set_aspect("equal")
+        cbar = None
+        if colorbar:
+            ax_divider = make_axes_locatable(ax)
+            cax = ax_divider.append_axes("right", size="8%", pad="4%")
+            cbar = fig.colorbar(im, cax=cax)
+            cbar.set_label(f"$g$ [${units:~L}$]")
+        ax.set_xlim(*make_lims(x, buffer=0.05))
+        ax.set_ylim(*make_lims(y, buffer=0.05))
+        used_axes.append(ax)
         used_axes.append(ax)
         if cbar is not None:
             used_axes.append(cbar.ax)
@@ -365,11 +367,11 @@ def plot_streams(
 
 def plot_fields(
     solution: Solution,
-    layers: Optional[Union[List[str], str]] = None,
-    dataset: str = "fields",
+    films: Optional[Union[List[str], str]] = None,
+    dataset: str = "field",
     normalize: bool = False,
     units: Optional[str] = None,
-    shading: str = "gouraud",
+    shading: str = "flat",
     max_cols: int = 3,
     cmap: str = "cividis",
     colorbar: bool = True,
@@ -381,16 +383,16 @@ def plot_fields(
     cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
-    """Plots either the total field or the screening field for
-    multiple layers in a Device.
+    """Plots the fields for one or more films in a Device.
 
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
         solution: The Solution from which to extract fields.
-        layers: Name(s) of layer(s) for which to plot the fields.
-            By default, the stream function is plotted for all layers in the Device.
-        dataset: Which set of fields to plot, either "fields" or "screening_fields".
+        films: Name(s) of films(s) for which to plot the fields.
+            By default, the field is plotted for all films in the Device.
+        dataset: Which set of fields to plot, either "field", "self_field",
+            "applied_field", or "field_from_other_films".
         normalize: Whether to normalize the fields by the applied field.
         units: Units in which to plot the fields. Defaults to solution.field_units.
             This argument is ignored if normalize is True.
@@ -409,10 +411,17 @@ def plot_fields(
     Returns:
         matplotlib figure and axes
     """
-    if dataset not in ("fields", "screening_fields"):
-        raise ValueError("Dataset must be 'fields' or 'screening_fields'.")
+    valid_datasets = (
+        "field",
+        "self_field",
+        "applied_field",
+        "field_from_other_films",
+    )
+    if dataset not in valid_datasets:
+        raise ValueError(f"Dataset must be one of {valid_datasets!r}.")
 
     device = solution.device
+    meshes = device.meshes
     # Length units from the Device
     length_units = device.ureg(device.length_units).units
     # The units the fields are currently in
@@ -423,31 +432,47 @@ def plot_fields(
     if isinstance(units, str):
         units = device.ureg(units).units
 
-    if layers is None:
-        layers = list(device.layers)
-    if isinstance(layers, str):
-        layers = [layers]
+    if films is None:
+        films = list(device.films)
+    if isinstance(films, str):
+        films = [films]
 
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
-    x, y = device.points.T
-    tri = device.triangles
-    fields = getattr(solution, dataset)
-    if dataset == "fields":
+    fig, axes = auto_grid(len(films), max_cols=max_cols, **kwargs)
+    film_solutions = solution.film_solutions
+    applied_fields = {
+        name: fs.applied_field.copy() for name, fs in film_solutions.items()
+    }
+    if dataset == "field":
         clabel = "$H_z$"
+        fields = {name: fs.total_field.copy() for name, fs in film_solutions.items()}
+    elif dataset == "self_field":
+        clabel = "$H_\\mathrm{sc}$"
+        fields = {name: fs.self_field.copy() for name, fs in film_solutions.items()}
+    elif dataset == "applied_field":
+        clabel = "$H_\\mathrm{applied}$"
+        fields = applied_fields
     else:
-        clabel = "$H_{sc}$"
+        clabel = "$H_\\mathrm{other}$"
+        fields = {}
+        zeros = None
+        for name, fs in film_solutions.items():
+            other_field = fs.field_from_other_films
+            if other_field is None:
+                if zeros is None:
+                    zeros = np.zeros(len(applied_fields[name]))
+                other_field = zeros
+            fields[name] = other_field
     if "[mass]" in units.dimensionality:
         # We want flux density, B = mu0 * H
         clabel = "$\\mu_0$" + clabel
     if normalize:
-        for layer, field in fields.items():
-            z0 = device.layers[layer].z0
-            field /= solution.applied_field(x, y, z0)
-        clabel = clabel + " / $H_{applied}$"
+        for film, field in fields.items():
+            fields[film] = fields[film] / applied_fields[film]
+        clabel = clabel + " / $H_\\mathrm{applied}$"
     else:
-        for layer in layers:
-            fields[layer] = convert_field(
-                fields[layer],
+        for film in films:
+            fields[film] = convert_field(
+                fields[film],
                 units,
                 old_units=old_units,
                 ureg=device.ureg,
@@ -465,10 +490,14 @@ def plot_fields(
     # Keep track of which axes are actually used,
     # and delete unused axes later
     used_axes = []
-    for ax, layer in zip(fig.axes, layers):
-        field = fields[layer]
-        layer_vmin, layer_vmax = clim_dict[layer]
-        norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+    for ax, film in zip(fig.axes, films):
+        field = fields[film]
+        mesh = meshes[film]
+        film_vmin, film_vmax = clim_dict[film]
+        norm = mpl.colors.Normalize(vmin=film_vmin, vmax=film_vmax)
+        x = mesh.sites[:, 0]
+        y = mesh.sites[:, 1]
+        tri = mesh.elements
         im = ax.tripcolor(
             x,
             y,
@@ -478,12 +507,12 @@ def plot_fields(
             cmap=cmap,
             norm=norm,
         )
-        ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
+        ax.set_title(f"{clabel.split('[')[0].strip()} ({film!r})")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-        ax.set_xlim(x.min(), x.max())
-        ax.set_ylim(y.min(), y.max())
+        ax.set_xlim(*make_lims(x, buffer=0.05))
+        ax.set_ylim(*make_lims(y, buffer=0.05))
         used_axes.append(ax)
         if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
@@ -519,39 +548,37 @@ def plot_fields(
 
 def plot_currents(
     solution: Solution,
-    layers: Optional[Union[List[str], str]] = None,
+    films: Optional[Union[List[str], str]] = None,
     units: Optional[str] = None,
-    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
-    grid_method: str = "cubic",
     max_cols: int = 3,
     cmap: str = "inferno",
     colorbar: bool = True,
+    shading: str = "flat",
     auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     streamplot: bool = True,
+    grid_shape: Union[int, Tuple[int, int]] = (200, 200),
     min_stream_amp: float = 0.025,
     cross_section_coords: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
-    """Plots the current density (sheet current) for each layer in a Device.
+    """Plots the sheet current density for one or more films in a Device.
 
     Additional keyword arguments are passed to plt.subplots().
 
     Args:
         solution: The Solution from which to extract sheet current.
-        layers: Name(s) of layer(s) for which to plot the sheet current.
-            By default, the stream function is plotted for all layers in the Device.
+        films: Name(s) of film(s) for which to plot the sheet current.
+            By default, the sheet current is plotted for all films in the Device.
         units: Units in which to plot the current density. Defaults to
             solution.current_units / solution.device.length_units.
-        grid_shape: Shape of the desired rectangular grid. If a single integer n
-            is given, then the grid will be square, shape = (n, n).
-        grid_method: Interpolation method to use (see scipy.interpolate.griddata).
         max_cols: Maximum number of columns in the grid of subplots.
         cmap: Name of the matplotlib colormap to use.
         colorbar: Whether to add a colorbar to each subplot.
+        shading: May be ``"flat"`` or ``"gouraud"``. The latter does some interpolation.
         auto_range_cutoff: Cutoff percentile for ``auto_range_iqr``.
         share_color_scale: Whether to force all layers to use the same color scale.
         symmetric_color_scale: Whether to use a symmetric color scale (vmin = -vmax).
@@ -560,6 +587,8 @@ def plot_currents(
         vmax: Color scale maximum to use for all layers
             (ignored if share_color_scale is True).
         streamplot: Whether to overlay current streamlines on the plot.
+        grid_shape: Shape of the rectangular grid used to contruct streamlines.
+            If a single integer N is given, the grid will be square, shape = (N, N).
         min_stream_amp: Streamlines will not be drawn anywhere the
             current density is less than min_stream_amp * max(current_density).
             This avoids streamlines being drawn where there is no current flowing.
@@ -575,37 +604,21 @@ def plot_currents(
     units = units or old_units
     if isinstance(units, str):
         units = device.ureg(units).units
-    if layers is None:
-        layers = list(device.layers)
-    if isinstance(layers, str):
-        layers = [layers]
-    fig, axes = auto_grid(len(layers), max_cols=max_cols, **kwargs)
-    xgrid, ygrid, current_densities = solution.grid_current_density(
-        grid_shape=grid_shape,
-        method=grid_method,
-        layers=layers,
-    )
-    # Create masks to set the current density to zero in holes
-    # and outside of films.
-    # This is really only required for cubic interpolation, but doesn't hurt
-    # to do in all cases.
-    points = np.stack([xgrid.ravel(), ygrid.ravel()], axis=1)
-    film_masks = device.contains_points_by_layer(
-        points,
-        polygon_type="film",
-    )
-    hole_masks = device.contains_points_by_layer(
-        points,
-        polygon_type="hole",
-    )
+    if films is None:
+        films = list(device.films)
+    if isinstance(films, str):
+        films = [films]
+    if isinstance(grid_shape, int):
+        grid_shape = (grid_shape, grid_shape)
+    fig, axes = auto_grid(len(films), max_cols=max_cols, **kwargs)
+
     jcs = {}
     Js = {}
-    for layer, jc in current_densities.items():
-        mask = ~(film_masks[layer] & ~hole_masks[layer]).reshape(xgrid.shape)
-        jc = jx, jy = (jc * old_units).to(units).magnitude
-        jc[:, mask] *= 0
-        jcs[layer] = jc
-        Js[layer] = np.sqrt(jx**2 + jy**2)
+    for film_name, film_solution in solution.film_solutions.items():
+        jc = film_solution.current_density
+        jc = (jc * old_units).to(units).magnitude
+        jcs[film_name] = jc
+        Js[film_name] = np.linalg.norm(jc, axis=1)
 
     clabel = "$|\\,\\vec{J}\\,|$" + f" [${units:~L}$]"
     clim_dict = setup_color_limits(
@@ -619,26 +632,27 @@ def plot_currents(
     # Keep track of which axes are actually used,
     # and delete unused axes later
     used_axes = []
-    for ax, layer in zip(fig.axes, layers):
-        Jx, Jy = jcs[layer]
-        J = Js[layer]
-        layer_vmin, layer_vmax = clim_dict[layer]
+    for ax, film in zip(fig.axes, films):
+        Jx, Jy = jcs[film].T
+        J = Js[film]
+        mesh = device.meshes[film]
+        x, y = mesh.sites.T
+        tri = mesh.elements
+        layer_vmin, layer_vmax = clim_dict[film]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.pcolormesh(xgrid, ygrid, J, shading="auto", cmap=cmap, norm=norm)
-        ax.set_title(f"{clabel.split('[')[0].strip()} ({layer})")
+        im = ax.tripcolor(x, y, J, triangles=tri, shading=shading, cmap=cmap, norm=norm)
+        ax.set_title(f"{clabel.split('[')[0].strip()} ({film})")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-        ax.set_xlim(xgrid.min(), xgrid.max())
-        ax.set_ylim(ygrid.min(), ygrid.max())
+        ax.set_xlim(*make_lims(x, buffer=0.05))
+        ax.set_ylim(*make_lims(y, buffer=0.05))
         used_axes.append(ax)
         if cross_section_coords is not None:
             ax_divider = make_axes_locatable(ax)
             cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
             coords, paths, cross_sections = cross_section(
-                np.stack([xgrid.ravel(), ygrid.ravel()], axis=1),
-                J.ravel(),
-                cross_section_coords,
+                np.array([x, y]).T, J, cross_section_coords
             )
             for i, (coord, path, cross) in enumerate(
                 zip(coords, paths, cross_sections)
@@ -655,11 +669,21 @@ def plot_currents(
             cax.set_ylabel(clabel)
             used_axes.append(cax)
         if streamplot:
+            xy = np.array([x, y]).T
+            xgrid, ygrid = np.meshgrid(
+                np.linspace(x.min(), x.max(), grid_shape[1]),
+                np.linspace(y.min(), y.max(), grid_shape[0]),
+            )
+            Jx_grid = interpolate.griddata(xy, Jx, (xgrid, ygrid), method="linear")
+            Jy_grid = interpolate.griddata(xy, Jy, (xgrid, ygrid), method="linear")
+            J_grid = np.sqrt(Jx_grid**2 + Jy_grid**2)
             if min_stream_amp is not None:
-                cutoff = np.nanmax(J) * min_stream_amp
-                Jx[J < cutoff] = np.nan
-                Jy[J < cutoff] = np.nan
-            ax.streamplot(xgrid, ygrid, Jx, Jy, color="w", density=1, linewidth=0.75)
+                cutoff = np.nanmax(J_grid) * min_stream_amp
+                Jx_grid[J_grid < cutoff] = np.nan
+                Jy_grid[J_grid < cutoff] = np.nan
+            ax.streamplot(
+                xgrid, ygrid, Jx_grid, Jy_grid, color="w", density=1, linewidth=0.75
+            )
         if colorbar:
             cbar = fig.colorbar(im, ax=ax, orientation="vertical")
             cbar.set_label(clabel)
@@ -672,7 +696,7 @@ def plot_currents(
 
 def plot_field_at_positions(
     solution: Solution,
-    positions: np.ndarray,
+    positions: Union[np.ndarray, Mesh],
     zs: Optional[Union[float, np.ndarray]] = None,
     vector: bool = False,
     units: Optional[str] = None,
@@ -688,7 +712,7 @@ def plot_field_at_positions(
     **kwargs,
 ) -> Tuple[plt.Figure, np.ndarray]:
     """Plots the total field (either all three components or just the
-    z component) at a given set of positions (x, y, z) outside of the device.
+    z component) anywhere in space.
 
     Additional keyword arguments are passed to plt.subplots().
 
@@ -730,10 +754,18 @@ def plot_field_at_positions(
     if isinstance(units, str):
         units = device.ureg(units).units
 
+    if isinstance(positions, Mesh):
+        if zs is None:
+            raise ValueError("zs must be given if positions is Mesh.")
+        mesh = positions
+        positions = mesh.sites
+        triangles = mesh.elements
+    else:
+        triangles = None
+
     fields = solution.field_at_position(
         positions,
         zs=zs,
-        vector=vector,
         units=units,
         with_units=False,
     )
@@ -766,7 +798,9 @@ def plot_field_at_positions(
         field = fields_dict[label]
         layer_vmin, layer_vmax = clim_dict[label]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.tripcolor(x, y, field, shading=shading, cmap=cmap, norm=norm)
+        im = ax.tripcolor(
+            x, y, field, triangles=triangles, shading=shading, cmap=cmap, norm=norm
+        )
         ax.set_title(f"{label.split('[')[0].strip()}")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
@@ -944,11 +978,11 @@ def plot_polygon_flux(
     device = solutions[0].device
     polygon_names = list(device.polygons)
     polygon_flux = defaultdict(list)
-    for i, solution in enumerate(solutions):
-        flux_dict = solution.polygon_flux(polygons=polygon_names, units=units)
-        for name, flux in flux_dict.items():
-            units = flux.units
-            polygon_flux[name].append(flux.magnitude)
+    for solution in solutions:
+        for name in polygon_names:
+            polygon_flux[name].append(
+                solution.polygon_flux(name, units=units, with_units=False)
+            )
 
     for name, flux_vals in polygon_flux.items():
         plot_kwargs["label"] = name
