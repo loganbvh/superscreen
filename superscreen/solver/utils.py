@@ -1,14 +1,120 @@
-import itertools
 import logging
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 import pint
-import scipy.sparse as sp
 
-from ..fem import cdist_batched
+try:
+    import jax
+except (ModuleNotFoundError, ImportError, RuntimeError):
+    jax = None
+
+from ..device import Device
+from ..device.polygon import Polygon
+from ..parameter import Constant
 
 logger = logging.getLogger("solve")
+
+
+@dataclass
+class Vortex:
+    """A vortex located at position ``(x, y)`` in ``layer`` containing
+    a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
+
+    Args:
+        x: Vortex x-position.
+        y: Vortex y-position.
+        layer: The layer in which the vortex is pinned.
+        nPhi0: The number of flux quanta contained in the vortex.
+    """
+
+    x: float
+    y: float
+    layer: str
+    nPhi0: float = 1
+
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        h5group.attrs["x"] = self.x
+        h5group.attrs["y"] = self.y
+        h5group.attrs["layer"] = self.layer
+        h5group.attrs["nPhi0"] = self.nPhi0
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "Vortex":
+        return Vortex(
+            x=h5group.attrs["x"],
+            y=h5group.attrs["y"],
+            layer=h5group.attrs["layer"],
+            nPhi0=h5group.attrs["nPhi0"],
+        )
+
+
+class FilmSolution:
+    def __init__(
+        self,
+        stream: np.ndarray,
+        current_density: np.ndarray,
+        applied_field: np.ndarray,
+        self_field: np.ndarray,
+        field_from_other_films: Optional[np.ndarray] = None,
+    ):
+        self.stream = np.asarray(stream)
+        self.current_density = np.asarray(current_density)
+        self.applied_field = np.asarray(applied_field)
+        self.self_field = np.asarray(self_field)
+        if field_from_other_films is not None:
+            field_from_other_films = np.asarray(field_from_other_films)
+        self.field_from_other_films = field_from_other_films
+        self._total_field: Optional[np.ndarray] = None
+
+    @property
+    def total_field(self) -> np.ndarray:
+        if self._total_field is None:
+            self._total_field = self.applied_field + self.self_field
+            if self.field_from_other_films is not None:
+                self._total_field += self.field_from_other_films
+        return self._total_field
+
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        h5group["stream"] = self.stream
+        h5group["current_density"] = self.current_density
+        h5group["applied_field"] = self.applied_field
+        h5group["self_field"] = self.self_field
+        if self.field_from_other_films is not None:
+            h5group["field_from_other_films"] = self.field_from_other_films
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "FilmSolution":
+        field_from_other_films = h5group.get("field_from_other_films", None)
+        if field_from_other_films is not None:
+            field_from_other_films = np.array(field_from_other_films)
+        return FilmSolution(
+            stream=np.array(h5group["stream"]),
+            current_density=np.array(h5group["current_density"]),
+            applied_field=np.array(h5group["applied_field"]),
+            self_field=np.array(h5group["self_field"]),
+            field_from_other_films=field_from_other_films,
+        )
+
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+        if not isinstance(other, FilmSolution):
+            return False
+        if self.field_from_other_films is None:
+            if other.field_from_other_films is not None:
+                return False
+        if other.field_from_other_films is None:
+            if self.field_from_other_films is not None:
+                return False
+        return (
+            np.allclose(self.stream, other.stream)
+            and np.allclose(self.current_density, other.current_density)
+            and np.allclose(self.applied_field, other.applied_field)
+            and np.allclose(self.self_field, other.self_field)
+        )
 
 
 class LambdaInfo:
@@ -18,12 +124,12 @@ class LambdaInfo:
     def __init__(
         self,
         *,
-        layer: str,
+        film: str,
         Lambda: np.ndarray,
         london_lambda: Optional[np.ndarray] = None,
         thickness: Optional[float] = None,
     ):
-        self.layer = layer
+        self.film = film
         self.Lambda = Lambda
         self.london_lambda = london_lambda
         self.thickness = thickness
@@ -41,118 +147,157 @@ class LambdaInfo:
             assert self.thickness is not None
             assert np.allclose(self.Lambda, self.london_lambda**2 / self.thickness)
         if np.any(self.Lambda < 0):
-            raise ValueError(f"Negative Lambda in layer '{layer}'.")
+            raise ValueError(f"Negative Lambda in film {film!r}.")
 
 
-def q_matrix(
-    points: np.ndarray,
-    dtype: Optional[Union[str, np.dtype]] = None,
-    batch_size: int = 100,
-) -> np.ndarray:
-    """Computes the denominator matrix, q:
-
-    .. math::
-
-        q_{ij} = \\frac{1}{4\\pi|\\vec{r}_i-\\vec{r}_j|^3}
-
-    See Eq. 7 in [Brandt-PRB-2005]_, Eq. 8 in [Kirtley-RSI-2016]_,
-    and Eq. 8 in [Kirtley-SST-2016]_.
-
-    Args:
-        points: Shape (n, 2) array of x,y coordinates of vertices.
-        dtype: Output dtype.
-        batch_size: Size of batches in which to compute the distance matrix.
-
-    Returns:
-        Shape (n, n) array, qij
-    """
-    # Euclidean distance between points
-    distances = cdist_batched(points, points, batch_size=batch_size, metric="euclidean")
-    if dtype is not None:
-        distances = distances.astype(dtype, copy=False)
-    with np.errstate(divide="ignore"):
-        q = 1 / (4 * np.pi * distances**3)
-    np.fill_diagonal(q, np.inf)
-    return q.astype(dtype, copy=False)
+@dataclass
+class FilmInfo:
+    name: str
+    layer: str
+    lambda_info: LambdaInfo
+    vortices: Tuple[Vortex]
+    film_indices: np.ndarray
+    hole_indices: Dict[str, np.ndarray]
+    in_hole: np.ndarray
+    circulating_currents: Dict[str, float]
+    weights: np.ndarray
+    kernel: np.ndarray
+    laplacian: np.ndarray
+    gradient: Optional[np.ndarray] = None
+    terminal_currents: Optional[Dict[str, float]] = None
 
 
-def C_vector(
-    points: np.ndarray,
-    dtype: Optional[Union[str, np.dtype]] = None,
-) -> np.ndarray:
-    """Computes the edge vector, C:
+def get_holes_vortices_by_film(
+    device: Device, vortices: List[Vortex]
+) -> Tuple[Dict[str, List[Polygon]], Dict[str, List[Vortex]]]:
+    films_by_layer = device.polygons_by_layer("film")
+    vortices_by_film = {film_name: [] for film_name in device.films}
+    holes_by_film = device.holes_by_film()
+    for vortex in vortices:
+        if not isinstance(vortex, Vortex):
+            raise TypeError(f"Expected a Vortex, but got {type(vortex)}.")
+        if vortex.layer not in device.layers:
+            raise ValueError(f"Vortex located in unknown layer: {vortex}.")
+        vortex_film = None
+        for film in films_by_layer[vortex.layer]:
+            for hole in holes_by_film[film.name]:
+                if hole.contains_points((vortex.x, vortex.y)).all():
+                    # Film contains hole and hole contains vortex.
+                    raise ValueError(
+                        f"Vortex {vortex} is located in hole {hole.name!r}."
+                    )
+            if film.contains_points((vortex.x, vortex.y)).all():
+                # Vortex is located in the film and not in the hole.
+                vortex_film = film.name
+        if vortex_film is None:
+            raise ValueError(f"Vortex {vortex} is not located in a film.")
+        vortices_by_film[vortex_film].append(vortex)
+    return holes_by_film, vortices_by_film
 
-    .. math::
-        C_i &= \\frac{1}{4\\pi}\\sum_{p,q=\\pm1}\\sqrt{(\\Delta x - px_i)^{-2}
-            + (\\Delta y - qy_i)^{-2}}\\\\
-        \\Delta x &= \\frac{1}{2}(\\mathrm{max}(x) - \\mathrm{min}(x))\\\\
-        \\Delta y &= \\frac{1}{2}(\\mathrm{max}(y) - \\mathrm{min}(y))
 
-    See Eq. 12 in [Brandt-PRB-2005]_, Eq. 16 in [Kirtley-RSI-2016]_,
-    and Eq. 15 in [Kirtley-SST-2016]_.
+def make_film_info(
+    *,
+    device: Device,
+    vortices: List[Vortex],
+    circulating_currents: Dict[str, float],
+    terminal_currents: Dict[str, float],
+    dtype: Union[np.dtype, str] = "float32",
+    gpu: bool = False,
+) -> Dict[str, FilmInfo]:
+    holes_by_film, vortices_by_film = get_holes_vortices_by_film(device, vortices)
+    film_info = {}
+    for name, film in device.films.items():
+        mesh = device.meshes[name]
+        layer = device.layers[film.layer]
+        # Check and cache penetration depth
+        london_lambda = layer.london_lambda
+        d = layer.thickness
+        Lambda = layer.Lambda
+        if isinstance(london_lambda, (int, float)) and london_lambda <= d:
+            length_units = device.ureg(device.length_units).units
+            logger.warning(
+                f"Layer '{name}': The film thickness, d = {d:.4f} {length_units:~P},"
+                f" is greater than or equal to the London penetration depth, resulting"
+                f" in an effective penetration depth {LambdaInfo.Lambda_str} = {Lambda:.4f}"
+                f" {length_units:~P} <= {LambdaInfo.lambda_str} = {london_lambda:.4f}"
+                f" {length_units:~P}. The assumption that the current density is nearly"
+                f" constant over the thickness of the film may not be valid."
+            )
+        if isinstance(Lambda, (int, float)):
+            Lambda = Constant(Lambda)
+        Lambda = Lambda(mesh.sites[:, 0], mesh.sites[:, 1]).astype(dtype, copy=False)
+        Lambda = Lambda[:, np.newaxis]
+        if london_lambda is not None:
+            if isinstance(london_lambda, (int, float)):
+                london_lambda = Constant(london_lambda)
+            london_lambda = london_lambda(mesh.sites[:, 0], mesh.sites[:, 1])
+            london_lambda = london_lambda.astype(dtype, copy=False)[:, np.newaxis]
 
-    Args:
-        points: Shape (n, 2) array of x, y coordinates of vertices.
-        dtype: Output dtype.
-
-    Returns:
-        Shape (n, ) array, Ci
-    """
-    x = points[:, 0]
-    y = points[:, 1]
-    x = x - x.mean()
-    y = y - y.mean()
-    a = np.ptp(x) / 2
-    b = np.ptp(y) / 2
-    with np.errstate(divide="ignore"):
-        C = sum(
-            np.sqrt((a - p * x) ** (-2) + (b - q * y) ** (-2))
-            for p, q in itertools.product((-1, 1), repeat=2)
+        hole_indices = {
+            hole.name: hole.contains_points(mesh.sites, index=True)
+            for hole in holes_by_film[name]
+        }
+        in_hole = np.zeros((len(mesh.sites)), dtype=bool)
+        if hole_indices:
+            in_hole_indices = np.concatenate(list(hole_indices.values()))
+            in_hole[in_hole_indices] = True
+        circ_currents = {
+            hole_name: current
+            for hole_name, current in circulating_currents.items()
+            if hole_name in hole_indices
+        }
+        lambda_info = LambdaInfo(
+            film=name,
+            Lambda=Lambda,
+            london_lambda=london_lambda,
+            thickness=layer.thickness,
         )
-    C[np.isinf(C)] = 1e30
-    C /= 4 * np.pi
-    if dtype is not None:
-        C = C.astype(dtype, copy=False)
-    return C
+        weights = mesh.operators.weights.astype(dtype, copy=False)[:, np.newaxis]
+        Q = mesh.operators.Q.astype(dtype, copy=False)
+        laplacian = mesh.operators.laplacian.toarray().astype(dtype, copy=False)
+        grad = None
+        if lambda_info.inhomogeneous:
+            grad_x = mesh.operators.gradient_x.toarray().astype(dtype, copy=False)
+            grad_y = mesh.operators.gradient_y.toarray().astype(dtype, copy=False)
+            grad = np.array([grad_x, grad_y])
+        if gpu and jax is not None:
+            weights = jax.device_put(weights)
+            Q = jax.device_put(Q)
+            laplacian = jax.device_put(laplacian)
+            if grad is not None:
+                grad = jax.device_put(grad)
+        film_info[name] = FilmInfo(
+            name=name,
+            layer=layer.name,
+            lambda_info=lambda_info,
+            vortices=vortices_by_film[name],
+            film_indices=film.contains_points(mesh.sites, index=True),
+            hole_indices=hole_indices,
+            in_hole=in_hole,
+            circulating_currents=circ_currents,
+            terminal_currents=terminal_currents,
+            weights=weights,
+            kernel=Q,
+            gradient=grad,
+            laplacian=laplacian,
+        )
+    return film_info
 
 
-def Q_matrix(
-    q: np.ndarray,
-    C: np.ndarray,
-    weights: np.ndarray,
-    dtype: Optional[Union[str, np.dtype]] = None,
-) -> np.ndarray:
-    """Computes the kernel matrix, Q:
+# Convert all circulating and terminal currents to floats.
+def current_to_float(value, ureg, current_units: str):
+    if isinstance(value, str):
+        value = ureg(value)
+    if isinstance(value, pint.Quantity):
+        value = value.to(current_units).magnitude
+    return value
 
-    .. math::
 
-        Q_{ij} = (\\delta_{ij}-1)q_{ij}
-        + \\delta_{ij}\\frac{1}{w_{ij}}\\left(C_i
-        + \\sum_{l\\neq i}q_{il}w_{il}\\right)
-
-    See Eq. 10 in [Brandt-PRB-2005]_, Eq. 11 in [Kirtley-RSI-2016]_,
-    and Eq. 11 in [Kirtley-SST-2016]_.
-
-    Args:
-        q: Shape (n, n) matrix qij.
-        C: Shape (n, ) vector Ci.
-        weights: Shape (n, ) weight vector.
-        dtype: Output dtype.
-
-    Returns:
-        Shape (n, n) array, Qij
-    """
-    if sp.issparse(weights):
-        weights = weights.diagonal()
-    # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
-    # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
-    q = q.copy()
-    np.fill_diagonal(q, 0)
-    Q = -q
-    np.fill_diagonal(Q, (C + np.einsum("ij, j -> i", q, weights)) / weights)
-    if dtype is not None:
-        Q = Q.astype(dtype, copy=False)
-    return Q
+def currents_to_floats(currents, ureg, current_units) -> Dict[str, float]:
+    _currents = currents.copy()
+    for name, val in _currents.items():
+        currents[name] = current_to_float(val, ureg, current_units)
+    return currents
 
 
 def convert_field(
@@ -168,7 +313,7 @@ def convert_field(
     Args:
         value: The value to convert. It can either be a numpy array (no units),
             a float (no units), a string like "1 uA/um", or a scalar or array
-            ``pint.Quantity``. If value is not a string wiht units or a ``pint.Quantity``,
+            ``pint.Quantity``. If value is not a string with units or a ``pint.Quantity``,
             then old_units must specify the units of the float or array.
         new_units: The units to convert to.
         old_units: The old units of ``value``. This argument is required if ``value``

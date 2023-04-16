@@ -7,6 +7,7 @@ from ..geometry import path_vectors
 from . import utils
 from .device import Device
 from .layer import Layer
+from .mesh import Mesh
 from .polygon import Polygon
 
 
@@ -162,37 +163,22 @@ class TransportDevice(Device):
         """Dict of ``{film_name: film_polygon}``"""
         return {film.name: film for film in self._films_list}
 
-    @films.setter
-    def films(self, films_dict: Dict[str, Polygon]) -> None:
-        """Dict of ``{film_name: film_polygon}``"""
-        if len(films_dict) > 1:
-            raise ValueError("A TransportDevice can have only one film.")
-        if not (
-            isinstance(films_dict, dict)
-            and all(isinstance(obj, Polygon) for obj in films_dict.values())
-        ):
-            raise TypeError("Films must be a dict of {film_name: Polygon}.")
-        for name, polygon in films_dict.items():
-            polygon.name = name
-        self._films_list = list(self._validate_polygons(films_dict.values(), "film"))
-
     @property
     def film(self) -> Layer:
         return self._films_list[0]
 
-    @film.setter
-    def film(self, film: Polygon) -> None:
-        self.films = {film.name: film}
+    @property
+    def mesh(self) -> Mesh:
+        return self.meshes[self._films_list[0].name]
 
     def copy(
-        self, with_arrays: bool = True, copy_arrays: bool = False
+        self, with_mesh: bool = True, copy_mesh: bool = False
     ) -> "TransportDevice":
         """Copy this Device to create a new one.
 
         Args:
-            with_arrays: Whether to set the large arrays on the new Device.
-            copy_arrays: Whether to create copies of the large arrays, or just
-                return references to the existing arrays.
+            with_mesh: Whether to shallow copy the ``meshes`` dictionary.
+            copy_mesh: Whether to deepcopy the arrays defining the mesh.
 
         Returns:
             A new Device instance, copied from self
@@ -214,39 +200,35 @@ class TransportDevice(Device):
             abstract_regions=abstract_regions,
             length_units=self.length_units,
         )
-        if with_arrays:
-            arrays = self.get_arrays(copy_arrays=copy_arrays)
-            if arrays is not None:
-                device.set_arrays(arrays)
+        if with_mesh and self.meshes is not None:
+            if copy_mesh:
+                device.meshes = {
+                    name: mesh.copy() for name, mesh in self.meshes.items()
+                }
+            else:
+                device.meshes = self.meshes
         return device
 
     def make_mesh(
         self,
-        compute_matrices: bool = True,
-        weight_method: str = "half_cotangent",
-        min_points: Optional[int] = None,
+        min_points: Union[int, None] = None,
+        max_edge_length: Union[float, None] = None,
         smooth: int = 0,
         **meshpy_kwargs,
     ) -> None:
-        """Generates and optimizes the triangular mesh.
+        """Generates the triangular mesh for the film and stores it in ``self.mesh``.
 
         Args:
-            compute_matrices: Whether to compute the field-independent matrices
-                (weights, Q, Laplace operator) needed for Brandt simulations.
-            weight_method: Weight methods for computing the Laplace operator:
-                one of "uniform", "half_cotangent", or "inv_euclidian".
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
-            smooth: Number of Laplacian smoothing steps to perform.
+            max_edge_length: The maximum distance between vertices in the resulting mesh.
+            smooth: Number of Laplacian smoothing iterations to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         return super().make_mesh(
-            bounding_polygon=self.film.name,
             min_points=min_points,
-            weight_method=weight_method,
-            compute_matrices=compute_matrices,
-            convex_hull=False,
+            max_edge_length=max_edge_length,
             smooth=smooth,
             **meshpy_kwargs,
         )
@@ -258,14 +240,17 @@ class TransportDevice(Device):
             An array of indices for vertices that are on the device boundary,
             ordered counterclockwise.
         """
-        if self.points is None:
+        mesh = self.mesh
+        if mesh is None:
             return None
-        indices = utils.boundary_vertices(self.points, self.triangles)
+        points = mesh.sites
+        triangles = mesh.elements
+        indices = utils.boundary_vertices(points, triangles)
         indices_list = indices.tolist()
         # Ensure that the indices wrap around outside of any terminals.
-        boundary = self.points[indices]
+        boundary = points[indices]
         for term in self.terminals.values():
-            boundary = self.points[indices]
+            boundary = points[indices]
             term_ix = indices[term.contains_points(boundary)]
             discont = np.diff(term_ix) != 1
             if np.any(discont):
