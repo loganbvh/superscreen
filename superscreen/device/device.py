@@ -8,6 +8,7 @@ import dill
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+from IPython.display import HTML
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
 
@@ -545,6 +546,42 @@ class Device:
                 smooth[name]
             )
         self.meshes = meshes
+
+    def mesh_stats_dict(self) -> Optional[Dict[str, Dict[str, Union[int, float]]]]:
+        """Returns a dictionary of information about all meshes."""
+        if self.meshes is None:
+            return None
+        return {name: mesh.stats() for name, mesh in self.meshes.items()}
+
+    def mesh_stats(self, precision: int = 3) -> HTML:
+        """When called with in Jupyter notebook, displays
+        a table of information about the mesh.
+
+        Args:
+            precision: Number of digits after the decimal for float values.
+
+        Returns:
+            An HTML table of mesh statistics.
+        """
+        all_stats = self.mesh_stats_dict()
+        if all_stats is None:
+            return None
+
+        def make_row(*cols):
+            return "<tr>" + "".join([f"<td>{c}</td>" for c in cols]) + "</tr>"
+
+        html = ["<table>", "<tr><h2>Mesh Statistics</h2></tr>"]
+        html.append(make_row("", "<b>length_units</b>", repr(self.length_units)))
+        for name, stats in all_stats.items():
+            for i, (key, value) in enumerate(stats.items()):
+                if isinstance(value, float):
+                    value = f"{value:.{precision}e}"
+                if i == 0:
+                    html.append(make_row(f"<b>{name!r}</b>", f"<b>{key}</b>", value))
+                else:
+                    html.append(make_row("", f"<b>{key}</b>", value))
+        html.append("</table>")
+        return HTML("".join(html))
 
     def mutual_inductance_matrix(
         self,

@@ -56,10 +56,37 @@ class Mesh:
         if not build_operators or self.edge_mesh is None:
             self.operators = None
         else:
-            self.build_operators()
+            self.operators = MeshOperators(self)
 
-    def build_operators(self) -> None:
-        self.operators = MeshOperators(self)
+    def stats(self) -> Dict[str, Union[int, float]]:
+        """Returns a dictionary of information about the mesh."""
+        edge_lengths = None
+        if self.edge_mesh is not None:
+            edge_lengths = self.edge_mesh.edge_lengths
+        vertex_areas = self.vertex_areas
+
+        def _min(arr):
+            if arr is not None:
+                return arr.min()
+
+        def _max(arr):
+            if arr is not None:
+                return arr.max()
+
+        # def _mean(arr):
+        #     if arr is not None:
+        #         return arr.mean()
+
+        return dict(
+            num_sites=len(self.sites),
+            num_elements=len(self.elements),
+            min_edge_length=_min(edge_lengths),
+            max_edge_length=_max(edge_lengths),
+            # mean_edge_length=_mean(edge_lengths),
+            min_vertex_area=_min(vertex_areas),
+            max_vertex_area=_max(vertex_areas),
+            # mean_vertex_area=_mean(vertex_areas),
+        )
 
     def closest_site(self, xy: Tuple[float, float]) -> int:
         """Returns the index of the mesh site closest to ``(x, y)``.
@@ -130,43 +157,6 @@ class Mesh:
         # Get the boundary edges and all boundary points
         boundary_edges = edges[is_boundary]
         return np.unique(boundary_edges.flatten())
-
-    def get_quantity_on_site(
-        self, quantity_on_edge: np.ndarray, vector: bool = True
-    ) -> np.ndarray:
-        """Compute the quantity on site by averaging over all edges
-        connecting to each site.
-
-        Args:
-            quantity_on_edge: Observable on the edges.
-            vector: Whether ``quantity_on_edge`` is a vector quantity.
-
-        Returns:
-            The quantity vector or scalar at each site.
-        """
-        # Normalize the edge direction
-        directions = self.edge_mesh.directions
-        normalized_directions = (
-            directions / np.linalg.norm(directions, axis=1)[:, np.newaxis]
-        )
-        if vector:
-            flux_x = quantity_on_edge * normalized_directions[:, 0]
-            flux_y = quantity_on_edge * normalized_directions[:, 1]
-        else:
-            flux_x = flux_y = quantity_on_edge
-        # Sum x and y components for every edge connecting to the vertex
-        vertices = np.concatenate(
-            [self.edge_mesh.edges[:, 0], self.edge_mesh.edges[:, 1]]
-        )
-        x_values = np.concatenate([flux_x, flux_x])
-        y_values = np.concatenate([flux_y, flux_y])
-        counts = np.bincount(vertices)
-        x_group_values = np.bincount(vertices, weights=x_values) / counts
-        y_group_values = np.bincount(vertices, weights=y_values) / counts
-        vector_val = np.array([x_group_values, y_group_values]).T / 2
-        if vector:
-            return vector_val
-        return vector_val[:, 0]
 
     def smooth(self, iterations: int) -> "Mesh":
         """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
