@@ -35,6 +35,7 @@ PYTHON_VERSION = ">=3.7, <3.11"
 
 INSTALL_REQUIRES = [
     "dill",
+    "h5py",
     "ipython",
     "joblib",
     "jupyter",

@@ -1,4 +1,5 @@
 dill
+h5py
 ipython
 joblib
 jupyter
