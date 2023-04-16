@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
 
-from ..fem import cdist_batched, gradient_edges, gradient_vertices, laplace_operator
+from ..fem import cdist_batched, gradient_vertices, laplace_operator
 from . import utils
 from .edge_mesh import EdgeMesh
 
@@ -38,7 +38,6 @@ class Mesh:
         vertex_areas: Optional[Sequence[float]] = None,
         triangle_areas: Optional[Sequence[float]] = None,
         edge_mesh: Optional[EdgeMesh] = None,
-        build_operators: bool = True,
     ):
         self.sites = np.asarray(sites).squeeze()
         # Setting dtype to int64 is important when running on Windows.
@@ -53,7 +52,11 @@ class Mesh:
             triangle_areas = np.asarray(triangle_areas)
         self.triangle_areas = triangle_areas
         self.edge_mesh = edge_mesh
-        if not build_operators or self.edge_mesh is None:
+        if (
+            self.edge_mesh is None
+            or self.vertex_areas is None
+            or self.triangle_areas is None
+        ):
             self.operators = None
         else:
             self.operators = MeshOperators(self)
@@ -216,7 +219,7 @@ class Mesh:
             edge_color: The color for the edges.
             linewidth: The line width for all edges.
             linestyle: The line style for all edges.
-            marker: The marker to use for the mesh sites and Voronoi centroids.
+            marker: The marker to use for the mesh sites.
 
         Returns:
             The resulting :class:`plt.Axes`
@@ -352,9 +355,9 @@ class MeshOperators:
         self.gradient_x, self.gradient_y = gradient_vertices(
             sites, elements, triangle_areas=mesh.triangle_areas
         )
-        self.gradient_edges = gradient_edges(
-            sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
-        )
+        # self.gradient_edges = gradient_edges(
+        #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
+        # )
         self.laplacian = laplace_operator(sites, elements, self.weights)
 
     def to_dict(self) -> Dict[str, Union[np.ndarray, sp.spmatrix]]:
@@ -363,7 +366,7 @@ class MeshOperators:
             Q=self.Q,
             gradient_x=self.gradient_x,
             gradient_y=self.gradient_y,
-            gradient_edges=self.gradient_edges,
+            # gradient_edges=self.gradient_edges,
             laplacian=self.laplacian,
         )
 

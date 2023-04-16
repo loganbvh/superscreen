@@ -2,7 +2,7 @@ import logging
 import os
 from collections import defaultdict
 from contextlib import nullcontext
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import dill
 import h5py
@@ -542,9 +542,12 @@ class Device:
                 convex_hull=False,
                 **meshpy_kwargs,
             )
-            meshes[name] = Mesh.from_triangulation(points, triangles).smooth(
-                smooth[name]
-            )
+            if smooth[name]:
+                meshes[name] = Mesh.from_triangulation(
+                    points, triangles, build_operators=False
+                ).smooth(smooth[name])
+            else:
+                meshes[name] = Mesh.from_triangulation(points, triangles)
         self.meshes = meshes
 
     def mesh_stats_dict(self) -> Optional[Dict[str, Dict[str, Union[int, float]]]]:
@@ -680,19 +683,19 @@ class Device:
             result = result[0]
         return result
 
-    def plot(
+    def plot_polygons(
         self,
         ax: Optional[plt.Axes] = None,
         subplots: bool = False,
-        legend: bool = True,
+        legend: bool = False,
         figsize: Optional[Tuple[float, float]] = None,
         **kwargs,
     ) -> Tuple[plt.Figure, plt.Axes]:
-        """Plot all of the device's polygons.
+        """Plot all of the Device's polygons.
 
         Args:
             ax: matplotlib axis on which to plot. If None, a new figure is created.
-            subplots: If True, plots each layer on a different subplot.
+            subplots: If True, plots each film on a different subplot.
             legend: Whether to add a legend.
             figsize: matplotlib figsize, only used if ax is None.
             kwargs: Passed to ``ax.plot()`` for the polygon boundaries.
@@ -700,36 +703,116 @@ class Device:
         Returns:
             Matplotlib Figure and Axes
         """
-        if len(self.layers_list) > 1 and subplots and ax is not None:
+        if len(self.films) > 1 and subplots and ax is not None:
             raise ValueError(
                 "Axes may not be provided if subplots is True and the device has "
-                "multiple layers."
+                "multiple films."
             )
         if ax is None:
             if subplots:
                 from ..visualization import auto_grid
 
                 fig, axes = auto_grid(
-                    len(self.layers_list),
+                    len(self.films),
                     max_cols=2,
                     figsize=figsize,
                     constrained_layout=True,
                 )
             else:
                 fig, axes = plt.subplots(figsize=figsize, constrained_layout=True)
-                axes = np.array([axes for _ in self.layers_list])
+                axes = np.array([axes for _ in self.films])
         else:
             subplots = False
             fig = ax.get_figure()
-            axes = np.array([ax for _ in self.layers_list])
-        polygons_by_layer = self.polygons_by_layer()
-        for ax, (layer, polygons) in zip(axes.flat, polygons_by_layer.items()):
-            for polygon in polygons:
-                ax = polygon.plot(ax=ax, **kwargs)
+            axes = np.array([ax for _ in self.films])
+        holes_by_film = self.holes_by_film()
+        for ax, (name, film) in zip(axes.flat, self.films.items()):
+            _ = film.plot(ax=ax, **kwargs)
+            for hole in holes_by_film[name]:
+                _ = hole.plot(ax=ax, **kwargs)
             if subplots:
-                ax.set_title(layer)
+                ax.set_title(name)
             if legend:
                 ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            units = self.ureg(self.length_units).units
+            ax.set_xlabel(f"$x$ $[{units:~L}]$")
+            ax.set_ylabel(f"$y$ $[{units:~L}]$")
+            ax.set_aspect("equal")
+        if not subplots:
+            axes = axes[0]
+        return fig, axes
+
+    def plot_mesh(
+        self,
+        ax: Optional[plt.Axes] = None,
+        subplots: bool = False,
+        figsize: Optional[Tuple[float, float]] = None,
+        show_sites: bool = True,
+        show_edges: bool = True,
+        site_color: Union[str, Sequence[float], None] = None,
+        edge_color: Union[str, Sequence[float], None] = None,
+        linewidth: float = 0.75,
+        linestyle: str = "-",
+        marker: str = ".",
+    ) -> Tuple[plt.Figure, plt.Axes]:
+        """Plot all of the Device's meshes.
+
+        Args:
+            ax: matplotlib axis on which to plot. If None, a new figure is created.
+            subplots: If True, plots each film on a different subplot.
+            figsize: matplotlib figsize, only used if ax is None.
+            show_sites: Whether to show the mesh sites.
+            show_edges: Whether to show the mesh edges.
+            site_color: The color for the sites.
+            edge_color: The color for the edges.
+            linewidth: The line width for all edges.
+            linestyle: The line style for all edges.
+            marker: The marker to use for the mesh sites.
+
+        Returns:
+            Matplotlib Figure and Axes
+        """
+        if len(self.films) > 1 and subplots and ax is not None:
+            raise ValueError(
+                "Axes may not be provided if subplots is True and the device has "
+                "multiple films."
+            )
+        if self.meshes is None:
+            raise ValueError(
+                "Mesh doesn't exist. Run Device.make_mesh() to generate one."
+            )
+        if ax is None:
+            if subplots:
+                from ..visualization import auto_grid
+
+                fig, axes = auto_grid(
+                    len(self.films),
+                    max_cols=2,
+                    figsize=figsize,
+                    constrained_layout=True,
+                )
+            else:
+                fig, axes = plt.subplots(figsize=figsize, constrained_layout=True)
+                axes = np.array([axes for _ in self.films])
+        else:
+            subplots = False
+            fig = ax.get_figure()
+            axes = np.array([ax for _ in self.films])
+        for i, (ax, (name, mesh)) in enumerate(zip(axes.flat, self.meshes.items())):
+            sc = f"C{i}" if site_color is None else None
+            ec = f"C{i}" if edge_color is None else None
+            ax = mesh.plot(
+                ax=ax,
+                show_sites=show_sites,
+                show_edges=show_edges,
+                site_color=sc,
+                edge_color=ec,
+                linestyle=linestyle,
+                linewidth=linewidth,
+                marker=marker,
+            )
+            if subplots:
+                ax.set_title(name)
             units = self.ureg(self.length_units).units
             ax.set_xlabel(f"$x$ $[{units:~L}]$")
             ax.set_ylabel(f"$y$ $[{units:~L}]$")
