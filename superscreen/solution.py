@@ -60,11 +60,9 @@ class Solution:
 
     Args:
         device: The ``Device`` that was solved
-        streams: A dict of ``{film_name: stream_function}``
-        current_densities: A dict of ``{film_name: current_density}``
-        fields: A dict of ``{film_name: total_field}``
-        screening_fields: A dict of ``{film_name: screening_field}``
-        applied_fields: A dict of ``{film_name: applied_field}``
+        film_solutions: A dict of ``{film_name: film_solution}`` containing the raw
+            simulation results in ``field_units``, ``current_units``,
+            and ``device.length_units``.
         applied_field_func: The function defining the applied field
         field_units: Units of the applied field
         current_units: Units used for current quantities.
@@ -212,8 +210,8 @@ class Solution:
             positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
                 the fields.
             film: The name of the film in which to interpolate the field.
-            dataset: The dataset to interpolate. One of 'field', 'screening_field',
-                or 'applied_field'.
+            dataset: The dataset to interpolate. One of 'field', 'self_field',
+                'applied_field', or 'field_from_other_films'.
             method: Interpolation method to use: 'nearest', 'linear', or 'cubic'.
             units: The desired units for the current density. Defaults to
                 ``self.field_units``.
@@ -341,7 +339,8 @@ class Solution:
 
         Args:
             polygon_coords: A shape ``(n, 2)`` array of ``(x, y)`` coordinates of
-                polygon vertices defining the closed region :math:`S`.
+                polygon vertices defining the closed region :math:`S`,
+                or a :class:`Polygon` instance.
             film: The name of the film in which to evaluate the field and current.
             interp_method: Interpolation method to use.
             units: The desired units for the current density.
@@ -586,8 +585,7 @@ class Solution:
         Returns:
             An np.ndarray if return_sum is True, otherwise a dict of
             ``{film_name: field_from_film}``. If with_units is True, then the
-            array(s) will contain pint.Quantities. ``field_from_film`` will have
-            shape ``(m, )`` if vector is False, or shape ``(m, 3)`` if ``vector`` is True.
+            array(s) will contain pint.Quantities.
         """
 
         device = self.device
