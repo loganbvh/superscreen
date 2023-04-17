@@ -111,7 +111,6 @@ class TransportDevice(Device):
         for terminal in all_terminals:
             if terminal.name is None:
                 raise ValueError("All current terminals must have a unique name.")
-            terminal.mesh = False
             terminal.layer = film.layer
         num_terminals = len(all_terminals)
         if len(set(terminal.name for terminal in all_terminals)) != num_terminals:
@@ -163,6 +162,16 @@ class TransportDevice(Device):
         """Dict of ``{film_name: film_polygon}``"""
         return {film.name: film for film in self._films_list}
 
+    @films.setter
+    def films(self, films_dict: Dict[str, Polygon]):
+        if len(films_dict) != 1:
+            raise ValueError(
+                f"films must be a dict containing one Polygon, (got {films_dict!r})."
+            )
+        for name, polygon in films_dict.items():
+            polygon.name = name
+        self._films_list = list(films_dict.values())
+
     @property
     def film(self) -> Layer:
         return self._films_list[0]
@@ -211,9 +220,9 @@ class TransportDevice(Device):
 
     def make_mesh(
         self,
-        min_points: Union[int, None] = None,
-        max_edge_length: Union[float, None] = None,
-        smooth: int = 0,
+        min_points: Union[int, Dict[str, int], None] = None,
+        max_edge_length: Union[float, Dict[str, float], None] = None,
+        smooth: Union[int, Dict[str, int]] = 0,
         **meshpy_kwargs,
     ) -> None:
         """Generates the triangular mesh for the film and stores it in ``self.mesh``.
@@ -230,6 +239,12 @@ class TransportDevice(Device):
             min_points=min_points,
             max_edge_length=max_edge_length,
             smooth=smooth,
+            buffer=None,
+            buffer_factor=None,
+            # Do not allow Triangle to insert boundary vertices
+            # because we need the film boundary to be indexed in a known,
+            # ordered way.
+            allow_boundary_steiner=False,
             **meshpy_kwargs,
         )
 
@@ -248,14 +263,14 @@ class TransportDevice(Device):
         indices = utils.boundary_vertices(points, triangles)
         indices_list = indices.tolist()
         # Ensure that the indices wrap around outside of any terminals.
-        boundary = points[indices]
         for term in self.terminals.values():
             boundary = points[indices]
             term_ix = indices[term.contains_points(boundary)]
-            discont = np.diff(term_ix) != 1
+            discont = np.abs(np.diff(term_ix)) > 1
             if np.any(discont):
                 i_discont = indices_list.index(term_ix[np.where(discont)[0][0]])
                 indices = np.roll(indices, -(i_discont + 2))
+                indices_list = indices.tolist()
                 break
         return indices
 

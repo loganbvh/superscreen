@@ -32,7 +32,8 @@ def generate_mesh(
         poly_coords: Shape ``(n, 2)`` array of polygon ``(x, y)`` coordinates.
         hole_coords: A list of arrays of hole boundary coordinates.
         min_points: The minimimum number of vertices in the resulting mesh.
-        max_edge_length: The maximum distance between vertices in the resulting mesh.
+        max_edge_length: The maximum distance between interior vertices in the
+            resulting mesh.
         convex_hull: If True, then the entire convex hull of the polygon (minus holes)
             will be meshed. Otherwise, only the polygon interior is meshed.
         boundary: Shape ``(m, 2)`` (where ``m <= n``) array of ``(x, y)`` coordinates
@@ -113,10 +114,14 @@ def generate_mesh(
         mesh = triangle.build(mesh_info=mesh_info, **kwargs)
         points = np.array(mesh.points) + r0
         triangles = np.array(mesh.elements)
-        max_length = get_edge_lengths(points, triangles).max()
+        # Only constrain the length of interior edges, i.e. edges not on the boundary.
+        edges, is_boundary = get_edges(triangles)
+        interior_edges = edges[~is_boundary]
+        edge_lengths = np.linalg.norm(np.diff(points[interior_edges], axis=1), axis=2)
+        max_length = edge_lengths.max()
         logger.debug(
             f"Iteration {i}: Made mesh with {len(points)} points and "
-            f"{len(triangles)} triangles with maximum edge length: "
+            f"{len(triangles)} triangles with maximum interior edge length: "
             f"{max_length:.2e}. Target maximum edge length: {max_edge_length:.2e}."
         )
         if np.isfinite(max_edge_length):
@@ -135,7 +140,7 @@ def get_edges(triangles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
     Returns:
         A tuple containing an integer array of edges and a boolean array
-        indicating whether each edge on in the boundary.
+        indicating whether each edge is on the boundary.
     """
     edges = np.concatenate([triangles[:, e] for e in [(0, 1), (1, 2), (2, 0)]])
     edges = np.sort(edges, axis=1)

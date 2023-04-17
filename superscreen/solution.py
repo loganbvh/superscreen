@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     Any,
@@ -25,10 +26,9 @@ from .device import Device, Polygon
 from .fem import cdist_batched, in_polygon
 from .io import deserialize_obj, serialize_obj
 from .parameter import Constant
-from .solver.utils import FilmSolution, Vortex
 from .sources.current import biot_savart_2d
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("solution")
 
 
 class Fluxoid(NamedTuple):
@@ -52,6 +52,105 @@ class Fluxoid(NamedTuple):
 
     flux_part: Union[float, pint.Quantity]
     supercurrent_part: Union[float, pint.Quantity]
+
+
+@dataclass
+class Vortex:
+    """A vortex located at position ``(x, y)`` in ``layer`` containing
+    a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
+
+    Args:
+        x: Vortex x-position.
+        y: Vortex y-position.
+        layer: The layer in which the vortex is pinned.
+        nPhi0: The number of flux quanta contained in the vortex.
+    """
+
+    x: float
+    y: float
+    layer: str
+    nPhi0: float = 1
+
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        h5group.attrs["x"] = self.x
+        h5group.attrs["y"] = self.y
+        h5group.attrs["layer"] = self.layer
+        h5group.attrs["nPhi0"] = self.nPhi0
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "Vortex":
+        return Vortex(
+            x=h5group.attrs["x"],
+            y=h5group.attrs["y"],
+            layer=h5group.attrs["layer"],
+            nPhi0=h5group.attrs["nPhi0"],
+        )
+
+
+class FilmSolution:
+    def __init__(
+        self,
+        stream: np.ndarray,
+        current_density: np.ndarray,
+        applied_field: np.ndarray,
+        self_field: np.ndarray,
+        field_from_other_films: Optional[np.ndarray] = None,
+    ):
+        self.stream = np.asarray(stream)
+        self.current_density = np.asarray(current_density)
+        self.applied_field = np.asarray(applied_field)
+        self.self_field = np.asarray(self_field)
+        if field_from_other_films is not None:
+            field_from_other_films = np.asarray(field_from_other_films)
+        self.field_from_other_films = field_from_other_films
+        self._total_field: Optional[np.ndarray] = None
+
+    @property
+    def total_field(self) -> np.ndarray:
+        if self._total_field is None:
+            self._total_field = self.applied_field + self.self_field
+            if self.field_from_other_films is not None:
+                self._total_field += self.field_from_other_films
+        return self._total_field
+
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        h5group["stream"] = self.stream
+        h5group["current_density"] = self.current_density
+        h5group["applied_field"] = self.applied_field
+        h5group["self_field"] = self.self_field
+        if self.field_from_other_films is not None:
+            h5group["field_from_other_films"] = self.field_from_other_films
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "FilmSolution":
+        field_from_other_films = h5group.get("field_from_other_films", None)
+        if field_from_other_films is not None:
+            field_from_other_films = np.array(field_from_other_films)
+        return FilmSolution(
+            stream=np.array(h5group["stream"]),
+            current_density=np.array(h5group["current_density"]),
+            applied_field=np.array(h5group["applied_field"]),
+            self_field=np.array(h5group["self_field"]),
+            field_from_other_films=field_from_other_films,
+        )
+
+    def __eq__(self, other) -> bool:
+        if other is self:
+            return True
+        if not isinstance(other, FilmSolution):
+            return False
+        if self.field_from_other_films is None:
+            if other.field_from_other_films is not None:
+                return False
+        if other.field_from_other_films is None:
+            if self.field_from_other_films is not None:
+                return False
+        return (
+            np.allclose(self.stream, other.stream)
+            and np.allclose(self.current_density, other.current_density)
+            and np.allclose(self.applied_field, other.applied_field)
+            and np.allclose(self.self_field, other.self_field)
+        )
 
 
 class Solution:
@@ -172,17 +271,25 @@ class Solution:
         Returns:
             The interpolated current density
         """
-        default_units = f"{self.current_units} / {self.device.length_units}"
+        device = self.device
+        default_units = f"{self.current_units} / {device.length_units}"
         if units is None:
             units = default_units
         positions = np.atleast_2d(positions)
         interpolator = self._select_interpolator(method)
-        xy = self.device.meshes[film].sites
+        xy = device.meshes[film].sites
         J = self.film_solutions[film].current_density
         Jx_interp = interpolator(xy, J[:, 0], **kwargs)
         Jy_interp = interpolator(xy, J[:, 1], **kwargs)
         J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
-        # J[~np.isfinite(J)] = 0
+        holes = device.holes_by_film()[film]
+        in_film = device.films[film].contains_points(positions)
+        in_hole = np.logical_or.reduce(
+            [hole.contains_points(positions) for hole in holes]
+        )
+        mask = np.logical_or(in_hole, ~in_film)
+        J[mask] = 0
+        J[~np.isfinite(J)] = 0
         J = (J * self.device.ureg(default_units)).to(units)
         if with_units:
             return J
@@ -892,7 +999,7 @@ class Solution:
         if isinstance(path_or_group, h5py.Group):
             read_context = nullcontext(path_or_group)
         else:
-            read_context = h5py.File(path_or_group, "x")
+            read_context = h5py.File(path_or_group, "r")
         solutions = []
         with read_context as h5group:
             groups = sorted((key for key in h5group if key.isdigit()), key=int)
