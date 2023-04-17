@@ -20,6 +20,8 @@ def path_vectors(path: np.ndarray) -> Tuple[float, np.ndarray]:
         each edge in the path.
     """
     dr = np.diff(path, axis=0)
+    # x cross z = -y
+    # y cross z = +x
     normals = np.cross(dr, [0, 0, 1])
     unit_normals = unit_vector(normals)
     total_length = np.sum(la.norm(dr, axis=1))
@@ -126,7 +128,7 @@ def circle(
 def box(
     width: float,
     height: Optional[float] = None,
-    points_per_side: int = 25,
+    points: int = 101,
     center: Tuple[float, float] = (0, 0),
     angle: float = 0,
 ) -> np.ndarray:
@@ -137,36 +139,41 @@ def box(
         width: Width of the rectangle (in the x direction).
         height: Height of the rectangle (in the y direction). If None is given,
             then height is set to width and the function returns a square.
-        points_per_side: Number of points on each side of the box.
+        points: The target number of points making up the box. The actual number of
+            points may be slightly different than this value.
         center: Coordinates of the center of the rectangle.
         angle: Angle (in degrees) by which to rotate counterclockwise about (0, 0)
-            **before** translating to the specified center.
+            **after** translating to the specified center.
 
     Returns:
-        A shape ``(4 * points_per_side, 2)`` array of (x, y) coordinates
+        A shape ``(m, 2)`` or array of (x, y) coordinates.
     """
     width = abs(width)
     if height is None:
         height = width
     height = abs(height)
     x0, y0 = center
+    perimeter = 2 * (width + height)
+    x_points = round(points * width / perimeter)
+    y_points = round(points * height / perimeter)
+
     xs = np.concatenate(
         [
-            width / 2 * np.ones(points_per_side),
-            np.linspace(width / 2, -width / 2, points_per_side),
-            -width / 2 * np.ones(points_per_side),
-            np.linspace(-width / 2, width / 2, points_per_side),
+            width / 2 * np.ones(y_points),
+            np.linspace(width / 2, -width / 2, x_points),
+            -width / 2 * np.ones(y_points),
+            np.linspace(-width / 2, width / 2, x_points),
         ]
     )
     ys = np.concatenate(
         [
-            np.linspace(-height / 2, height / 2, points_per_side),
-            height / 2 * np.ones(points_per_side),
-            np.linspace(height / 2, -height / 2, points_per_side),
-            -height / 2 * np.ones(points_per_side),
+            np.linspace(-height / 2, height / 2, y_points),
+            height / 2 * np.ones(x_points),
+            np.linspace(height / 2, -height / 2, y_points),
+            -height / 2 * np.ones(x_points),
         ]
     )
-    coords = np.stack([xs, ys], axis=1) + np.array([[x0, y0]])
+    coords = np.array([xs, ys]).T + np.array([[x0, y0]])
     if angle:
         coords = rotate(coords, angle)
     return coords
