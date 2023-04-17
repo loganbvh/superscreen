@@ -59,7 +59,7 @@ class Mesh:
         ):
             self.operators = None
         else:
-            self.operators = MeshOperators(self)
+            self.operators = MeshOperators.from_mesh(self)
 
     def stats(self) -> Dict[str, Union[int, float]]:
         """Returns a dictionary of information about the mesh."""
@@ -90,6 +90,16 @@ class Mesh:
             max_vertex_area=_max(vertex_areas),
             # mean_vertex_area=_mean(vertex_areas),
         )
+
+    @property
+    def x(self) -> np.ndarray:
+        """The x-coordinates of the mesh sites."""
+        return self.sites[:, 0]
+
+    @property
+    def y(self) -> np.ndarray:
+        """The y-coordinates of the mesh sites."""
+        return self.sites[:, 1]
 
     def closest_site(self, xy: Tuple[float, float]) -> int:
         """Returns the index of the mesh site closest to ``(x, y)``.
@@ -159,7 +169,7 @@ class Mesh:
         edges, is_boundary = utils.get_edges(elements)
         # Get the boundary edges and all boundary points
         boundary_edges = edges[is_boundary]
-        return np.unique(boundary_edges.flatten())
+        return np.unique(boundary_edges.ravel())
 
     def smooth(self, iterations: int) -> "Mesh":
         """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
@@ -343,22 +353,20 @@ class Mesh:
 
 
 class MeshOperators:
-    def __init__(self, mesh: Mesh):
-        sites = mesh.sites
-        elements = mesh.elements
-        self.weights = mesh.vertex_areas
-        self.Q = MeshOperators.Q_matrix(
-            MeshOperators.q_matrix(sites),
-            MeshOperators.C_vector(sites),
-            self.weights,
-        )
-        self.gradient_x, self.gradient_y = gradient_vertices(
-            sites, elements, triangle_areas=mesh.triangle_areas
-        )
-        # self.gradient_edges = gradient_edges(
-        #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
-        # )
-        self.laplacian = laplace_operator(sites, elements, self.weights)
+    def __init__(
+        self,
+        *,
+        weights: np.ndarray,
+        Q: np.ndarray,
+        gradient_x: Union[np.ndarray, sp.spmatrix],
+        gradient_y: Union[np.ndarray, sp.spmatrix],
+        laplacian: Union[np.ndarray, sp.spmatrix],
+    ):
+        self.weights = weights
+        self.Q = Q
+        self.gradient_x = gradient_x
+        self.gradient_y = gradient_y
+        self.laplacian = laplacian
 
     def to_dict(self) -> Dict[str, Union[np.ndarray, sp.spmatrix]]:
         return dict(
@@ -368,6 +376,31 @@ class MeshOperators:
             gradient_y=self.gradient_y,
             # gradient_edges=self.gradient_edges,
             laplacian=self.laplacian,
+        )
+
+    @staticmethod
+    def from_mesh(mesh: Mesh) -> "MeshOperators":
+        sites = mesh.sites
+        elements = mesh.elements
+        weights = mesh.vertex_areas
+        Q = MeshOperators.Q_matrix(
+            MeshOperators.q_matrix(sites),
+            MeshOperators.C_vector(sites),
+            weights,
+        )
+        gradient_x, gradient_y = gradient_vertices(
+            sites, elements, triangle_areas=mesh.triangle_areas
+        )
+        # gradient_edges = gradient_edges(
+        #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
+        # )
+        laplacian = laplace_operator(sites, elements, weights)
+        return MeshOperators(
+            weights=weights,
+            Q=Q,
+            gradient_x=gradient_x,
+            gradient_y=gradient_y,
+            laplacian=laplacian,
         )
 
     def copy(self) -> "MeshOperators":
