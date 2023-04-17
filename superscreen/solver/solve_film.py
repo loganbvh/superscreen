@@ -6,7 +6,8 @@ import scipy.linalg as la
 
 from ..device import Device, TransportDevice
 from ..device.transport import stream_from_terminal_current
-from .utils import FilmInfo, FilmSolution
+from ..solution import FilmSolution
+from .utils import FilmInfo
 
 logger = logging.getLogger("solve")
 

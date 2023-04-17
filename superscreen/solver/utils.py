@@ -2,119 +2,14 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
-import h5py
 import numpy as np
 import pint
 
-try:
-    import jax
-except (ModuleNotFoundError, ImportError, RuntimeError):
-    jax = None
-
-from ..device import Device
-from ..device.polygon import Polygon
+from ..device import Device, Polygon, TransportDevice
 from ..parameter import Constant
+from ..solution import Vortex
 
 logger = logging.getLogger("solve")
-
-
-@dataclass
-class Vortex:
-    """A vortex located at position ``(x, y)`` in ``layer`` containing
-    a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
-
-    Args:
-        x: Vortex x-position.
-        y: Vortex y-position.
-        layer: The layer in which the vortex is pinned.
-        nPhi0: The number of flux quanta contained in the vortex.
-    """
-
-    x: float
-    y: float
-    layer: str
-    nPhi0: float = 1
-
-    def to_hdf5(self, h5group: h5py.Group) -> None:
-        h5group.attrs["x"] = self.x
-        h5group.attrs["y"] = self.y
-        h5group.attrs["layer"] = self.layer
-        h5group.attrs["nPhi0"] = self.nPhi0
-
-    @staticmethod
-    def from_hdf5(h5group: h5py.Group) -> "Vortex":
-        return Vortex(
-            x=h5group.attrs["x"],
-            y=h5group.attrs["y"],
-            layer=h5group.attrs["layer"],
-            nPhi0=h5group.attrs["nPhi0"],
-        )
-
-
-class FilmSolution:
-    def __init__(
-        self,
-        stream: np.ndarray,
-        current_density: np.ndarray,
-        applied_field: np.ndarray,
-        self_field: np.ndarray,
-        field_from_other_films: Optional[np.ndarray] = None,
-    ):
-        self.stream = np.asarray(stream)
-        self.current_density = np.asarray(current_density)
-        self.applied_field = np.asarray(applied_field)
-        self.self_field = np.asarray(self_field)
-        if field_from_other_films is not None:
-            field_from_other_films = np.asarray(field_from_other_films)
-        self.field_from_other_films = field_from_other_films
-        self._total_field: Optional[np.ndarray] = None
-
-    @property
-    def total_field(self) -> np.ndarray:
-        if self._total_field is None:
-            self._total_field = self.applied_field + self.self_field
-            if self.field_from_other_films is not None:
-                self._total_field += self.field_from_other_films
-        return self._total_field
-
-    def to_hdf5(self, h5group: h5py.Group) -> None:
-        h5group["stream"] = self.stream
-        h5group["current_density"] = self.current_density
-        h5group["applied_field"] = self.applied_field
-        h5group["self_field"] = self.self_field
-        if self.field_from_other_films is not None:
-            h5group["field_from_other_films"] = self.field_from_other_films
-
-    @staticmethod
-    def from_hdf5(h5group: h5py.Group) -> "FilmSolution":
-        field_from_other_films = h5group.get("field_from_other_films", None)
-        if field_from_other_films is not None:
-            field_from_other_films = np.array(field_from_other_films)
-        return FilmSolution(
-            stream=np.array(h5group["stream"]),
-            current_density=np.array(h5group["current_density"]),
-            applied_field=np.array(h5group["applied_field"]),
-            self_field=np.array(h5group["self_field"]),
-            field_from_other_films=field_from_other_films,
-        )
-
-    def __eq__(self, other) -> bool:
-        if other is self:
-            return True
-        if not isinstance(other, FilmSolution):
-            return False
-        if self.field_from_other_films is None:
-            if other.field_from_other_films is not None:
-                return False
-        if other.field_from_other_films is None:
-            if self.field_from_other_films is not None:
-                return False
-        return (
-            np.allclose(self.stream, other.stream)
-            and np.allclose(self.current_density, other.current_density)
-            and np.allclose(self.applied_field, other.applied_field)
-            and np.allclose(self.self_field, other.self_field)
-        )
 
 
 class LambdaInfo:
@@ -165,6 +60,7 @@ class FilmInfo:
     laplacian: np.ndarray
     gradient: Optional[np.ndarray] = None
     terminal_currents: Optional[Dict[str, float]] = None
+    boundary_indices: Optional[np.ndarray] = None
 
 
 def get_holes_vortices_by_film(
@@ -202,7 +98,6 @@ def make_film_info(
     circulating_currents: Dict[str, float],
     terminal_currents: Dict[str, float],
     dtype: Union[np.dtype, str] = "float32",
-    gpu: bool = False,
 ) -> Dict[str, FilmInfo]:
     holes_by_film, vortices_by_film = get_holes_vortices_by_film(device, vortices)
     film_info = {}
@@ -260,12 +155,9 @@ def make_film_info(
             grad_x = mesh.operators.gradient_x.toarray().astype(dtype, copy=False)
             grad_y = mesh.operators.gradient_y.toarray().astype(dtype, copy=False)
             grad = np.array([grad_x, grad_y])
-        if gpu and jax is not None:
-            weights = jax.device_put(weights)
-            Q = jax.device_put(Q)
-            laplacian = jax.device_put(laplacian)
-            if grad is not None:
-                grad = jax.device_put(grad)
+        boundary_indices = None
+        if isinstance(device, TransportDevice):
+            boundary_indices = device.boundary_vertices()
         film_info[name] = FilmInfo(
             name=name,
             layer=layer.name,
@@ -280,6 +172,7 @@ def make_film_info(
             kernel=Q,
             gradient=grad,
             laplacian=laplacian,
+            boundary_indices=boundary_indices,
         )
     return film_info
 

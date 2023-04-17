@@ -11,8 +11,10 @@ import numpy as np
 from IPython.display import HTML
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
+from shapely import geometry as geo
 
 from .. import fem
+from ..geometry import ensure_unique
 from ..units import ureg
 from . import utils
 from .layer import Layer
@@ -215,9 +217,7 @@ class Device:
         # Remove duplicate points to avoid meshing issues.
         # If you don't do this and there are duplicate points,
         # meshpy.triangle will segfault.
-        _, ix = np.unique(points, return_index=True, axis=0)
-        points = points[np.sort(ix)]
-        return points
+        return ensure_unique(points)
 
     def polygons_by_layer(
         self, polygon_type: Optional[str] = None
@@ -451,7 +451,8 @@ class Device:
 
     def make_mesh(
         self,
-        buffer: Union[float, Dict[str, float], str, None] = "default",
+        buffer_factor: Union[float, Dict[str, float], None] = 0.05,
+        buffer: Union[float, Dict[str, float], None] = None,
         join_style: str = "round",
         # exclude_holes: Optional[List[str]] = None,
         min_points: Union[int, Dict[str, int], None] = None,
@@ -462,12 +463,14 @@ class Device:
         """Generates the triangular mesh for each film and stores them in the
         ``self.meshes`` dictionary.
 
-        The arguments ``buffer``, ``min_points``, ``max_edge_length``, and
-        ``smooth`` can be specified either as a single value for all films
-        or as a dict of ``{film_name: argument_value}``.
+        The arguments ``buffer_factor``, ``buffer``, ``min_points``,
+        ``max_edge_length``, and ``smooth`` can be specified either as a
+        single value for all films or as a dict of ``{film_name: argument_value}``.
 
         Args:
-            buffer: Amount by which to expand or contract the boundary.
+            buffer_factor: Buffer for the film bounding box(es), in units of the maximum
+                film dimension. This argument is ignored if ``buffer`` is not None.
+            buffer: Buffer for the film bounding box(es), in ``length_units``.
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
@@ -478,6 +481,8 @@ class Device:
         logger.info("Generating mesh...")
         films = self.films
         meshes = {}
+        if not isinstance(buffer_factor, dict):
+            buffer_factor = {name: buffer_factor for name in films}
         if not isinstance(buffer, dict):
             buffer = {name: buffer for name in films}
         if not isinstance(min_points, dict):
@@ -505,7 +510,7 @@ class Device:
             for poly in holes + abs_regions:
                 if film.contains_points(poly.points).all():
                     coords.append(poly.points)
-            if buffer[name] is None:
+            if buffer_factor[name] is None and buffer[name] is None:
                 boundary = film.points
                 # hole_coords = [
                 #     hole.points
@@ -514,11 +519,17 @@ class Device:
                 # ]
             else:
                 boundary = Polygon(points=film.points)
-                if buffer[name] == "default":
-                    buffer_size = 0.05 * max(boundary.extents)
+                if buffer[name] is None:
+                    buffer_size = buffer_factor[name] * max(boundary.extents)
                 else:
                     buffer_size = buffer[name]
-                boundary = boundary.buffer(buffer_size, join_style=join_style).points
+                buffered = boundary.polygon.buffer(
+                    buffer_size,
+                    join_style=getattr(geo.JOIN_STYLE, join_style),
+                    single_sided=True,
+                    mitre_limit=5.0,
+                ).exterior.coords
+                boundary = Polygon(points=buffered).resample(len(film.points)).points
                 coords.append(boundary)
                 # for hole in holes_by_film[name]:
                 #     if hole.name in exclude_holes:
@@ -534,7 +545,7 @@ class Device:
                 #             else:
                 #                 hole_coords.append(hole_points)
             points, triangles = utils.generate_mesh(
-                np.concatenate(coords, axis=0),
+                ensure_unique(np.concatenate(coords, axis=0)),
                 hole_coords=hole_coords,
                 min_points=min_points[name],
                 max_edge_length=max_edge_length[name],
@@ -747,7 +758,7 @@ class Device:
         ax: Optional[plt.Axes] = None,
         subplots: bool = False,
         figsize: Optional[Tuple[float, float]] = None,
-        show_sites: bool = True,
+        show_sites: bool = False,
         show_edges: bool = True,
         site_color: Union[str, Sequence[float], None] = None,
         edge_color: Union[str, Sequence[float], None] = None,
@@ -799,8 +810,8 @@ class Device:
             fig = ax.get_figure()
             axes = np.array([ax for _ in self.films])
         for i, (ax, (name, mesh)) in enumerate(zip(axes.flat, self.meshes.items())):
-            sc = f"C{i}" if site_color is None else None
-            ec = f"C{i}" if edge_color is None else None
+            sc = f"C{i}" if site_color is None else site_color
+            ec = f"C{i}" if edge_color is None else edge_color
             ax = mesh.plot(
                 ax=ax,
                 show_sites=show_sites,

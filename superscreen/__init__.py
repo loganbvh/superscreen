@@ -2,9 +2,10 @@ from . import fem, geometry, parallel, sources
 from .about import version_dict, version_table
 from .device import Device, Layer, Polygon, TransportDevice
 from .fluxoid import find_fluxoid_solution, make_fluxoid_polygons
+from .parallel import solve_many
 from .parameter import Constant, Parameter
 from .solution import Fluxoid, Solution, Vortex
-from .solver import convert_field, solve, solve_many
+from .solver import convert_field, solve
 from .units import ureg
 from .version import __version__, __version_info__
 from .visualization import (

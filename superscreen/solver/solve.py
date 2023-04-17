@@ -9,7 +9,7 @@ import pint
 
 from ..device import Device
 from ..fem import cdist_batched
-from ..solution import Solution, Vortex
+from ..solution import FilmSolution, Solution, Vortex
 from ..sources import ConstantField
 from . import utils
 from .solve_film import build_linear_systems, solve_film
@@ -141,7 +141,7 @@ def solve(
     )
 
     solutions: List[Solution] = []
-    film_solutions: Dict[str, utils.FilmSolution] = {}
+    film_solutions: Dict[str, FilmSolution] = {}
 
     # Compute the stream functions and fields for each film
     # given only the applied field.
