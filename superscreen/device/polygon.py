@@ -461,9 +461,8 @@ class Polygon:
             mitre_limit=mitre_limit,
             single_sided=single_sided,
         )
-
         polygon = Polygon(
-            name=f"{self.name} ({distance:+.3f})",
+            name=f"{self.name}",
             layer=self.layer,
             points=poly,
         )
@@ -539,7 +538,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the union of a sequence of polygons.
 
@@ -547,13 +545,12 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
 
         Returns:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.union(*rest)
 
     @classmethod
@@ -571,7 +568,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the intersection
         of a sequence of polygons.
@@ -580,13 +576,12 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
 
         Returns:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.intersection(*rest)
 
     @classmethod
@@ -604,7 +599,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
         symmetric: bool = False,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the difference
@@ -614,7 +608,6 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
             symmetric: If True, creates a new :class:`Polygon` from the
                 "symmetric difference" (aka XOR) of the inputs.
 
@@ -622,7 +615,7 @@ class Polygon:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.difference(*rest, symmetric=symmetric)
 
     def __repr__(self) -> str:
