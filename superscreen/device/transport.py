@@ -56,8 +56,8 @@ def stream_from_terminal_current(points: np.ndarray, current: float) -> np.ndarr
     Returns:
         A shape ``(n, )`` array of the stream function along the terminal.
     """
-    length, unit_normals = path_vectors(points)
-    J = current * unit_normals / length
+    edge_lengths, unit_normals = path_vectors(points)
+    J = current * unit_normals / np.sum(edge_lengths)
     g = stream_from_current_density(points, J)
     return g * current / g[-1]
 
@@ -244,7 +244,7 @@ class TransportDevice(Device):
             # Do not allow Triangle to insert boundary vertices
             # because we need the film boundary to be indexed in a known,
             # ordered way.
-            allow_boundary_steiner=False,
+            preserve_boundary=True,
             **meshpy_kwargs,
         )
 

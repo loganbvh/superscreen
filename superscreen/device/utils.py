@@ -21,6 +21,7 @@ def generate_mesh(
     max_edge_length: Optional[float] = None,
     convex_hull: bool = False,
     boundary: Optional[np.ndarray] = None,
+    preserve_boundary: bool = False,
     min_angle: float = 32.5,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -38,6 +39,7 @@ def generate_mesh(
             will be meshed. Otherwise, only the polygon interior is meshed.
         boundary: Shape ``(m, 2)`` (where ``m <= n``) array of ``(x, y)`` coordinates
             for points on the boundary of the polygon.
+        preserve_boundary: Do not add any mesh sites to the boundary.
         min_angle: The minimum angle in the mesh's triangles. Setting a larger value
             will make the triangles closer to equilateral, but the mesh generation
             may fail if the value is too large.
@@ -93,6 +95,8 @@ def generate_mesh(
         ]
         mesh_info.set_holes(holes)
 
+    kwargs = kwargs.copy()
+    kwargs["allow_boundary_steiner"] = not preserve_boundary
     if "min_angle" not in kwargs:
         kwargs["min_angle"] = min_angle
 
@@ -102,7 +106,6 @@ def generate_mesh(
     if min_points is None and (max_edge_length is None or max_edge_length <= 0):
         return points, triangles
 
-    kwargs = kwargs.copy()
     kwargs["max_volume"] = dx * dy / 100
     i = 1
     if min_points is None:
@@ -114,10 +117,11 @@ def generate_mesh(
         mesh = triangle.build(mesh_info=mesh_info, **kwargs)
         points = np.array(mesh.points) + r0
         triangles = np.array(mesh.elements)
-        # Only constrain the length of interior edges, i.e. edges not on the boundary.
         edges, is_boundary = get_edges(triangles)
-        interior_edges = edges[~is_boundary]
-        edge_lengths = np.linalg.norm(np.diff(points[interior_edges], axis=1), axis=2)
+        if preserve_boundary:
+            # Only constrain the length of interior edges, i.e. edges not on the boundary.
+            edges = edges[~is_boundary]
+        edge_lengths = np.linalg.norm(np.diff(points[edges], axis=1), axis=2)
         max_length = edge_lengths.max()
         logger.debug(
             f"Iteration {i}: Made mesh with {len(points)} points and "

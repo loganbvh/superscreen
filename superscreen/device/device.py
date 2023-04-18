@@ -457,6 +457,7 @@ class Device:
         # exclude_holes: Optional[List[str]] = None,
         min_points: Union[int, Dict[str, int], None] = None,
         max_edge_length: Union[float, Dict[str, float], None] = None,
+        preserve_boundary: bool = False,
         smooth: Union[int, Dict[str, int]] = 0,
         **meshpy_kwargs,
     ) -> None:
@@ -475,6 +476,7 @@ class Device:
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
             max_edge_length: The maximum distance between vertices in the resulting mesh.
+            preserve_boundary: Do not add any mesh sites to the boundary.
             smooth: Number of Laplacian smoothing iterations to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
@@ -551,6 +553,7 @@ class Device:
                 max_edge_length=max_edge_length[name],
                 boundary=boundary,
                 convex_hull=False,
+                preserve_boundary=preserve_boundary,
                 **meshpy_kwargs,
             )
             if smooth[name]:
