@@ -24,6 +24,7 @@ from scipy import interpolate
 from .about import version_dict
 from .device import Device, Polygon
 from .fem import cdist_batched, in_polygon
+from .geometry import path_vectors
 from .io import deserialize_obj, serialize_obj
 from .parameter import Constant
 from .sources.current import biot_savart_2d
@@ -263,7 +264,7 @@ class Solution:
             positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
                 the current density.
             film: The name of the film in which to interpolate current density.
-            method: Interpolation method to use (see scipy.interpolate.griddata).
+            method: Interpolation method to use ("nearest", "linear" or "cubic").
             units: The desired units for the current density. Defaults to
                 ``self.current_units / self.device.length_units``.
             with_units: Whether to return arrays of pint.Quantities with units attached.
@@ -282,18 +283,56 @@ class Solution:
         Jx_interp = interpolator(xy, J[:, 0], **kwargs)
         Jy_interp = interpolator(xy, J[:, 1], **kwargs)
         J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
-        holes = device.holes_by_film()[film]
         in_film = device.films[film].contains_points(positions)
-        in_hole = np.logical_or.reduce(
-            [hole.contains_points(positions) for hole in holes]
-        )
-        mask = np.logical_or(in_hole, ~in_film)
-        J[mask] = 0
-        J[~np.isfinite(J)] = 0
+        J[~in_film] = 0
+        J[~np.isfinite(J).all(axis=1)] = 0
         J = (J * self.device.ureg(default_units)).to(units)
         if with_units:
             return J
         return J.magnitude
+
+    def current_through_path(
+        self,
+        path_coords: np.ndarray,
+        *,
+        film: str,
+        interp_method: str = "linear",
+        units: Union[str, None] = None,
+        with_units: bool = True,
+    ) -> Union[float, pint.Quantity]:
+        """Calculates the total current crossing a given path.
+
+        Args:
+            path_coords: An ``(n, 2)`` array of ``(x, y)`` coordinates defining
+                the path.
+            film: The name of the film in which to interpolate current density.
+            interp_method: Interpolation method to use ("nearest", "linear" or "cubic").
+            units: The current units to return.
+            with_units: Whether to return a :class:`pint.Quantity` with units attached.
+
+        Returns:
+            The total current crossing the path as either a float or a
+            :class:`pint.Quantity`.
+        """
+        device = self.device
+        if units is None:
+            units = self.current_units
+        # The center of each edge in the path
+        edge_positions = (path_coords[:-1] + path_coords[1:]) / 2
+        # Evaluate the supercurrent at the edge centers
+        J_edge = self.interp_current_density(
+            edge_positions,
+            film=film,
+            method=interp_method,
+            with_units=True,
+        )
+        edge_lengths, unit_normals = path_vectors(path_coords)
+        edge_lengths = edge_lengths * device.ureg(device.length_units)
+        J_dot_n = (J_edge * unit_normals[:-1]).sum(axis=1)
+        total_current = np.trapz(J_dot_n * edge_lengths).to(units)
+        if not with_units:
+            total_current = total_current.magnitude
+        return total_current
 
     def interp_field(
         self,
