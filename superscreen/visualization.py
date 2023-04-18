@@ -632,16 +632,18 @@ def plot_currents(
     # Keep track of which axes are actually used,
     # and delete unused axes later
     used_axes = []
-    for ax, film in zip(fig.axes, films):
-        Jx, Jy = jcs[film].T
-        J = Js[film]
-        mesh = device.meshes[film]
+    holes_by_film = device.holes_by_film()
+    for ax, film_name in zip(fig.axes, films):
+        film = device.films[film_name]
+        Jx, Jy = jcs[film_name].T
+        J = Js[film_name]
+        mesh = device.meshes[film_name]
         x, y = mesh.sites.T
         tri = mesh.elements
-        layer_vmin, layer_vmax = clim_dict[film]
+        layer_vmin, layer_vmax = clim_dict[film_name]
         norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
         im = ax.tripcolor(x, y, J, triangles=tri, shading=shading, cmap=cmap, norm=norm)
-        ax.set_title(f"{clabel.split('[')[0].strip()} ({film})")
+        ax.set_title(f"{clabel.split('[')[0].strip()} ({film_name})")
         ax.set_aspect("equal")
         ax.set_xlabel(f"$x$ [${length_units:~L}$]")
         ax.set_ylabel(f"$y$ [${length_units:~L}$]")
@@ -657,6 +659,7 @@ def plot_currents(
             for i, (coord, path, cross) in enumerate(
                 zip(coords, paths, cross_sections)
             ):
+                cross[~film.contains_points(coord)] *= 0
                 color = f"C{i % 10}"
                 ax.plot(*coord.T, "--", color=color, lw=2)
                 ax.plot(*coord[0], "o", color=color)
@@ -674,8 +677,17 @@ def plot_currents(
                 np.linspace(x.min(), x.max(), grid_shape[1]),
                 np.linspace(y.min(), y.max(), grid_shape[0]),
             )
+            # Create masks to set the current density to zero in holes
+            # and outside of films.
+            coords = np.array([xgrid.ravel(), ygrid.ravel()]).T
+            film_mask = film.contains_points(coords)
+            for hole in holes_by_film[film_name]:
+                film_mask = film_mask & ~hole.contains_points(coords)
+            film_mask = film_mask.reshape(xgrid.shape)
             Jx_grid = interpolate.griddata(xy, Jx, (xgrid, ygrid), method="linear")
             Jy_grid = interpolate.griddata(xy, Jy, (xgrid, ygrid), method="linear")
+            Jx_grid[~film_mask] = np.nan
+            Jy_grid[~film_mask] = np.nan
             J_grid = np.sqrt(Jx_grid**2 + Jy_grid**2)
             if min_stream_amp is not None:
                 cutoff = np.nanmax(J_grid) * min_stream_amp

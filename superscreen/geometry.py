@@ -16,7 +16,7 @@ def path_vectors(path: np.ndarray) -> Tuple[float, np.ndarray]:
         path: Shape ``(n, 2)`` array of coordinates representing a continuous path.
 
     Returns:
-        The total path length and an array of of unit vectors normal to
+        The edge lengths and an array of of unit vectors normal to
         each edge in the path.
     """
     dr = np.diff(path, axis=0)
@@ -24,9 +24,9 @@ def path_vectors(path: np.ndarray) -> Tuple[float, np.ndarray]:
     # y cross z = +x
     normals = np.cross(dr, [0, 0, 1])
     unit_normals = unit_vector(normals)
-    total_length = np.sum(la.norm(dr, axis=1))
+    edge_lengths = la.norm(dr, axis=1)
     unit_normals = np.concatenate([unit_normals, unit_normals[-1:]], axis=0)
-    return total_length, unit_normals[:, :2]
+    return edge_lengths, unit_normals[:, :2]
 
 
 def rotation_matrix(angle_radians: float) -> np.ndarray:
