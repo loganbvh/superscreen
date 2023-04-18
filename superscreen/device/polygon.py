@@ -109,6 +109,16 @@ class Polygon:
         """A matplotlib.path.Path representing the polygon boundary."""
         return path.Path(self.points, closed=True)
 
+    def set_name(self, name: Union[str, None]) -> "Polygon":
+        """Sets the Polygon's name and returns ``self``."""
+        self.name = name
+        return self
+
+    def set_layer(self, layer: Union[str, None]) -> "Polygon":
+        """Sets the Polygon's layer and returns ``self``."""
+        self.layer = layer
+        return self
+
     def contains_points(
         self,
         points: np.ndarray,

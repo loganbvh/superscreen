@@ -211,7 +211,7 @@ class Mesh:
     def plot(
         self,
         ax: Union[plt.Axes, None] = None,
-        show_sites: bool = True,
+        show_sites: bool = False,
         show_edges: bool = True,
         site_color: Union[str, Sequence[float], None] = None,
         edge_color: Union[str, Sequence[float], None] = "k",
