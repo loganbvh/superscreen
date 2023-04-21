@@ -55,7 +55,7 @@ def shared_arrays_to_sparse(
 ) -> sp.spmatrix:
     """Convert shared RawArrays to a sparse matrix."""
     numpy_arrays = tuple(shared_array_to_numpy(a) for a in shared_arrays)
-    csr = sp.csr_matrix(tuple(numpy_arrays), shape=shape, copy=False)
+    csr = sp.csr_array(tuple(numpy_arrays), shape=shape, copy=False)
     return csr.asformat(fmt, copy=False)
 
 

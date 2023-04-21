@@ -4,7 +4,7 @@ import numpy as np
 from scipy.constants import mu_0
 from scipy.spatial import Delaunay
 
-from ..fem import mass_matrix
+from ..device.utils import vertex_areas
 from ..parameter import Parameter
 from ..units import ureg
 
@@ -92,7 +92,7 @@ def biot_savart_2d(
     if areas is None:
         # Triangulate the current sheet to assign an effective area to each vertex.
         triangles = Delaunay(positions).simplices
-        areas = mass_matrix(positions, triangles)
+        areas = vertex_areas(positions, triangles)
     else:
         areas = areas * to_meter**2
     # Evaluate the Biot-Savart integral.

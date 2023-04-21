@@ -507,8 +507,6 @@ class MeshOperators:
         Returns:
             Shape (n, n) array, Qij
         """
-        if sp.issparse(weights):
-            weights = weights.diagonal()
         # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
         # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
         q = q.copy()
