@@ -7,8 +7,6 @@ import scipy.sparse as sp
 from matplotlib.path import Path
 from scipy.spatial.distance import cdist
 
-from .device.utils import vertex_areas
-
 
 def triangle_areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     """Calculates the area of each triangle.
@@ -263,6 +261,8 @@ def laplace_operator(
     # See: http://rodolphe-vaillant.fr/?e=20
     # See: http://ddg.cs.columbia.edu/SGP2014/LaplaceBeltrami.pdf
     if masses is None:
+        from .device.utils import vertex_areas
+
         masses = vertex_areas(points, triangles)
     L = calculate_weights(points, triangles, weight_method, sparse=True)
     with warnings.catch_warnings():
