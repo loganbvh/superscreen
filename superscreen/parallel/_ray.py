@@ -138,7 +138,7 @@ def solve_many_ray(
             keep_only_final_solution=keep_only_final_solution,
         )
         if save_path is not None:
-            Solution.save_solutions(solutions, save_path)
+            utils.save_solutions(solutions, save_path)
         if not return_solutions:
             solutions = None
 

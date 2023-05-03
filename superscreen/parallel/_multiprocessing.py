@@ -115,7 +115,8 @@ def meshes_to_shared_arrays(
 
 def meshes_from_shared_arrays(shared_meshes) -> Dict[str, Mesh]:
     """Reconstruct meshes from shared arrays."""
-    return {name: Mesh.from_dict(d) for name, d in shared_meshes.items()}
+    meshes = shared_to_container(shared_meshes)
+    return {name: Mesh.from_dict(d) for name, d in meshes.items()}
 
 
 def init(shared_meshes):
@@ -128,9 +129,9 @@ def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     use_shared_memory = kwargs.pop("use_shared_memory")
     device: Device = kwargs["device"]
     if use_shared_memory:
-        meshes = meshes_to_shared_arrays(init_meshes)
+        meshes = meshes_from_shared_arrays(init_meshes)
     else:
-        meshes = init_meshes
+        meshes = {name: Mesh.from_dict(d) for name, d in init_meshes.items()}
     device.meshes = meshes
     kwargs["device"] = device
     _ = solve(**kwargs)
@@ -231,7 +232,7 @@ def solve_many_mp(
             keep_only_final_solution=keep_only_final_solution,
         )
         if save_path is not None:
-            Solution.save_solutions(solutions, save_path)
+            utils.save_solutions(solutions, save_path)
         if not return_solutions:
             solutions = None
 

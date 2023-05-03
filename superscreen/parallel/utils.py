@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import h5py
 import joblib
 import pint
 
@@ -136,6 +137,21 @@ def load_solutions(
         else:
             solutions.append(model_solutions)
     return solutions
+
+
+def save_solutions(
+    solutions: Union[List[Solution], List[List[Solution]]],
+    save_path: os.PathLike,
+    compress: bool = True,
+):
+    with h5py.File(save_path, "x") as h5file:
+        if isinstance(solutions[0], list):
+            for i, model_solutions in enumerate(solutions):
+                Solution.save_solutions(
+                    model_solutions, h5file.create_group(str(i)), compress=compress
+                )
+        else:
+            Solution.save_solutions(solutions, h5file, compress=compress)
 
 
 # Set docstrings for functions in parallel.py based on solve_many.
