@@ -3,7 +3,7 @@ import os
 import tempfile
 import time
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 import pint
@@ -27,6 +27,21 @@ logger = utils.logger
 # See: https://stackoverflow.com/questions/37705974/why-are-multiprocessing-sharedctypes-assignments-so-slow
 
 
+class SharedNDArray(NamedTuple):
+    """A numpy.ndarray living in shared memory."""
+
+    data: mp.RawArray
+    shape: Tuple[int, ...]
+
+
+class SharedCSRArray(NamedTuple):
+    """A scipy.sparse.csr_array living in shared memory."""
+
+    data: Tuple[mp.RawArray, mp.RawArray, mp.RawArray]
+    shape: Tuple[int, ...]
+    fmt: str = "csr"
+
+
 def shared_array_to_numpy(
     shared_array: mp.RawArray, shape: Optional[Tuple[int, ...]] = None
 ) -> np.ndarray:
@@ -39,19 +54,19 @@ def shared_array_to_numpy(
     return array
 
 
-def numpy_to_shared_array(array: np.ndarray) -> mp.RawArray:
+def numpy_to_shared_array(array: np.ndarray) -> Tuple[mp.RawArray, Tuple[int, ...]]:
     """Convert a numpy array to a shared RawArray."""
     dtype = np.ctypeslib.as_ctypes_type(array.dtype)
     shared_array = mp.RawArray(dtype, array.size)
     sh_np = np.ctypeslib.as_array(shared_array).reshape(array.shape)
     np.copyto(sh_np, array)
-    return shared_array
+    return SharedNDArray(shared_array, array.shape)
 
 
 def shared_arrays_to_sparse(
     shared_arrays: Tuple[mp.RawArray, mp.RawArray, mp.RawArray],
     shape: Tuple[int, ...],
-    fmt: str,
+    fmt: str = "csr",
 ) -> sp.spmatrix:
     """Convert shared RawArrays to a sparse matrix."""
     numpy_arrays = tuple(shared_array_to_numpy(a) for a in shared_arrays)
@@ -64,10 +79,10 @@ def sparse_to_shared_arrays(
 ) -> Tuple[Tuple[mp.RawArray, mp.RawArray, mp.RawArray], Tuple[int, ...]]:
     """Convert a sparse matrix to shared RawArrays."""
     csr = mat.asformat("csr", copy=False)
-    data = numpy_to_shared_array(csr.data)
-    indices = numpy_to_shared_array(csr.indices)
-    indptr = numpy_to_shared_array(csr.indptr)
-    return (data, indices, indptr), csr.shape
+    data = numpy_to_shared_array(csr.data).data
+    indices = numpy_to_shared_array(csr.indices).data
+    indptr = numpy_to_shared_array(csr.indptr).data
+    return SharedCSRArray((data, indices, indptr), csr.shape)
 
 
 def container_to_shared(item):
@@ -87,30 +102,16 @@ def shared_to_container(item):
     """Recursively convert a container of shared arrays into numpy arrays
     and sparse matrices.
     """
-    if isinstance(item, mp.RawArray):
-        return shared_array_to_numpy(item)
-    if (
-        isinstance(item, tuple)
-        and len(item) == 2
-        and len(item[0]) == 3
-        and all(isinstance(i, mp.RawArray) for i in item[0])
-        and isinstance(item[1], tuple)
-    ):
-        # It's a shared sparse matrix.
-        return shared_arrays_to_sparse(item)
+    if isinstance(item, SharedNDArray):
+        return shared_array_to_numpy(item.data, item.shape)
+    if isinstance(item, SharedCSRArray):
+        sparse_data, shape, fmt = item
+        return shared_arrays_to_sparse(sparse_data, shape, fmt=fmt)
     if isinstance(item, dict):
         return {key: shared_to_container(value) for key, value in item.items()}
     if isinstance(item, (list, tuple)):
         return type(item)(shared_to_container(value) for value in item)
     return item
-
-
-def meshes_to_shared_arrays(
-    meshes: Dict[str, Union[np.ndarray, Dict[str, np.ndarray]]]
-) -> Dict[str, Tuple[mp.RawArray, Tuple[int, ...]]]:
-    """Convert all arrays in the device to shared RawArrays."""
-    meshes_as_dicts = {name: mesh.to_dict() for name, mesh in meshes.items()}
-    return container_to_shared(meshes_as_dicts)
 
 
 def meshes_from_shared_arrays(shared_meshes) -> Dict[str, Mesh]:
@@ -127,13 +128,11 @@ def init(shared_meshes):
 def solve_single_mp(kwargs: Dict[str, Any]) -> str:
     """Solve a single setup (multiprocessing)."""
     use_shared_memory = kwargs.pop("use_shared_memory")
-    device: Device = kwargs["device"]
     if use_shared_memory:
         meshes = meshes_from_shared_arrays(init_meshes)
     else:
         meshes = {name: Mesh.from_dict(d) for name, d in init_meshes.items()}
-    device.meshes = meshes
-    kwargs["device"] = device
+    kwargs["device"].meshes = meshes
     _ = solve(**kwargs)
 
 
@@ -180,7 +179,7 @@ def solve_many_mp(
 
     if use_shared_memory:
         # Put the device's big arrays in shared memory
-        shared_meshes = meshes_to_shared_arrays(meshes)
+        shared_meshes = container_to_shared(meshes)
     else:
         shared_meshes = meshes
     if num_cpus is None:
@@ -196,7 +195,6 @@ def solve_many_mp(
                 dict(
                     device=device_copy,
                     save_path=os.path.join(savedir, f"solutions-{i}.h5"),
-                    return_solutions=return_solutions,
                     applied_field=applied_field,
                     circulating_currents=circulating_currents,
                     vortices=vortices,
@@ -205,6 +203,7 @@ def solve_many_mp(
                     iterations=iterations,
                     check_inversion=check_inversion,
                     log_level=log_level,
+                    return_solutions=False,
                     cache_kernels=cache_kernels,
                     _solver=solver,
                     use_shared_memory=use_shared_memory,

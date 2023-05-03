@@ -92,12 +92,11 @@ def solve_many(
     """
     from ._multiprocessing import solve_many_mp
     from ._ray import solve_many_ray
-    from ._serial import solve_many_serial
 
     parallel_methods = {
-        None: solve_many_serial,
-        False: solve_many_serial,
-        "serial": solve_many_serial,
+        None: solve_many_mp,
+        False: solve_many_mp,
+        "serial": solve_many_mp,
         "multiprocessing": solve_many_mp,
         "mp": solve_many_mp,
         "ray": solve_many_ray,
@@ -135,5 +134,11 @@ def solve_many(
         num_cpus=num_cpus,
     )
 
-    solutions, path = parallel_methods[parallel_method](**kwargs)
+    solver = parallel_methods[parallel_method]
+    # "serial" just uses multiprocessing with 1 CPU and no shared memory.
+    if parallel_method in (None, False, "serial"):
+        kwargs["num_cpus"] = 1
+        kwargs["use_shared_memory"] = False
+
+    solutions, path = solver(**kwargs)
     return solutions, path
