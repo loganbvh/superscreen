@@ -389,7 +389,7 @@ class MeshOperators:
             weights,
         )
         gradient_x, gradient_y = gradient_vertices(
-            sites, elements, triangle_areas=mesh.triangle_areas
+            sites, elements, areas=mesh.triangle_areas
         )
         # gradient_edges = gradient_edges(
         #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths

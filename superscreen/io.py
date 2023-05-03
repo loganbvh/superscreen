@@ -19,7 +19,8 @@ def deserialize_obj(group: h5py.Group, name: str, attr: bool = False) -> Any:
     if attr:
         if name in group.attrs:
             return group.attrs[name]
-        if f"{name}.pickle" in group:
-            return dill.loads(np.void(group[f"{name}.pickle"]).tobytes())
-        raise IOError(f"Unable to load {name}.")
-    return dill.loads(np.void(group[f"{name}.pickle"]).tobytes())
+        if f"{name}.pickle" in group.attrs:
+            return dill.loads(np.void(group.attrs[f"{name}.pickle"]).tobytes())
+    elif f"{name}.pickle" in group:
+        return dill.loads(np.void(group[f"{name}.pickle"]).tobytes())
+    raise IOError(f"Unable to load {name}.")

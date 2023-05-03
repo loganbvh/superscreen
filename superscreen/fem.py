@@ -266,22 +266,20 @@ def laplace_operator(
         masses = vertex_areas(points, triangles)
     L = calculate_weights(points, triangles, weight_method, sparse=True)
     with warnings.catch_warnings():
-        # scipy.sparse throws a warning here
         warnings.filterwarnings("ignore", message="Changing the sparsity structure")
         L.setdiag(0)
-        w_sum = np.atleast_2d(L.sum(axis=1))
-        L.setdiag(-w_sum)
+        L.setdiag(-L.sum(axis=1))
         L = L.tocsr()
-    Del2 = sp.diags(1 / masses, format="csr") @ L
-    if not sparse:
-        Del2 = Del2.toarray()
-    return Del2
+    laplacian = sp.diags(1 / masses, format="csr") @ L
+    if sparse:
+        return laplacian
+    return laplacian.toarray()
 
 
 def gradient_triangles(
     points: np.ndarray,
     triangles: np.ndarray,
-    triangle_areas: Optional[np.ndarray] = None,
+    areas: Optional[np.ndarray] = None,
 ) -> Tuple[sp.csr_array, sp.csr_array]:
     """Returns the triangle gradient operators ``Gx`` and ``Gy``.
 
@@ -293,13 +291,13 @@ def gradient_triangles(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices
         triangles: Shape (m, 3) array of triangle indices
-        triangle_areas: Shape (m, ) array of triangle areas
+        _areas: Shape (m, ) array of triangle areas
 
     Returns:
         x and y gradient matrices, both of which have shape ``(m, n)``
     """
-    if triangle_areas is None:
-        triangle_areas = triangle_areas(points, triangles)
+    if areas is None:
+        areas = triangle_areas(points, triangles)
     # Shape (triangles.shape[0], 3, 2)
     xy = points[triangles]
     edges = np.roll(xy, 2, axis=1) - np.roll(xy, 1, axis=1)
@@ -309,7 +307,7 @@ def gradient_triangles(
     edges_rot[:, :, 0] = +edges[:, :, 1]
     edges_rot[:, :, 1] = -edges[:, :, 0]
 
-    tri_data = edges_rot / (2 * triangle_areas[:, np.newaxis, np.newaxis])
+    tri_data = edges_rot / (2 * areas[:, np.newaxis, np.newaxis])
     tri_data = tri_data.reshape(-1, 2).T
     shape = (triangles.shape[0], points.shape[0])
     # Row indices: [0, 0, 0, 1, 1, 1, ...]
@@ -332,7 +330,7 @@ def gradient_triangles(
 def gradient_vertices(
     points: np.ndarray,
     triangles: np.ndarray,
-    triangle_areas: Optional[np.ndarray] = None,
+    areas: Optional[np.ndarray] = None,
 ) -> Tuple[sp.csr_array, sp.csr_array]:
     """Returns the vertex gradient operators ``gx`` and ``gy``.
 
@@ -347,15 +345,15 @@ def gradient_vertices(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices
         triangles: Shape (m, 3) array of triangle indices
-        triangle_areas: Shape (m, ) array of triangle areas
+        areas: Shape (m, ) array of triangle areas
 
     Returns:
         x and y gradient matrices, both of which have shape ``(n, n)``
     """
-    if triangle_areas is None:
-        triangle_areas = triangle_areas(points, triangles)
+    if areas is None:
+        areas = triangle_areas(points, triangles)
     n = points.shape[0]
-    Gx, Gy = gradient_triangles(points, triangles, triangle_areas=triangle_areas)
+    Gx, Gy = gradient_triangles(points, triangles, areas=areas)
     # Use numpy arrays for fast slicing even though the operators are sparse.
     Gx = Gx.toarray()
     Gy = Gy.toarray()

@@ -1010,15 +1010,23 @@ class Solution:
                 the Solutions.
             compress: Save the meshes in a compressed format.
         """
+        if not solutions:
+            return
+        device = solutions[0].device
         if isinstance(path_or_group, h5py.Group):
             save_context = nullcontext(path_or_group)
         else:
             save_context = h5py.File(path_or_group, "x")
         with save_context as h5group:
+            device_grp = h5group.create_group("device")
+            device.to_hdf5(device_grp)
             for i, solution in enumerate(solutions):
+                device_path = None
+                if solution.device == device:
+                    device_path = device_grp.name
                 solution.to_hdf5(
                     h5group.create_group(str(i)),
-                    device_path="/device" if i else None,
+                    device_path=device_path,
                     compress=compress,
                 )
 
