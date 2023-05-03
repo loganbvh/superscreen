@@ -409,7 +409,7 @@ class MeshOperators:
     @staticmethod
     def q_matrix(
         points: np.ndarray,
-        dtype: Optional[Union[str, np.dtype]] = None,
+        dtype: Union[str, np.dtype, None] = None,
         batch_size: int = 100,
     ) -> np.ndarray:
         """Computes the denominator matrix, q:

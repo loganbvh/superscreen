@@ -97,8 +97,10 @@ def make_film_info(
     vortices: List[Vortex],
     circulating_currents: Dict[str, float],
     terminal_currents: Dict[str, float],
-    dtype: Union[np.dtype, str] = "float32",
+    dtype: Union[np.dtype, str, None] = None,
 ) -> Dict[str, FilmInfo]:
+    if dtype is None:
+        dtype = device.solve_dtype
     holes_by_film, vortices_by_film = get_holes_vortices_by_film(device, vortices)
     film_info = {}
     for name, film in device.films.items():
