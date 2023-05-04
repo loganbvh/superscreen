@@ -101,7 +101,7 @@ def adjacency_matrix(
 
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
-) -> Union[np.ndarray, sp.lil_array]:
+) -> Union[np.ndarray, sp.lil_matrix]:
     """Weights edges by the inverse Euclidean distance of the edge lengths.
 
     Args:
@@ -117,8 +117,8 @@ def weights_inv_euclidean(
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
     N = points.shape[0]
     if sparse:
-        # Use lil_array for operations that change matrix sparsity
-        weights = sp.lil_array((N, N), dtype=float)
+        # Use lil_matrix for operations that change matrix sparsity
+        weights = sp.lil_matrix((N, N), dtype=float)
     else:
         weights = np.zeros((N, N), dtype=float)
 
@@ -142,7 +142,7 @@ def weights_inv_euclidean(
 
 def weights_half_cotangent(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
-) -> Union[np.ndarray, sp.lil_array]:
+) -> Union[np.ndarray, sp.lil_matrix]:
     """Weights edges by half of the cotangent of the two angles opposite the edge.
 
     Args:
@@ -159,7 +159,7 @@ def weights_half_cotangent(
     N = points.shape[0]
     if sparse:
         # Use lil_array for operations that change matrix sparsity
-        weights = sp.lil_array((N, N), dtype=float)
+        weights = sp.lil_matrix((N, N), dtype=float)
     else:
         weights = np.zeros((N, N), dtype=float)
 
