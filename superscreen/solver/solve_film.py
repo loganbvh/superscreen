@@ -280,7 +280,7 @@ def solve_film(
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
-        vortices: A list of Vortex objects located in films in this layer.
+        vortices: A list of Vortex objects located in films in this film.
         current_units: Units to use for current quantities. The applied field will be
             converted to units of ``{current_units} / {device.length_units}``.
         check_inversion: Whether to verify the accuracy of the matrix inversion.
@@ -356,9 +356,10 @@ def solve_film(
             K = -la.lu_solve(lu_piv, np.eye(A.shape[0]))
         # Index of the mesh vertex that is closest to the vortex position:
         # in the film-specific sub-mesh
-        j_film = np.argmin(la.norm(points[indices] - [[vortex.x, vortex.y]], axis=1))
+        xy = (vortex.x, vortex.y)
+        j_film = np.argmin(la.norm(points[indices] - xy, axis=1))
         # ... and in the full device mesh.
-        j_device = np.argmin(la.norm(points - [[vortex.x, vortex.y]], axis=1))
+        j_device = np.argmin(la.norm(points - xy, axis=1))
         # Eq. 28 in [Brandt]
         g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
         g[indices] += g_vortex

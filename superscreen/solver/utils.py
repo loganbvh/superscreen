@@ -34,7 +34,7 @@ class LambdaInfo:
         )
         if self.inhomogeneous:
             logger.warning(
-                f"Inhomogeneous {LambdaInfo.Lambda_str} in layer '{self.layer}', "
+                f"Inhomogeneous {LambdaInfo.Lambda_str} in film {self.film!r}, "
                 f"which violates the assumptions of the London model. "
                 f"Results may not be reliable."
             )
@@ -66,28 +66,20 @@ class FilmInfo:
 def get_holes_vortices_by_film(
     device: Device, vortices: List[Vortex]
 ) -> Tuple[Dict[str, List[Polygon]], Dict[str, List[Vortex]]]:
-    films_by_layer = device.polygons_by_layer("film")
     vortices_by_film = {film_name: [] for film_name in device.films}
     holes_by_film = device.holes_by_film()
     for vortex in vortices:
         if not isinstance(vortex, Vortex):
             raise TypeError(f"Expected a Vortex, but got {type(vortex)}.")
-        if vortex.layer not in device.layers:
-            raise ValueError(f"Vortex located in unknown layer: {vortex}.")
-        vortex_film = None
-        for film in films_by_layer[vortex.layer]:
-            for hole in holes_by_film[film.name]:
-                if hole.contains_points((vortex.x, vortex.y)).all():
-                    # Film contains hole and hole contains vortex.
-                    raise ValueError(
-                        f"Vortex {vortex} is located in hole {hole.name!r}."
-                    )
-            if film.contains_points((vortex.x, vortex.y)).all():
-                # Vortex is located in the film and not in the hole.
-                vortex_film = film.name
-        if vortex_film is None:
-            raise ValueError(f"Vortex {vortex} is not located in a film.")
-        vortices_by_film[vortex_film].append(vortex)
+        if not device.films[vortex.film].contains_points((vortex.x, vortex.y)).all():
+            raise ValueError(
+                f"Vortex {vortex!r} is not located in film {vortex.film!r}."
+            )
+        for hole in holes_by_film[vortex.film]:
+            if hole.contains_points((vortex.x, vortex.y)).all():
+                # Film contains hole and hole contains vortex.
+                raise ValueError(f"Vortex {vortex} is located in hole {hole.name!r}.")
+        vortices_by_film[vortex.film].append(vortex)
     return holes_by_film, vortices_by_film
 
 

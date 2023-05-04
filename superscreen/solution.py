@@ -1,8 +1,8 @@
+import datetime as dt
 import logging
 import os
 from contextlib import nullcontext
 from dataclasses import dataclass
-from datetime import datetime
 from typing import (
     Any,
     Callable,
@@ -57,25 +57,25 @@ class Fluxoid(NamedTuple):
 
 @dataclass
 class Vortex:
-    """A vortex located at position ``(x, y)`` in ``layer`` containing
+    """A vortex located at position ``(x, y)`` in ``film`` containing
     a total flux ``nPhi0`` in units of the flux quantum :math:`\\Phi_0`.
 
     Args:
         x: Vortex x-position.
         y: Vortex y-position.
-        layer: The layer in which the vortex is pinned.
+        film: The name of the film in which the vortex is pinned.
         nPhi0: The number of flux quanta contained in the vortex.
     """
 
     x: float
     y: float
-    layer: str
+    film: str
     nPhi0: float = 1
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
         h5group.attrs["x"] = self.x
         h5group.attrs["y"] = self.y
-        h5group.attrs["layer"] = self.layer
+        h5group.attrs["film"] = self.film
         h5group.attrs["nPhi0"] = self.nPhi0
 
     @staticmethod
@@ -83,7 +83,7 @@ class Vortex:
         return Vortex(
             x=h5group.attrs["x"],
             y=h5group.attrs["y"],
-            layer=h5group.attrs["layer"],
+            film=h5group.attrs["film"],
             nPhi0=h5group.attrs["nPhi0"],
         )
 
@@ -196,7 +196,7 @@ class Solution:
         self._field_units = field_units
         self._current_units = current_units
         self._solver = solver
-        self._time_created = datetime.now()
+        self._time_created = dt.datetime.now()
         self._version_info = version_dict()
 
     @property
@@ -215,7 +215,7 @@ class Solution:
         return self._solver
 
     @property
-    def time_created(self) -> datetime:
+    def time_created(self) -> dt.datetime:
         """The time at which the solution was originally created."""
         return self._time_created
 
@@ -733,10 +733,10 @@ class Solution:
             ``{film_name: field_from_film}``. If with_units is True, then the
             array(s) will contain pint.Quantities.
         """
+        from .solver.utils import convert_field
 
         device = self.device
         dtype = device.solve_dtype
-        ureg = device.ureg
         units = units or self.field_units
         # In case something like a list [x, y] or [x, y, z] is given
         positions = np.atleast_2d(positions)
@@ -760,8 +760,8 @@ class Solution:
             zs=zs,
             vector=False,
             interp_method=interp_method,
-            units=units,
-            with_units=with_units,
+            units=self.field_units,
+            with_units=False,
             return_sum=False,
         )
         # Evaluate the applied fields
@@ -794,10 +794,15 @@ class Solution:
         Hz_applied[mask] = self.applied_field_func(
             positions[mask, 0], positions[mask, 1], zs[mask, np.newaxis]
         )
-        Hz_applied = (Hz_applied * ureg(self.field_units)).to(units)
-        if not with_units:
-            Hz_applied = Hz_applied.magnitude
         fields["applied_field"] = np.atleast_1d(Hz_applied).squeeze()
+        for key, field in fields.items():
+            fields[key] = convert_field(
+                field,
+                units,
+                old_units=self.field_units,
+                ureg=device.ureg,
+                with_units=with_units,
+            )
         if return_sum:
             return sum(fields.values())
         return fields
@@ -855,6 +860,9 @@ class Solution:
         dtype = device.solve_dtype
         ureg = device.ureg
         units = units or f"{self.field_units} * {device.length_units}"
+        layers_by_film = {}
+        for name, film in device.films.items():
+            layers_by_film[name] = layers[film.layer]
 
         # In case something like a list [x, y] or [x, y, z] is given
         positions = np.atleast_2d(positions)
@@ -880,7 +888,7 @@ class Solution:
         # from the currents in each film
         vector_potentials = {}
         for name, film in device.films.items():
-            dz = zs - layers[name].z0
+            dz = zs - layers_by_film[name].z0
             if np.all(dz == 0) and film.contains_points(positions).all():
                 raise ValueError(
                     f"Cannot evaluate vector potential inside the film ({name!r})."
@@ -895,7 +903,7 @@ class Solution:
             # rho has units of [length] and
             # shape = (postitions.shape[0], device.points.shape[0], 1)
             rho = np.sqrt(rho2 + dz**2)[:, :, np.newaxis]
-            Axy = np.einsum("ijk, j -> ik", J / rho, areas, dtype=dtype)
+            Axy = np.einsum("ijk, j -> ik", J / rho, areas)
             # z-component is zero because currents are parallel to the x-y plane.
             A = np.concatenate([Axy, np.zeros_like(Axy[:, :1])], axis=1)
             A = A * ureg(self.current_units)
@@ -976,7 +984,7 @@ class Solution:
             vortices = []
             for i in sorted(h5group["vortices"], key=int):
                 vortices.append(Vortex.from_hdf5(h5group[f"vortices/{i}"]))
-            time_created = datetime.fromisoformat(h5group.attrs["time_created"])
+            time_created = dt.datetime.fromisoformat(h5group.attrs["time_created"])
             version_info = dict(h5group["version_info"].attrs)
 
             solution = Solution(
