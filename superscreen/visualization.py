@@ -710,7 +710,6 @@ def plot_field_at_positions(
     solution: Solution,
     positions: Union[np.ndarray, Mesh],
     zs: Optional[Union[float, np.ndarray]] = None,
-    vector: bool = False,
     units: Optional[str] = None,
     shading: str = "gouraud",
     cmap: str = "cividis",
@@ -722,7 +721,7 @@ def plot_field_at_positions(
     vmax: Optional[float] = None,
     cross_section_coords: Optional[Union[float, List[float]]] = None,
     **kwargs,
-) -> Tuple[plt.Figure, np.ndarray]:
+) -> Tuple[plt.Figure, plt.Axes]:
     """Plots the total field (either all three components or just the
     z component) anywhere in space.
 
@@ -737,7 +736,6 @@ def plot_field_at_positions(
             this argument is not allowed. If zs is a scalar, then the fields are calculated in
             a plane parallel to the x-y plane. If zs is any array, then it must be same length
             as positions.
-        vector: Whether to return the full vector magnetic field or just the z component.
         units: Units in which to plot the fields. Defaults to solution.field_units.
             This argument is ignored if normalize is True.
         shading: May be ``"flat"`` or ``"gouraud"``. The latter does some interpolation.
@@ -775,75 +773,60 @@ def plot_field_at_positions(
     else:
         triangles = None
 
-    fields = solution.field_at_position(
+    field = solution.field_at_position(
         positions,
         zs=zs,
         units=units,
         with_units=False,
     )
-    if fields.ndim == 1:
-        fields = fields[:, np.newaxis]
-    if vector:
-        num_subplots = 3
-    else:
-        num_subplots = 1
-    fig, axes = plt.subplots(1, num_subplots, **kwargs)
-    if not isinstance(axes, (list, np.ndarray)):
-        axes = [axes]
+    fig, ax = plt.subplots(**kwargs)
     x, y, *_ = positions.T
-    clabels = [f"{label} [${units:~L}$]" for label in ["$H_x$ ", "$H_y$ ", "$H_z$ "]]
+    clabel = f"$H_z$  [${units:~L}$]"
     if "[mass]" in units.dimensionality:
         # We want flux density, B = mu0 * H
-        clabels = ["$\\mu_0$" + clabel for clabel in clabels]
-    if not vector:
-        clabels = clabels[-1:]
-    fields_dict = {label: fields[:, i] for i, label in enumerate(clabels)}
-    clim_dict = setup_color_limits(
-        fields_dict,
+        clabel = "$\\mu_0$" + clabel
+    clim = setup_color_limits(
+        {"field": field},
         vmin=vmin,
         vmax=vmax,
         share_color_scale=share_color_scale,
         symmetric_color_scale=symmetric_color_scale,
         auto_range_cutoff=auto_range_cutoff,
+    )["field"]
+    layer_vmin, layer_vmax = clim
+    norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
+    im = ax.tripcolor(
+        x, y, field, triangles=triangles, shading=shading, cmap=cmap, norm=norm
     )
-    for ax, label in zip(fig.axes, clabels):
-        field = fields_dict[label]
-        layer_vmin, layer_vmax = clim_dict[label]
-        norm = mpl.colors.Normalize(vmin=layer_vmin, vmax=layer_vmax)
-        im = ax.tripcolor(
-            x, y, field, triangles=triangles, shading=shading, cmap=cmap, norm=norm
+    ax.set_title(f"{clabel.split('[')[0].strip()}")
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"$x$ [${length_units:~L}$]")
+    ax.set_ylabel(f"$y$ [${length_units:~L}$]")
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(y.min(), y.max())
+    if cross_section_coords is not None:
+        ax_divider = make_axes_locatable(ax)
+        cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
+        coords, paths, cross_sections = cross_section(
+            np.array([x, y]).T,
+            field,
+            cross_section_coords=cross_section_coords,
         )
-        ax.set_title(f"{label.split('[')[0].strip()}")
-        ax.set_aspect("equal")
-        ax.set_xlabel(f"$x$ [${length_units:~L}$]")
-        ax.set_ylabel(f"$y$ [${length_units:~L}$]")
-        ax.set_xlim(x.min(), x.max())
-        ax.set_ylim(y.min(), y.max())
-        if cross_section_coords is not None:
-            ax_divider = make_axes_locatable(ax)
-            cax = ax_divider.append_axes("bottom", size="40%", pad="30%")
-            coords, paths, cross_sections = cross_section(
-                np.array([x, y]).T,
-                field,
-                cross_section_coords=cross_section_coords,
-            )
-            for i, (coord, path, cross) in enumerate(
-                zip(coords, paths, cross_sections)
-            ):
-                color = f"C{i % 10}"
-                ax.plot(*coord.T, "--", color=color, lw=2)
-                ax.plot(*coord[0], "o", color=color)
-                ax.plot(*coord[-1], "s", color=color)
-                cax.plot(path, cross, color=color, lw=2)
-                cax.plot(path[0], cross[0], "o", color=color)
-                cax.plot(path[-1], cross[-1], "s", color=color)
-            cax.grid(True)
-            cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
-            cax.set_ylabel(label)
-        if colorbar:
-            cbar = fig.colorbar(im, ax=ax, orientation="vertical")
-            cbar.set_label(label)
-    return fig, axes
+        for i, (coord, path, cross) in enumerate(zip(coords, paths, cross_sections)):
+            color = f"C{i % 10}"
+            ax.plot(*coord.T, "--", color=color, lw=2)
+            ax.plot(*coord[0], "o", color=color)
+            ax.plot(*coord[-1], "s", color=color)
+            cax.plot(path, cross, color=color, lw=2)
+            cax.plot(path[0], cross[0], "o", color=color)
+            cax.plot(path[-1], cross[-1], "s", color=color)
+        cax.grid(True)
+        cax.set_xlabel(f"Distance along cut [${length_units:~L}$]")
+        cax.set_ylabel(clabel)
+    if colorbar:
+        cbar = fig.colorbar(im, ax=ax, orientation="vertical")
+        cbar.set_label(clabel)
+    return fig, ax
 
 
 def plot_mutual_inductance(
@@ -980,14 +963,16 @@ def plot_polygon_flux(
     Returns:
         Matplotlib Figure and Axes.
     """
+    device = solutions[0].device
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     else:
         fig = ax.figure
+    if units is None:
+        units = f"{solutions[0].field_units} * {device.length_units}**2"
     i0 = int(iteration_offset)
     iterations = np.arange(len(solutions))
     plot_kwargs = kwargs.copy()
-    device = solutions[0].device
     polygon_names = list(device.polygons)
     polygon_flux = defaultdict(list)
     for solution in solutions:
@@ -995,7 +980,7 @@ def plot_polygon_flux(
             polygon_flux[name].append(
                 solution.polygon_flux(name, units=units, with_units=False)
             )
-
+    units = device.ureg(units)
     for name, flux_vals in polygon_flux.items():
         plot_kwargs["label"] = name
         if diff:
