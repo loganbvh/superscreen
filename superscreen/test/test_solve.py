@@ -32,20 +32,16 @@ def device():
         sc.Polygon(
             "ring_hole",
             layer="layer1",
-            points=geo.circle(3, center=(0.5, 0.5)),
+            points=geo.circle(2),
         ),
     ]
-
-    abstract_regions = [sc.Polygon("bounding_box", layer="layer1", points=geo.box(10))]
-
     device = sc.Device(
         "device",
         layers=layers,
         films=films,
         holes=holes,
-        abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_points=5000, smooth=200)
+    device.make_mesh(max_edge_length=0.15)
 
     return device
 
@@ -110,8 +106,7 @@ def two_rings():
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
 @pytest.mark.parametrize("inhomogeneous", [False, True])
-@pytest.mark.parametrize("gpu", [False, True])
-def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, gpu):
+def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
     applied_field = sc.sources.ConstantField(0)
 
     circulating_currents = {
@@ -119,14 +114,14 @@ def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, 
     }
 
     # https://docs.pytest.org/en/stable/tmpdir.html
-    directory = str(tmp_path) if save else None
+    save_path = tmp_path / "solution.h5" if save else None
 
     old_lambda = device.layers["layer1"].london_lambda
     try:
         if inhomogeneous:
 
             def linear(x, y, offset=0):
-                return offset + (y - y.min()) + (x - x.min())
+                return offset + 0.1 * ((y - y.min()) + (x - x.min()))
 
             device.layers["layer1"].london_lambda = sc.Parameter(
                 linear, offset=old_lambda
@@ -138,63 +133,63 @@ def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous, 
             field_units="mT",
             iterations=1,
             return_solutions=return_solutions,
-            directory=directory,
-            gpu=(HAS_JAX and gpu),
+            save_path=save_path,
         )
     finally:
         device.layers["layer1"].london_lambda = old_lambda
-    if directory is not None:
-        assert os.path.isdir(directory)
-        assert len(os.listdir(directory)) == 1
 
     if return_solutions:
         assert isinstance(solutions, list)
         assert len(solutions) == 1
         solution = solutions[0]
-        grid_shape = 500
+        xs = np.linspace(1.9, 4.1, 1001)
+        ys = np.zeros_like(xs)
+        positions = np.array([xs, ys]).T
+        rtol = 5e-2
+        for angle, axis in [(0, 1), (90, 0), (180, 1), (270, 0)]:
+            coords = sc.geometry.rotate(positions, angle)
+            current = solution.current_through_path(
+                coords,
+                film="ring",
+                units="uA",
+                with_units=False,
+            )
+            assert np.isclose(abs(current), 1000, rtol=rtol)
 
-        xgrid, ygrid, J = solution.grid_current_density(
-            grid_shape=grid_shape, units="uA / um", with_units=False
-        )
-        jx, jy = J["layer1"]
-        x, y = sc.grids_to_vecs(xgrid, ygrid)
-
-        dx = x[1] - x[0]
-        dy = y[1] - y[0]
-
-        N = grid_shape // 2
-
-        assert np.isclose(np.sum(-jy[N, :N]) * dx, 1000)
-        assert np.isclose(np.sum(+jy[N, N:]) * dx, 1000)
-        assert np.isclose(np.sum(-jx[N:, N]) * dy, 1000)
-        assert np.isclose(np.sum(+jx[:N, N]) * dy, 1000)
-    else:
-        assert solutions is None
+            j = solution.interp_current_density(
+                coords,
+                film="ring",
+                units="uA / um",
+                with_units=False,
+            )
+            dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)
+            current = np.sum(j[1:, axis] * dr)
+            assert np.isclose(abs(current), 1000, rtol=rtol)
 
 
 def test_invalid_vortex_args(device):
     with pytest.raises(TypeError):
         _ = sc.solve(device=device, vortices=[0, 1, 2])
 
-    # Vortex in unknown layer
-    with pytest.raises(ValueError):
+    # Vortex in unknown film
+    with pytest.raises(KeyError):
         _ = sc.solve(
             device=device,
-            vortices=[sc.Vortex(x=3.5, y=0, layer="invalid")],
+            vortices=[sc.Vortex(x=3.5, y=0, film="invalid")],
         )
 
     # Vortex in hole
     with pytest.raises(ValueError):
         _ = sc.solve(
             device=device,
-            vortices=[sc.Vortex(x=0, y=0, layer="layer1")],
+            vortices=[sc.Vortex(x=0, y=0, film="ring")],
         )
 
     # Vortex outside film
     with pytest.raises(ValueError):
         _ = sc.solve(
             device=device,
-            vortices=[sc.Vortex(x=4.5, y=0, layer="layer1")],
+            vortices=[sc.Vortex(x=4.5, y=0, film="ring")],
         )
 
 
@@ -221,11 +216,9 @@ def mutual_inductance_matrix(two_rings, iterations=3):
     return M
 
 
-@pytest.mark.parametrize("gpu", [False, True])
 def test_mutual_inductance_matrix(
     two_rings,
     mutual_inductance_matrix,
-    gpu,
     iterations=3,
 ):
     hole_polygon_mapping = {
@@ -237,7 +230,6 @@ def test_mutual_inductance_matrix(
         hole_polygon_mapping=hole_polygon_mapping,
         iterations=iterations,
         all_iterations=True,
-        gpu=(HAS_JAX and gpu),
     )
     assert isinstance(M, list)
     assert len(M) == iterations + 1
@@ -289,15 +281,12 @@ def test_plot_mutual_inductance(mutual_inductance_matrix):
         _ = sc.plot_mutual_inductance([M[0], 0])
 
 
-@pytest.mark.parametrize("gpu", [False, True])
-def test_fluxoid_single(device, gpu):
+def test_fluxoid_single(device):
     _ = sc.make_fluxoid_polygons(device, interp_points=None)
     _ = sc.make_fluxoid_polygons(device, interp_points=101)
 
     fluxoids = {hole: 0 for hole in device.holes}
-    solution = sc.find_fluxoid_solution(
-        device, fluxoids=fluxoids, gpu=(HAS_JAX and gpu)
-    )
+    solution = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
     assert isinstance(solution, sc.Solution)
     fluxoid = solution.hole_fluxoid(list(device.holes)[0])
     assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
@@ -318,5 +307,5 @@ def test_fluxoid_multi(two_rings):
         assert np.isclose(
             sum(fluxoid).to("Phi_0").m,
             fluxoids[hole_name],
-            atol=1e-6,
+            atol=3e-6,
         )

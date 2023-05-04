@@ -1,123 +1,16 @@
-import contextlib
 import copy
+import os
 import pickle
 import tempfile
+from typing import Optional
 
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import scipy.sparse as sp
-import shapely
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend
-
-
-def test_set_polygon_points():
-    box = shapely.geometry.box(0, 0, 1, 1).exterior.coords
-    hole = shapely.geometry.box(0.25, 0.25, 0.75, 0.75, ccw=False)
-    polygon = shapely.geometry.polygon.Polygon(box, holes=[hole.exterior.coords])
-
-    with pytest.raises(ValueError):
-        _ = sc.Polygon("bad", layer="None", points=polygon)
-
-    invalid = shapely.geometry.polygon.LinearRing(
-        [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
-    )
-
-    with pytest.raises(ValueError):
-        _ = sc.Polygon(points=invalid)
-
-    x, y = sc.geometry.circle(1).T
-    z = np.ones_like(x)
-    points = np.stack([x, y, z], axis=1)
-    with pytest.raises(ValueError):
-        _ = sc.Polygon(points=points)
-
-
-def test_polygon_on_boundary(radius=1):
-    points = sc.geometry.circle(radius, points=501)
-    polygon = sc.Polygon(points=points)
-    Delta_x, Delta_y = polygon.extents
-    assert np.isclose(Delta_x, 2 * radius)
-    assert np.isclose(Delta_y, 2 * radius)
-
-    smaller = sc.geometry.circle(radius - 0.01)
-    bigger = sc.geometry.circle(radius + 0.01)
-    assert polygon.on_boundary(smaller, radius=0.1).all()
-    assert polygon.on_boundary(bigger, radius=0.1).all()
-    assert not polygon.on_boundary(smaller, radius=0.001).any()
-    assert not polygon.on_boundary(bigger, radius=0.001).any()
-    assert issubclass(polygon.on_boundary(smaller, index=True).dtype.type, np.integer)
-
-
-def test_polygon_join():
-    square1 = sc.Polygon(points=sc.geometry.box(1))
-    square2 = sc.Polygon(points=sc.geometry.translate(sc.geometry.box(1), 0.5, 0.5))
-    square3 = sc.geometry.box(1, center=(-0.25, 0.25))
-    name = "name"
-    layer = "layer"
-    for items in (
-        [square1, square2, square3],
-        [square1.points, square2.points, square3],
-        [square1.polygon, square2.polygon, square3],
-    ):
-        _ = sc.Polygon.from_union(items, name=name, layer=layer)
-        _ = sc.Polygon.from_difference(items, name=name, layer=layer)
-        _ = sc.Polygon.from_intersection(items, name=name, layer=layer)
-
-    assert (
-        square1.union(square2, square3).polygon
-        == sc.Polygon.from_union(items, name=name, layer=layer).polygon
-    )
-
-    assert (
-        square1.intersection(square2, square3).polygon
-        == sc.Polygon.from_intersection(items, name=name, layer=layer).polygon
-    )
-
-    assert (
-        square1.difference(square2, square3).polygon
-        == sc.Polygon.from_difference(items, name=name, layer=layer).polygon
-    )
-
-    square1.layer = square2.layer = None
-    with pytest.raises(ValueError):
-        _ = sc.Polygon.from_difference([square1, square1], name=name, layer=layer)
-
-    with pytest.raises(ValueError):
-        _ = square1._join_via(square2, "invalid")
-
-    with pytest.raises(ValueError):
-        _ = sc.Polygon.from_difference(
-            [square1, square2],
-            name=name,
-            layer=layer,
-            symmetric=True,
-        )
-
-    assert square1.resample(False) == square1
-    assert square1.resample(None).points.shape == square1.points.shape
-    assert square1.resample(71).points.shape != square1.points.shape
-
-    with pytest.raises(ValueError):
-        bowtie = [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
-        _ = sc.Polygon(name="bowtie", layer="layer", points=bowtie)
-
-    with pytest.raises(ValueError):
-        square1.name = None
-        sc.Device._validate_polygons([square1], "label")
-
-    for min_points, smooth in [(0, 0), (500, 0), (500, 10)]:
-        points, triangles = square1.make_mesh(min_points=min_points, smooth=smooth)
-        if min_points:
-            assert points.shape[0] > min_points
-
-
-def test_plot_polygon():
-    with non_gui_backend():
-        ax = sc.Polygon("square1", layer="layer", points=sc.geometry.box(1)).plot()
-        assert isinstance(ax, plt.Axes)
 
 
 @pytest.fixture(scope="module")
@@ -153,9 +46,9 @@ def device():
 
     abstract_regions = [
         sc.Polygon(
-            "bounding_box",
+            "abstract",
             layer="layer0",
-            points=sc.geometry.box(12, angle=90),
+            points=sc.geometry.box(5, angle=90),
         ),
     ]
 
@@ -179,11 +72,9 @@ def device():
     with pytest.raises(AttributeError):
         device.layers["layer0"].Lambda = 0
     with pytest.raises(ValueError):
-        device.compute_matrices()
-    with pytest.raises(ValueError):
         device.solve_dtype = "int64"
 
-    assert device.get_arrays() is None
+    assert device.meshes is None
 
     with pytest.raises(TypeError):
         device.scale(xfact=-1, origin="center")
@@ -199,7 +90,7 @@ def device():
     dz = 1
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
     d = device.copy()
-    assert d.translate(dx, dy, dz=dz, inplace=True) is d
+    assert d == device
 
     return device
 
@@ -250,13 +141,14 @@ def device_with_mesh():
         holes=holes,
         abstract_regions=abstract_regions,
     )
-    assert device.vertex_distances is None
-    assert device.triangle_areas is None
+    assert device.meshes is None
     device.make_mesh(min_points=3000)
-    assert isinstance(device.vertex_distances, np.ndarray)
-    assert isinstance(device.triangle_areas, np.ndarray)
-    centroids = sc.fem.centroids(device.points, device.triangles)
-    assert centroids.shape[0] == device.triangles.shape[0]
+    assert isinstance(device.meshes, dict)
+    assert set(device.meshes) == set(device.films)
+    assert all(isinstance(mesh, sc.device.Mesh) for mesh in device.meshes.values())
+    for mesh in device.meshes.values():
+        centroids = sc.fem.centroids(mesh.sites, mesh.elements)
+        assert centroids.shape[0] == mesh.elements.shape[0]
 
     print(device)
     assert device == device
@@ -282,61 +174,48 @@ def device_with_mesh():
     assert (
         copy.deepcopy(device)
         == copy.copy(device)
-        == device.copy(with_arrays=True)
+        == device.copy(with_mesh=True)
         == device
     )
 
     d = device.scale(xfact=-1)
     assert isinstance(d, sc.Device)
-    assert d.points is None
+    assert d.meshes is None
     d = device.scale(yfact=-1)
     assert isinstance(d, sc.Device)
-    assert d.points is None
+    assert d.meshes is None
     d = device.rotate(90)
     assert isinstance(d, sc.Device)
-    assert d.points is None
+    assert d.meshes is None
     d = device.mirror_layers(about_z=-1)
     assert isinstance(d, sc.Device)
-    assert np.array_equal(d.points, device.points)
+    assert d.meshes is None
     dx = 1
     dy = -1
     dz = 1
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
-    d = device.copy(with_arrays=True, copy_arrays=True)
-    assert d.translate(dx, dy, dz=dz, inplace=True) is d
-
-    for points in ("poly_points", "points"):
-        x0, y0 = getattr(device, points).mean(axis=0)
-        z0s = {layer.name: layer.z0 for layer in layers}
-        with device.translation(dx, dy, dz=dz):
-            x, y = getattr(device, points).mean(axis=0)
-            assert np.isclose(x, x0 + dx)
-            assert np.isclose(y, y0 + dy)
-            for layer in device.layers.values():
-                assert np.isclose(layer.z0, z0s[layer.name] + dz)
-        x, y = getattr(device, points).mean(axis=0)
-        assert np.isclose(x, x0)
-        assert np.isclose(y, y0)
-        for layer in device.layers.values():
-            assert np.isclose(layer.z0, z0s[layer.name])
-
+    d = device.copy(with_mesh=True, copy_mesh=True)
     return device
 
 
 @pytest.mark.parametrize("subplots", [False, True])
 @pytest.mark.parametrize("legend", [False, True])
-def test_plot_device(device, device_with_mesh, legend, subplots, mesh=True):
+def test_plot_device(
+    device: sc.Device,
+    device_with_mesh: sc.Device,
+    legend: bool,
+    subplots: bool,
+    mesh: bool = True,
+):
     with non_gui_backend():
-        fig, axes = device.plot(legend=legend, subplots=subplots)
+        fig, axes = device.plot_polygons(legend=legend, subplots=subplots)
         if subplots:
             assert isinstance(axes, np.ndarray)
             assert all(isinstance(ax, plt.Axes) for ax in axes.flat)
             with pytest.raises(ValueError):
                 fig, ax = plt.subplots()
-                _ = device.plot(ax=ax, subplots=subplots)
-        with pytest.raises(RuntimeError):
-            _ = device.plot(legend=legend, subplots=subplots, mesh=mesh)
-        fig, axes = device_with_mesh.plot(legend=legend, subplots=subplots, mesh=mesh)
+                _ = device.plot_polygons(ax=ax, subplots=subplots)
+        fig, axes = device_with_mesh.plot_mesh(subplots=subplots)
         plt.close("all")
 
 
@@ -371,49 +250,57 @@ def test_draw_device(device, legend, subplots):
 
 
 @pytest.mark.parametrize(
-    ", ".join(["min_points", "smooth"]),
-    [(None, None), (None, 20), (1200, None), (1200, 20)],
+    ", ".join(["min_points", "max_edge_length", "smooth"]),
+    [(None, None, None), (None, 0.4, 20), (1200, 0.4, None), (1200, 0.4, 20)],
 )
 @pytest.mark.parametrize(
-    "weight_method", ["uniform", "half_cotangent", "inv_euclidean", "invalid"]
+    "buffer_factor, buffer", [(None, None), (None, 0.5), (0.05, None)]
 )
-def test_make_mesh(device, min_points, smooth, weight_method):
-    if weight_method == "invalid":
-        context = pytest.raises(ValueError)
-    else:
-        context = contextlib.nullcontext()
+@pytest.mark.parametrize("preserve_boundary", [False, True])
+def test_make_mesh(
+    device: sc.Device,
+    min_points: Optional[int],
+    max_edge_length: Optional[float],
+    smooth: Optional[int],
+    buffer_factor: Optional[float],
+    buffer: Optional[float],
+    preserve_boundary: bool,
+):
+    device.make_mesh(
+        min_points=min_points,
+        max_edge_length=max_edge_length,
+        smooth=smooth,
+        buffer_factor=buffer_factor,
+        buffer=buffer,
+        preserve_boundary=preserve_boundary,
+    )
 
-    with context:
-        device.make_mesh(
-            min_points=min_points,
-            smooth=smooth,
-            weight_method=weight_method,
-        )
-
-    if weight_method == "invalid":
-        return
-
-    assert device.points is not None
-    assert device.triangles is not None
+    assert isinstance(device.meshes, dict)
+    assert set(device.meshes) == set(device.films)
     if min_points:
-        assert device.points.shape[0] >= min_points
-
-    assert isinstance(device.weights, np.ndarray)
-    assert device.weights.shape == (device.points.shape[0],)
+        for mesh in device.meshes.values():
+            assert len(mesh.sites) >= min_points
 
 
 @pytest.mark.parametrize("save_mesh", [False, True])
-@pytest.mark.parametrize("compressed", [False, True])
-def test_device_to_file(device, device_with_mesh, save_mesh, compressed):
-    with tempfile.TemporaryDirectory() as directory:
-        device.to_file(directory, save_mesh=save_mesh, compressed=compressed)
-        loaded_device = sc.Device.from_file(directory)
-    assert device == loaded_device
+@pytest.mark.parametrize("compress", [False, True])
+def test_device_to_hdf5(
+    device: sc.Device,
+    device_with_mesh: sc.Device,
+    save_mesh: bool,
+    compress: bool,
+):
+    for sc_device in (device, device_with_mesh):
+        with tempfile.TemporaryDirectory() as directory:
+            fname = os.path.join(directory, "test-0.h5")
+            sc_device.to_hdf5(fname, save_mesh=save_mesh, compress=compress)
+            loaded_device = sc.Device.from_hdf5(fname)
+            assert loaded_device == sc_device
 
-    with tempfile.TemporaryDirectory() as directory:
-        device_with_mesh.to_file(directory, save_mesh=save_mesh, compressed=compressed)
-        loaded_device = sc.Device.from_file(directory)
-    assert device_with_mesh == loaded_device
+            with h5py.File(os.path.join(directory, "test-1.h5"), "x") as h5file:
+                sc_device.to_hdf5(h5file, save_mesh=save_mesh, compress=compress)
+                loaded_device = sc.Device.from_hdf5(h5file)
+                assert loaded_device == sc_device
 
 
 def test_pickle_device(device, device_with_mesh):
@@ -424,20 +311,6 @@ def test_pickle_device(device, device_with_mesh):
     assert loaded_device_with_mesh == device_with_mesh
 
     assert loaded_device.ureg("1 m") == loaded_device.ureg("1000 mm")
-
-
-@pytest.mark.parametrize("dense", [False, True])
-def test_copy_arrays(device_with_mesh, dense):
-    arrays = device_with_mesh.get_arrays(copy_arrays=False, dense=dense)
-    copied_arrays = device_with_mesh.get_arrays(copy_arrays=True, dense=dense)
-
-    for key, val in arrays.items():
-        assert val is not copied_arrays[key]
-        if sp.issparse(val):
-            assert not dense
-            assert np.array_equal(val.toarray(), copied_arrays[key].toarray())
-        else:
-            assert np.array_equal(val, copied_arrays[key])
 
 
 def poly_derivative(coeffs):
@@ -456,9 +329,10 @@ def assert_consistent_polynomial(xs, ys, coeffs, rtol=1e-3, atol=5e-3):
 
 
 @pytest.mark.parametrize("poly_degree", [0, 1, 2])
-def test_gradient_triangles(device_with_mesh, poly_degree):
-    points = device_with_mesh.points
-    triangles = device_with_mesh.triangles
+def test_gradient_triangles(device_with_mesh: sc.Device, poly_degree: int):
+    mesh = device_with_mesh.meshes["disk"]
+    points = mesh.sites
+    triangles = mesh.elements
 
     x, y = points[:, 0], points[:, 1]
     centroids = sc.fem.centroids(points, triangles)
@@ -487,9 +361,10 @@ def test_gradient_triangles(device_with_mesh, poly_degree):
 
 
 @pytest.mark.parametrize("poly_degree", [0, 1, 2])
-def test_gradient_vertices(device_with_mesh, poly_degree):
-    points = device_with_mesh.points
-    triangles = device_with_mesh.triangles
+def test_gradient_vertices(device_with_mesh: sc.Device, poly_degree: int):
+    mesh = device_with_mesh.meshes["disk"]
+    points = mesh.sites
+    triangles = mesh.elements
 
     x, y = points[:, 0], points[:, 1]
 

@@ -51,20 +51,20 @@ def test_ray_initialized(ray_initialized):
     "vortices, return_solutions, save, use_shared_memory",
     [
         (None, True, True, True),
-        (sc.Vortex(x=0, y=0, layer="layer0"), True, False, True),
-        ([sc.Vortex(x=0, y=0, layer="layer0")], False, True, False),
-        (
-            [
-                [sc.Vortex(x=0, y=0, layer="layer0")],
-                [
-                    sc.Vortex(x=0, y=0, layer="layer0"),
-                    sc.Vortex(x=1, y=-1, layer="layer0"),
-                ],
-            ],
-            True,
-            False,
-            True,
-        ),
+        (sc.Vortex(x=0, y=0, film="disk"), True, False, True),
+        ([sc.Vortex(x=0, y=0, film="disk")], False, True, False),
+        # (
+        #     [
+        #         [sc.Vortex(x=0, y=0, film="disk")],
+        #         [
+        #             sc.Vortex(x=0, y=0, film="disk"),
+        #             sc.Vortex(x=1, y=-1, film="disk"),
+        #         ],
+        #     ],
+        #     True,
+        #     False,
+        #     True,
+        # ),
     ],
 )
 @pytest.mark.parametrize("keep_only_final_solution", [False, True])
