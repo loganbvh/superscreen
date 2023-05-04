@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 from scipy import integrate
@@ -9,6 +9,12 @@ from .device import Device
 from .layer import Layer
 from .mesh import Mesh
 from .polygon import Polygon
+
+
+class TerminalSet(NamedTuple):
+    film: str
+    source_terminals: List[Polygon]
+    drain_terminal: Polygon
 
 
 def stream_from_current_density(points: np.ndarray, J: np.ndarray) -> np.ndarray:
