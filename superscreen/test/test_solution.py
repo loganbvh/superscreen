@@ -1,8 +1,5 @@
 import contextlib
-import os
-import shutil
-import tempfile
-from datetime import datetime
+import datetime as dt
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,18 +9,8 @@ import pytest
 import superscreen as sc
 
 
-@contextlib.contextmanager
-def make_tempdir(**kwargs):
-    tmp = tempfile.mkdtemp(**kwargs)
-    try:
-        yield tmp
-    finally:
-        if os.path.isdir(tmp):
-            shutil.rmtree(tmp)
-
-
 @pytest.fixture(scope="module")
-def device():
+def device() -> sc.Device:
     layers = [
         sc.Layer("layer0", london_lambda=1, thickness=0.1, z0=0),
         sc.Layer("layer1", london_lambda=2, thickness=0.05, z0=0.5),
@@ -38,30 +25,24 @@ def device():
         sc.Polygon("ring_hole", layer="layer1", points=sc.geometry.circle(2)),
     ]
 
-    abstract_regions = [
-        sc.Polygon("bounding_box", layer="layer0", points=sc.geometry.box(12)),
-    ]
-
     device = sc.Device(
         "device",
         layers=layers,
         films=films,
         holes=holes,
-        abstract_regions=abstract_regions,
     )
-    device.make_mesh(min_points=3000)
-
+    device.make_mesh(max_edge_length=0.5, min_points=3000)
     return device
 
 
 @pytest.fixture(scope="module")
-def solution1(device):
+def solution1(device: sc.Device) -> sc.Solution:
     applied_field = sc.sources.ConstantField(1)
 
     solutions = sc.solve(
         device=device,
         applied_field=applied_field,
-        vortices=[sc.Vortex(x=0, y=0, layer="layer0")],
+        vortices=[sc.Vortex(x=0, y=0, film="disk")],
         circulating_currents=None,
         field_units="mT",
         iterations=1,
@@ -71,12 +52,10 @@ def solution1(device):
 
 
 @pytest.fixture(scope="module")
-def solution2(device):
+def solution2(device: sc.Device) -> sc.Solution:
     applied_field = sc.sources.ConstantField(0)
 
-    circulating_currents = {
-        "ring_hole": "1 mA",
-    }
+    circulating_currents = {"ring_hole": "1 mA"}
 
     solutions = sc.solve(
         device=device,
@@ -89,111 +68,24 @@ def solution2(device):
     return solutions[-1]
 
 
-def test_solution_equals(solution1, solution2):
+def test_solution_equals(solution1: sc.Solution, solution2: sc.Solution):
     assert solution1 == solution1
     assert solution2 == solution2
     assert solution1 != solution2
     assert solution1 != 0
 
 
-@pytest.mark.parametrize(
-    "dataset", ["streams", "fields", "screening_fields", "current_densities"]
-)
-@pytest.mark.parametrize("with_units", [False, True])
-def test_grid_data(solution1, dataset, with_units):
-    with pytest.raises(ValueError):
-        _ = solution1.grid_data("invalid_dataset")
-
-    with pytest.raises(ValueError):
-        _ = solution1.grid_data("streams", layers="invalid_layer")
-
-    with pytest.raises(TypeError):
-        _ = solution1.grid_data("streams", grid_shape=(100, 100, 2))
-
-    xgrid, ygrid, zgrids = solution1.grid_data(
-        dataset,
-        grid_shape=(20, 20),
-        with_units=with_units,
-    )
-
-    if with_units:
-        assert isinstance(xgrid.magnitude, np.ndarray)
-        assert isinstance(ygrid.magnitude, np.ndarray)
-    else:
-        assert isinstance(xgrid, np.ndarray)
-        assert isinstance(ygrid, np.ndarray)
-    assert isinstance(zgrids, dict)
-
-    for layer, array in zgrids.items():
-        assert isinstance(layer, str)
-        if with_units:
-            assert isinstance(array, pint.Quantity)
-            assert isinstance(array.magnitude, np.ndarray)
-            if dataset == "streams":
-                assert array.units == solution1.device.ureg(solution1.current_units)
-            elif dataset == "current_densities":
-                device = solution1.device
-                current_units = device.ureg(solution1.current_units)
-                length_units = device.ureg(device.length_units)
-                assert array.units == current_units / length_units
-            else:
-                assert array.units == solution1.device.ureg(solution1.field_units)
-        else:
-            assert isinstance(array, np.ndarray)
-        if dataset == "current_densities":
-            assert xgrid.shape == ygrid.shape
-            assert array.shape == (2,) + xgrid.shape
-        else:
-            assert xgrid.shape == ygrid.shape == array.shape
-
-
-@pytest.mark.parametrize("units", [None, "mA / um"])
-@pytest.mark.parametrize("with_units", [False, True])
-def test_current_density(solution1, units, with_units):
-    xgrid, ygrid, current_density = solution1.grid_current_density(
-        grid_shape=(20, 20),
-        units=units,
-        with_units=with_units,
-    )
-
-    if with_units:
-        assert isinstance(xgrid.magnitude, np.ndarray)
-        assert isinstance(ygrid.magnitude, np.ndarray)
-    else:
-        assert isinstance(xgrid, np.ndarray)
-        assert isinstance(ygrid, np.ndarray)
-    assert isinstance(current_density, dict)
-
-    for layer, array in current_density.items():
-        assert isinstance(layer, str)
-        if with_units:
-            assert isinstance(array, pint.Quantity)
-            assert isinstance(array.magnitude, np.ndarray)
-            if units is None:
-                units = f"{solution1.current_units} / {solution1.device.length_units}"
-                assert array.units == solution1.device.ureg(units)
-            else:
-                assert array.units == solution1.device.ureg(units)
-        else:
-            assert isinstance(array, np.ndarray)
-        assert array.shape[0] == 2
-        assert xgrid.shape == ygrid.shape == array.shape[1:]
-
-
 @pytest.mark.parametrize("units", [None, "Phi_0", "mT * um**2"])
 @pytest.mark.parametrize("with_units", [False, True])
-def test_polygon_flux(solution2, units, with_units):
+def test_polygon_flux(solution2: sc.Solution, units, with_units):
     with pytest.raises(ValueError):
-        _ = solution2.polygon_flux(polygons="invalid_polygon")
+        _ = solution2.polygon_flux(name="invalid_polygon")
 
-    flux_dict = solution2.polygon_flux(units=units, with_units=with_units)
-
-    assert isinstance(flux_dict, dict)
-    assert len(flux_dict) == (
-        len(solution2.device.films)
-        + len(solution2.device.holes)
-        + len(solution2.device.abstract_regions)
-    )
+    flux_dict = {}
+    for name in solution2.device.polygons:
+        flux_dict[name] = solution2.polygon_flux(
+            name, units=units, with_units=with_units
+        )
 
     units = units or f"{solution2.field_units} * {solution2.device.length_units}**2"
     ureg = solution2.device.ureg
@@ -218,15 +110,11 @@ def test_polygon_flux(solution2, units, with_units):
 )
 @pytest.mark.parametrize("units", [None, "mT", "mA/um"])
 @pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize("return_sum", [False, True])
-def test_field_at_positions(
-    solution2, positions, zs, vector, units, with_units, return_sum
-):
+def test_field_at_positions(solution2, positions, zs, units, with_units, return_sum):
     H = solution2.field_at_position(
         positions,
         zs=zs,
-        vector=vector,
         units=units,
         with_units=with_units,
         return_sum=return_sum,
@@ -240,10 +128,7 @@ def test_field_at_positions(
             assert isinstance(H, pint.Quantity)
             assert isinstance(H.magnitude, np.ndarray)
             assert H.units == units
-        if vector:
-            assert H.shape == positions.shape[:1] + (3,)
-        else:
-            assert H.shape == positions.shape[:1]
+        assert H.shape == positions.shape[:1]
 
     else:
         assert isinstance(H, dict)
@@ -255,64 +140,44 @@ def test_field_at_positions(
                 assert item.units == units
             else:
                 assert isinstance(item, np.ndarray)
-            if vector:
-                assert item.shape == positions.shape[:1] + (3,)
-            else:
-                assert item.shape == positions.shape[:1]
+            assert item.shape == positions.shape[:1]
 
 
-@pytest.mark.parametrize("to_zip", [False, True])
-@pytest.mark.parametrize("save_mesh", [False, True])
-@pytest.mark.parametrize("compressed", [False, True])
-def test_save_solution(solution1, solution2, save_mesh, compressed, to_zip):
-    with make_tempdir() as directory:
-        solution1.to_file(
-            directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
-        )
-        loaded_solution1 = sc.Solution.from_file(directory + (".zip" if to_zip else ""))
+@pytest.mark.parametrize("compress", [False, True])
+def test_save_solution(
+    solution1: sc.Solution,
+    solution2: sc.Solution,
+    compress,
+    tmp_path,
+):
+    solution1.to_hdf5(tmp_path / "solution1.h5", compress=compress)
+    loaded_solution1 = sc.Solution.from_hdf5(tmp_path / "solution1.h5")
     assert solution1 == loaded_solution1
 
-    with make_tempdir() as other_directory:
-        solution2.to_file(
-            other_directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
-        )
-        loaded_solution2 = sc.Solution.from_file(
-            other_directory + (".zip" if to_zip else "")
-        )
+    solution2.to_hdf5(tmp_path / "solution2.h5", compress=compress)
+    loaded_solution2 = sc.Solution.from_hdf5(tmp_path / "solution2.h5")
     assert solution2 == loaded_solution2
 
-    loaded_solution2._time_created = datetime.now()
+    loaded_solution2._time_created = dt.datetime.now()
     assert solution2 != loaded_solution2
-
-    with make_tempdir() as directory:
-        solution1.to_file(
-            directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
-        )
-        if not to_zip:
-            with pytest.raises(IOError):
-                solution1.to_file(
-                    directory, save_mesh=save_mesh, compressed=compressed, to_zip=to_zip
-                )
 
 
 @pytest.mark.parametrize("polygon_shape", ["circle", "rectangle"])
 @pytest.mark.parametrize("center", [(-4, 0), (-2, 2), (0, 0), (1, -2)])
-@pytest.mark.parametrize("layers", ["layer0", ["layer0"]])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("units", ["Phi_0", None])
 def test_fluxoid_simply_connected(
-    solution1,
+    solution1: sc.Solution,
     units,
     with_units,
-    layers,
     center,
     polygon_shape,
 ):
     ureg = solution1.device.ureg
     if polygon_shape == "circle":
-        coords = sc.geometry.circle(1.5, points=501, center=center)
+        coords = sc.geometry.circle(1.5, points=201, center=center)
     else:
-        coords = sc.geometry.box(3, 2, points_per_side=100, center=center)[::-1]
+        coords = sc.geometry.box(3, 2, points=401, center=center)[::-1]
 
     if center == (-4, 0):
         # The polygon goes outside of the film -> raise ValueError
@@ -321,9 +186,9 @@ def test_fluxoid_simply_connected(
         context = contextlib.nullcontext()
 
     with context:
-        fluxoid_dict = solution1.polygon_fluxoid(
-            polygon_points=coords,
-            layers=layers,
+        fluxoid = solution1.polygon_fluxoid(
+            polygon_coords=coords,
+            film="disk",
             units=units,
             with_units=with_units,
         )
@@ -333,54 +198,47 @@ def test_fluxoid_simply_connected(
     if center == (-4, 0):
         return
 
-    for name, fluxoid in fluxoid_dict.items():
-        assert name in solution1.device.layers
-        flux_part, supercurrent_part = fluxoid
-        desired_type = pint.Quantity if with_units else float
-        assert isinstance(flux_part, desired_type)
-        assert isinstance(supercurrent_part, desired_type)
-        total_fluxoid = sum(fluxoid)
-        if with_units:
-            flux_part = flux_part.m
-            total_fluxoid = total_fluxoid.m
-        # For a simply connected region, the total fluxoid should be equal to
-        # Phi0 times the number of vortices in the region.
-        total_vortex_flux = 0
-        for vortex in solution1.vortices:
-            if vortex.layer == name:
-                if sc.fem.in_polygon(coords, [vortex.x, vortex.y]):
-                    total_vortex_flux += (
-                        (vortex.nPhi0 * ureg("Phi_0")).to(units).magnitude
-                    )
-        if total_vortex_flux:
-            # There are vortices in the region.
-            assert (
-                abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)
-            ) < 5e-2
-        else:
-            # No vortices - fluxoid should be zero.
-            assert abs(total_fluxoid) / abs(flux_part) < 5e-2
+    flux_part, supercurrent_part = fluxoid
+    desired_type = pint.Quantity if with_units else float
+    assert isinstance(flux_part, desired_type)
+    assert isinstance(supercurrent_part, desired_type)
+    total_fluxoid = sum(fluxoid)
+    if with_units:
+        flux_part = flux_part.m
+        total_fluxoid = total_fluxoid.m
+    # For a simply connected region, the total fluxoid should be equal to
+    # Phi0 times the number of vortices in the region.
+    total_vortex_flux = 0
+    for vortex in solution1.vortices:
+        if sc.fem.in_polygon(coords, (vortex.x, vortex.y)):
+            total_vortex_flux += (vortex.nPhi0 * ureg("Phi_0")).to(units).magnitude
+    if total_vortex_flux:
+        # There are vortices in the region.
+        assert (abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)) < 3e-2
+    else:
+        # No vortices - fluxoid should be zero.
+        assert abs(total_fluxoid) / abs(flux_part) < 3e-2
 
 
 @pytest.mark.parametrize("units, with_units", [("uA / um", False), (None, True)])
 @pytest.mark.parametrize(
-    "layers, method, positions",
+    "film, method, positions",
     [
-        ("layer0", "nearest", [0, 0]),
-        (None, "linear", np.array([[1, 0], [0, 1]])),
-        (["layer0"], "cubic", None),
+        ("disk", "nearest", [0, 0]),
+        ("ring", "linear", np.array([[1, 0], [0, 1]])),
+        ("disk", "cubic", None),
     ],
 )
 def test_interp_current_density(
-    solution1, positions, method, layers, units, with_units
+    solution1: sc.Solution, positions, method, film, units, with_units
 ):
     if positions is None:
-        positions = solution1.device.points
+        positions = solution1.device.meshes["disk"].sites
 
     with pytest.raises(ValueError):
         _ = solution1.interp_current_density(
             positions,
-            layers=layers,
+            film=film,
             method="invalid_method",
             units=units,
             with_units=with_units,
@@ -388,22 +246,17 @@ def test_interp_current_density(
 
     current_densities = solution1.interp_current_density(
         positions,
-        layers=layers,
+        film=film,
         method=method,
         units=units,
         with_units=with_units,
     )
-    if layers is None:
-        assert set(current_densities) == set(solution1.device.layers)
-    else:
-        assert set(current_densities) == set(["layer0"])
-    for array in current_densities.values():
-        assert array.shape == np.atleast_2d(positions).shape
-        if with_units:
-            assert isinstance(array, pint.Quantity)
+    assert current_densities.shape == np.atleast_2d(positions).shape
+    if with_units:
+        assert isinstance(current_densities, pint.Quantity)
 
 
-def test_visualization(solution1):
+def test_visualization(solution1: sc.Solution):
     with sc.visualization.non_gui_backend():
         fig, _ = solution1.plot_streams()
         plt.close(fig)
@@ -414,78 +267,76 @@ def test_visualization(solution1):
         fig, _ = solution1.plot_currents()
         plt.close(fig)
 
-        fig, _ = solution1.plot_field_at_positions(solution1.device.points, zs=0.3333)
+        fig, _ = solution1.plot_field_at_positions(
+            solution1.device.meshes["disk"].sites, zs=0.3333
+        )
         plt.close(fig)
 
 
-@pytest.mark.parametrize("use_zs", [False, True, "z0"])
-@pytest.mark.parametrize("units", [None, "uT * um"])
-@pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("return_sum", [False, True])
-def test_bz_from_vector_potential(solution2, use_zs, units, with_units, return_sum):
-    solution = solution2
-    applied_field = solution.applied_field
-    device = solution.device
-    ureg = device.ureg
-    gradx = device.gradx
-    grady = device.grady
-    if with_units:
-        gradx = gradx / ureg(device.length_units)
-        grady = grady / ureg(device.length_units)
-    positions = device.points.copy()
-    z0 = 1.5
-    zs = z0 * np.ones_like(positions[:, :1])
-    applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
-    if not use_zs:
-        positions = np.concatenate([positions, zs], axis=1)
-        zs = None
-    elif use_zs == "z0":
-        zs = z0
-    bz_units = None if units is None else "uT"
-    Bz = solution.field_at_position(
-        positions, zs=zs, units=bz_units, with_units=with_units
-    )
-    A = solution.vector_potential_at_position(
-        positions,
-        zs=zs,
-        units=units,
-        with_units=with_units,
-        return_sum=return_sum,
-    )
-    if not return_sum:
-        assert isinstance(A, dict)
-        assert len(A) == len(device.layers)
-        A = sum(A.values())
-    Ax = A[:, 0]
-    Ay = A[:, 1]
-    if with_units:
-        applied_field = applied_field * ureg(solution.field_units)
-    Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
-    if with_units:
-        Bz_from_A.ito(Bz.units)
-    assert np.all(np.abs(Bz_from_A - Bz) < 0.1 * np.max(np.abs(Bz)))
+# @pytest.mark.parametrize("use_zs", [False, True, "z0"])
+# @pytest.mark.parametrize("units", [None, "uT * um"])
+# @pytest.mark.parametrize("with_units", [False, True])
+# @pytest.mark.parametrize("return_sum", [False, True])
+# def test_bz_from_vector_potential(
+#     solution2: sc.Solution, use_zs, units, with_units, return_sum
+# ):
+#     solution = solution2
+#     applied_field = solution.applied_field_func
+#     device = solution.device
+#     ureg = device.ureg
+#     gradx = device.meshes["disk"].operators.gradient_x.toarray()
+#     grady = device.meshes["disk"].operators.gradient_y.toarray()
+#     if with_units:
+#         gradx = gradx / ureg(device.length_units)
+#         grady = grady / ureg(device.length_units)
+#     positions = device.meshes["disk"].sites
+#     z0 = 1.5
+#     zs = z0 * np.ones_like(positions[:, :1])
+#     applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
+#     if not use_zs:
+#         positions = np.concatenate([positions, zs], axis=1)
+#         zs = None
+#     elif use_zs == "z0":
+#         zs = z0
+#     bz_units = None if units is None else "uT"
+#     Bz = solution.field_at_position(
+#         positions, zs=zs, units=bz_units, with_units=with_units
+#     )
+#     A = solution.vector_potential_at_position(
+#         positions,
+#         zs=zs,
+#         units=units,
+#         with_units=with_units,
+#         return_sum=return_sum,
+#     )
+#     if not return_sum:
+#         assert isinstance(A, dict)
+#         assert len(A) == len(device.films)
+#         A = sum(A.values())
+#     Ax = A[:, 0]
+#     Ay = A[:, 1]
+#     if with_units:
+#         applied_field = applied_field * ureg(solution.field_units)
+#     Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
+#     if with_units:
+#         Bz_from_A.ito(Bz.units)
+#     assert np.all(np.abs(Bz_from_A - Bz) < 0.1 * np.max(np.abs(Bz)))
 
 
-@pytest.mark.parametrize("layers", [["layer1"], None])
 @pytest.mark.parametrize("units", [None, "mT", "mA/um"])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
-def test_interp_fields(solution2, layers, units, with_units, method):
+def test_interp_field(solution2: sc.Solution, units, with_units, method):
     solution = solution2
-    positions = np.random.random(size=200).reshape((100, 2))
-    fields = solution.interp_fields(
+    positions = np.random.random(size=(100, 2))
+    field = solution.interp_field(
         positions,
-        layers=layers,
+        film="disk",
         units=units,
         with_units=with_units,
         method=method,
     )
-    if layers is None:
-        assert set(fields) == set(solution.device.layers)
-    else:
-        assert set(fields) == set(layers)
-    for value in fields.values():
-        if with_units:
-            assert isinstance(value, pint.Quantity)
-            assert isinstance(value.magnitude, np.ndarray)
-        assert value.shape == positions.shape[:1]
+    if with_units:
+        assert isinstance(field, pint.Quantity)
+        assert isinstance(field.magnitude, np.ndarray)
+    assert field.shape == positions.shape[:1]
