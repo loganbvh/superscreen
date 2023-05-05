@@ -35,7 +35,7 @@ class SharedNDArray(NamedTuple):
 
 
 class SharedCSRArray(NamedTuple):
-    """A scipy.sparse.csr_matrix living in shared memory."""
+    """A scipy.sparse.csr_array living in shared memory."""
 
     data: Tuple[mp.RawArray, mp.RawArray, mp.RawArray]
     shape: Tuple[int, ...]
@@ -70,7 +70,7 @@ def shared_arrays_to_sparse(
 ) -> sp.spmatrix:
     """Convert shared RawArrays to a sparse matrix."""
     numpy_arrays = tuple(shared_array_to_numpy(a) for a in shared_arrays)
-    csr = sp.csc_matrix(tuple(numpy_arrays), shape=shape, copy=False)
+    csr = sp.csr_array(tuple(numpy_arrays), shape=shape, copy=False)
     return csr.asformat(fmt, copy=False)
 
 

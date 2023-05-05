@@ -135,6 +135,27 @@ class FilmSolution:
             field_from_other_films=field_from_other_films,
         )
 
+    def is_close(
+        self, other: "FilmSolution", rtol: float = 1e-5, atol: float = 1e-8
+    ) -> bool:
+        """Check whether two FilmSolutions are equal to within a tolerance.
+
+        Args:
+            other: The other FilmSolution
+            rtol: Relative tolerance (see :func:`np.allclose`)
+            atol: Absolute tolerance (see :func:`np.allclose`)
+
+        Returns:
+            True if the two FilmSolutions are equal within the given tolerances.
+        """
+        kw = dict(rtol=rtol, atol=atol)
+        return (
+            np.allclose(self.stream, other.stream, **kw)
+            and np.allclose(self.applied_field, other.applied_field, **kw)
+            and np.allclose(self.self_field, other.self_field, **kw)
+            and np.allclose(self.total_field, other.total_field, **kw)
+        )
+
     def __eq__(self, other) -> bool:
         if other is self:
             return True
@@ -146,12 +167,7 @@ class FilmSolution:
         if other.field_from_other_films is None:
             if self.field_from_other_films is not None:
                 return False
-        return (
-            np.allclose(self.stream, other.stream)
-            and np.allclose(self.current_density, other.current_density)
-            and np.allclose(self.applied_field, other.applied_field)
-            and np.allclose(self.self_field, other.self_field)
-        )
+        return self.is_close(other)
 
 
 class Solution:

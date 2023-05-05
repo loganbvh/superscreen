@@ -70,7 +70,7 @@ def centroids(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
 
 def adjacency_matrix(
     triangles: np.ndarray, sparse: bool = True
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.csr_array]:
     """Computes the adjacency matrix for a given set of triangles.
 
     Args:
@@ -88,9 +88,9 @@ def adjacency_matrix(
     row, col = edges[:, 0], edges[:, 1]
     nrow, ncol = row.max() + 1, col.max() + 1
     data = np.ones_like(row, dtype=int)
-    # This is the (data, (row_ind, col_ind)) format for csr_matrix,
+    # This is the (data, (row_ind, col_ind)) format for csr_array,
     # meaning that adj[row_ind[k], col_ind[k]] = data[k]
-    adj = sp.csr_matrix((data, (row, col)), shape=(nrow, ncol))
+    adj = sp.csr_array((data, (row, col)), shape=(nrow, ncol))
     # Undirected graph -> symmetric adjacency matrix
     adj = adj + adj.T
     adj = (adj > 0).astype(int)
@@ -101,7 +101,7 @@ def adjacency_matrix(
 
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
-) -> Union[np.ndarray, sp.lil_matrix]:
+) -> Union[np.ndarray, sp.lil_array]:
     """Weights edges by the inverse Euclidean distance of the edge lengths.
 
     Args:
@@ -117,8 +117,8 @@ def weights_inv_euclidean(
     # https://gitlab.com/uwegra/spharapy/-/blob/master/spharapy/trimesh.py
     N = points.shape[0]
     if sparse:
-        # Use lil_matrix for operations that change matrix sparsity
-        weights = sp.lil_matrix((N, N), dtype=float)
+        # Use lil_array for operations that change matrix sparsity
+        weights = sp.lil_array((N, N), dtype=float)
     else:
         weights = np.zeros((N, N), dtype=float)
 
@@ -142,7 +142,7 @@ def weights_inv_euclidean(
 
 def weights_half_cotangent(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
-) -> Union[np.ndarray, sp.lil_matrix]:
+) -> Union[np.ndarray, sp.lil_array]:
     """Weights edges by half of the cotangent of the two angles opposite the edge.
 
     Args:
@@ -159,7 +159,7 @@ def weights_half_cotangent(
     N = points.shape[0]
     if sparse:
         # Use lil_array for operations that change matrix sparsity
-        weights = sp.lil_matrix((N, N), dtype=float)
+        weights = sp.lil_array((N, N), dtype=float)
     else:
         weights = np.zeros((N, N), dtype=float)
 
@@ -207,7 +207,7 @@ def calculate_weights(
     triangles: np.ndarray,
     method: str,
     sparse: bool = True,
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.csr_array]:
     """Returns the weight matrix, calculated using the specified method.
 
     Args:
@@ -240,7 +240,7 @@ def laplace_operator(
     masses: Optional[np.ndarray] = None,
     weight_method: str = "half_cotangent",
     sparse: bool = True,
-) -> Union[np.ndarray, sp.csr_matrix]:
+) -> Union[np.ndarray, sp.csr_array]:
     """Laplacian operator for the mesh (sometimes called
     Laplace-Beltrami operator).
 
@@ -280,7 +280,7 @@ def gradient_triangles(
     points: np.ndarray,
     triangles: np.ndarray,
     areas: Optional[np.ndarray] = None,
-) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+) -> Tuple[sp.csr_array, sp.csr_array]:
     """Returns the triangle gradient operators ``Gx`` and ``Gy``.
 
     Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
@@ -314,12 +314,12 @@ def gradient_triangles(
     row_ind = np.array([[i] * 3 for i in range(len(triangles))]).ravel()
     # Column indices: [t[0,0], t[0,1], t[0,2], t[1,0], t[1,1], t[1,2], ...]
     col_ind = triangles.ravel()
-    Gx = sp.csr_matrix(
+    Gx = sp.csr_array(
         (tri_data[0], (row_ind, col_ind)),
         shape=shape,
         dtype=float,
     )
-    Gy = sp.csr_matrix(
+    Gy = sp.csr_array(
         (tri_data[1], (row_ind, col_ind)),
         shape=shape,
         dtype=float,
@@ -331,7 +331,7 @@ def gradient_vertices(
     points: np.ndarray,
     triangles: np.ndarray,
     areas: Optional[np.ndarray] = None,
-) -> Tuple[sp.csr_matrix, sp.csr_matrix]:
+) -> Tuple[sp.csr_array, sp.csr_array]:
     """Returns the vertex gradient operators ``gx`` and ``gy``.
 
     Given a mesh with ``n`` vertices and ``m`` triangles and a scalar field ``f``
@@ -375,14 +375,14 @@ def gradient_vertices(
         assert (weights > 0).all()
         gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
         gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])
-    return sp.csr_matrix(gx), sp.csr_matrix(gy)
+    return sp.csr_array(gx), sp.csr_array(gy)
 
 
 def gradient_edges(
     points: np.ndarray,
     edges: np.ndarray,
     edge_lengths: np.ndarray,
-) -> sp.csr_matrix:
+) -> sp.csr_array:
     """Build the gradient for a function living on the sites onto the edges.
 
     Args:
@@ -398,7 +398,7 @@ def gradient_edges(
     rows = np.concatenate([edge_indices, edge_indices])
     cols = np.concatenate([edges[:, 1], edges[:, 0]])
     values = np.concatenate([weights, -weights])
-    return sp.csr_matrix((values, (rows, cols)), shape=(len(edges), len(points)))
+    return sp.csr_array((values, (rows, cols)), shape=(len(edges), len(points)))
 
 
 def cdist_batched(
