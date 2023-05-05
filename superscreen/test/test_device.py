@@ -205,7 +205,6 @@ def test_plot_device(
     device_with_mesh: sc.Device,
     legend: bool,
     subplots: bool,
-    mesh: bool = True,
 ):
     with non_gui_backend():
         fig, axes = device.plot_polygons(legend=legend, subplots=subplots)

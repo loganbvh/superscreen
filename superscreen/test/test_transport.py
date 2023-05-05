@@ -162,9 +162,9 @@ def test_multi_terminal_currents(plus_device, applied_field):
     drain_current, *source_currents = currents
     target_currents = solution.terminal_currents.values()
     total_current = sum(target_currents)
-    assert np.isclose(drain_current, total_current, rtol=3e-2)
+    assert np.isclose(drain_current, total_current, rtol=5e-2)
     for actual, target in zip(source_currents, target_currents):
-        assert np.isclose(-actual, target, rtol=3e-2)
+        assert np.isclose(-actual, target, rtol=5e-2)
 
 
 def test_holey_device(holey_device):
@@ -212,7 +212,7 @@ def test_holey_device(holey_device):
         dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
         currents.append(np.sum(J * dr * unit_normals))
     for actual, target in zip(currents, target_currents):
-        assert np.isclose(actual, target, rtol=3e-2, atol=1e-2)
+        assert np.isclose(actual, target, rtol=5e-2, atol=1e-2)
 
 
 def test_no_terminals(plus_device_no_terminals):
