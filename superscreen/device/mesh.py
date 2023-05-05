@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
 
-from ..fem import cdist_batched, gradient_vertices, laplace_operator
+from ..distance import cdist
+from ..fem import gradient_vertices, laplace_operator
 from . import utils
 from .edge_mesh import EdgeMesh
 
@@ -410,7 +411,6 @@ class MeshOperators:
     def q_matrix(
         points: np.ndarray,
         dtype: Union[str, np.dtype, None] = None,
-        batch_size: int = 100,
     ) -> np.ndarray:
         """Computes the denominator matrix, q:
 
@@ -424,15 +424,12 @@ class MeshOperators:
         Args:
             points: Shape (n, 2) array of x,y coordinates of vertices.
             dtype: Output dtype.
-            batch_size: Size of batches in which to compute the distance matrix.
 
         Returns:
             Shape (n, n) array, qij
         """
         # Euclidean distance between points
-        distances = cdist_batched(
-            points, points, batch_size=batch_size, metric="euclidean"
-        )
+        distances = cdist(points, points, metric="euclidean")
         if dtype is not None:
             distances = distances.astype(dtype, copy=False)
         with np.errstate(divide="ignore"):

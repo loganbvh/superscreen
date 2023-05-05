@@ -5,6 +5,7 @@ joblib
 jupyter
 matplotlib
 meshpy
+numba
 numpy
 pandas
 pint

@@ -5,7 +5,6 @@ import numpy as np
 import scipy.linalg as la
 import scipy.sparse as sp
 from matplotlib.path import Path
-from scipy.spatial.distance import cdist
 
 
 def triangle_areas(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
@@ -399,28 +398,3 @@ def gradient_edges(
     cols = np.concatenate([edges[:, 1], edges[:, 0]])
     values = np.concatenate([weights, -weights])
     return sp.csr_array((values, (rows, cols)), shape=(len(edges), len(points)))
-
-
-def cdist_batched(
-    XA: np.ndarray, XB: np.ndarray, *, batch_size: int = 0, **kwargs
-) -> np.ndarray:
-    """A batched version of scipy.spatial.distance.cdist.
-
-    The batching is performed over the second input array, XB. See the docs
-    for scipy.spatial.distance.cdist for keyword argument options.
-
-    Args:
-        XA: An mA by n array of mA original observations in an n-dimensional space.
-        XB: An mB by n array of mB original observations in an n-dimensional space.
-        batch_size: The maximum size of each batch of XB values.
-            Setting batch_size <= 0 results in no batching.
-
-    Returns:
-        An mA by mB distance matrix.
-    """
-    if "out" in kwargs:
-        raise ValueError("cdist_batched does not support the 'out' keyword argument.")
-    if batch_size <= 0:
-        return cdist(XA, XB, **kwargs)
-    batches = np.array_split(XB, range(batch_size, XB.shape[0], batch_size))
-    return np.concatenate([cdist(XA, batch) for batch in batches], axis=1)

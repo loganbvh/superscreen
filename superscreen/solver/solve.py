@@ -8,7 +8,7 @@ import numpy as np
 import pint
 
 from ..device import Device
-from ..fem import cdist_batched
+from ..distance import cdist
 from ..solution import FilmSolution, Solution, Vortex
 from ..sources import ConstantField
 from . import utils
@@ -216,7 +216,7 @@ def solve(
                 q = kernel_cache[key[::-1]].T
             else:
                 dz = layer.z0 - other_layer.z0
-                rho2 = cdist_batched(
+                rho2 = cdist(
                     film_sites[film], film_sites[other_film], metric="sqeuclidean"
                 ).astype(dtype, copy=False)
                 q = (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))

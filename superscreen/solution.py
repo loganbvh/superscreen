@@ -23,7 +23,8 @@ from scipy import interpolate
 
 from .about import version_dict
 from .device import Device, Polygon
-from .fem import cdist_batched, in_polygon
+from .distance import cdist
+from .fem import in_polygon
 from .geometry import path_vectors
 from .io import deserialize_obj, serialize_obj
 from .parameter import Constant
@@ -820,7 +821,6 @@ class Solution:
         units: Optional[str] = None,
         with_units: bool = True,
         return_sum: bool = True,
-        batch_size: int = 1000,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Calculates the vector potential due to currents in the device at any
         point(s) in space. Note that this only considers the vector potential
@@ -850,8 +850,6 @@ class Solution:
                 with units attached.
             return_sum: Whether to return the sum of the potential from all layers in
                 the device, or a dict of ``{layer_name: potential_from_layer}``.
-            batch_size: The maximum size of each batch of positions.
-                See :func:`superscreen.fem.cdist_batched`.
 
         Returns:
             An np.ndarray if return_sum is True, otherwise a dict of
@@ -891,6 +889,7 @@ class Solution:
 
         # Compute the vector potential at the specified positions
         # from the currents in each film
+
         vector_potentials = {}
         for name, film in device.films.items():
             dz = zs - layers_by_film[name].z0
@@ -899,9 +898,7 @@ class Solution:
                     f"Cannot evaluate vector potential inside the film ({name!r})."
                 )
             mesh = meshes[name]
-            rho2 = cdist_batched(
-                positions, mesh.sites, batch_size=batch_size, metric="sqeuclidean"
-            ).astype(dtype, copy=False)
+            rho2 = cdist(positions, mesh.sites, metric="sqeuclidean")
             areas = mesh.vertex_areas
             # J has units of [current / length], shape = (device.points.shape[0], 2)
             J = self.film_solutions[name].current_density

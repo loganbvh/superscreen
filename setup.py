@@ -41,6 +41,7 @@ INSTALL_REQUIRES = [
     "jupyter",
     "matplotlib",
     "meshpy",
+    "numba",
     "numpy",
     "pandas",
     "pint",

@@ -31,7 +31,7 @@ def device() -> sc.Device:
         films=films,
         holes=holes,
     )
-    device.make_mesh(max_edge_length=0.5, min_points=3000)
+    device.make_mesh(max_edge_length=0.4, min_points=3000)
     return device
 
 
@@ -62,7 +62,7 @@ def solution2(device: sc.Device) -> sc.Solution:
         applied_field=applied_field,
         circulating_currents=circulating_currents,
         field_units="mT",
-        iterations=2,
+        iterations=5,
     )
 
     return solutions[-1]
@@ -273,54 +273,57 @@ def test_visualization(solution1: sc.Solution):
         plt.close(fig)
 
 
-# @pytest.mark.parametrize("use_zs", [False, True, "z0"])
-# @pytest.mark.parametrize("units", [None, "uT * um"])
-# @pytest.mark.parametrize("with_units", [False, True])
-# @pytest.mark.parametrize("return_sum", [False, True])
-# def test_bz_from_vector_potential(
-#     solution2: sc.Solution, use_zs, units, with_units, return_sum
-# ):
-#     solution = solution2
-#     applied_field = solution.applied_field_func
-#     device = solution.device
-#     ureg = device.ureg
-#     gradx = device.meshes["disk"].operators.gradient_x.toarray()
-#     grady = device.meshes["disk"].operators.gradient_y.toarray()
-#     if with_units:
-#         gradx = gradx / ureg(device.length_units)
-#         grady = grady / ureg(device.length_units)
-#     positions = device.meshes["disk"].sites
-#     z0 = 1.5
-#     zs = z0 * np.ones_like(positions[:, :1])
-#     applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
-#     if not use_zs:
-#         positions = np.concatenate([positions, zs], axis=1)
-#         zs = None
-#     elif use_zs == "z0":
-#         zs = z0
-#     bz_units = None if units is None else "uT"
-#     Bz = solution.field_at_position(
-#         positions, zs=zs, units=bz_units, with_units=with_units
-#     )
-#     A = solution.vector_potential_at_position(
-#         positions,
-#         zs=zs,
-#         units=units,
-#         with_units=with_units,
-#         return_sum=return_sum,
-#     )
-#     if not return_sum:
-#         assert isinstance(A, dict)
-#         assert len(A) == len(device.films)
-#         A = sum(A.values())
-#     Ax = A[:, 0]
-#     Ay = A[:, 1]
-#     if with_units:
-#         applied_field = applied_field * ureg(solution.field_units)
-#     Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
-#     if with_units:
-#         Bz_from_A.ito(Bz.units)
-#     assert np.all(np.abs(Bz_from_A - Bz) < 0.1 * np.max(np.abs(Bz)))
+@pytest.mark.parametrize("use_zs", [False, True, "z0"])
+@pytest.mark.parametrize("units", [None, "uT * um"])
+@pytest.mark.parametrize("with_units", [False, True])
+@pytest.mark.parametrize("return_sum", [False, True])
+def test_bz_from_vector_potential(
+    solution2: sc.Solution, use_zs, units, with_units, return_sum
+):
+    solution = solution2
+    applied_field = solution.applied_field_func
+    device = solution.device
+    ureg = device.ureg
+    bz_units = None if units is None else "uT"
+    gradx = device.meshes["disk"].operators.gradient_x.toarray()
+    grady = device.meshes["disk"].operators.gradient_y.toarray()
+    if with_units:
+        gradx = gradx / ureg(device.length_units)
+        grady = grady / ureg(device.length_units)
+    positions = device.meshes["disk"].sites
+    z0 = 1.5
+    zs = z0 * np.ones_like(positions[:, :1])
+    applied_field = applied_field(positions[:, 0], positions[:, 1], zs[0])
+    applied_field = applied_field * ureg(solution.field_units)
+    if bz_units:
+        applied_field.ito(bz_units)
+    if not use_zs:
+        positions = np.concatenate([positions, zs], axis=1)
+        zs = None
+    elif use_zs == "z0":
+        zs = z0
+    Bz = solution.field_at_position(
+        positions, zs=zs, units=bz_units, with_units=with_units
+    )
+    A = solution.vector_potential_at_position(
+        positions,
+        zs=zs,
+        units=units,
+        with_units=with_units,
+        return_sum=return_sum,
+    )
+    if not return_sum:
+        assert isinstance(A, dict)
+        assert len(A) == len(device.films)
+        A = sum(A.values())
+    Ax = A[:, 0]
+    Ay = A[:, 1]
+    if not with_units:
+        applied_field = applied_field.magnitude
+    Bz_from_A = applied_field + (gradx @ Ay - grady @ Ax)
+    if with_units:
+        Bz_from_A.ito(Bz.units)
+    assert np.all(np.abs(Bz_from_A - Bz) < 5e-2 * np.max(np.abs(Bz)))
 
 
 @pytest.mark.parametrize("units", [None, "mT", "mA/um"])

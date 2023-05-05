@@ -5,6 +5,7 @@ from scipy.constants import mu_0
 from scipy.spatial import Delaunay
 
 from ..device.utils import vertex_areas
+from ..distance import pairwise_difference
 from ..parameter import Parameter
 from ..units import ureg
 
@@ -86,9 +87,9 @@ def biot_savart_2d(
     # points for each axis.
     x0, y0 = positions[:, 0], positions[:, 1]
     Jx, Jy = current_densities[:, 0], current_densities[:, 1]
-    dx = np.subtract.outer(x, x0)
-    dy = np.subtract.outer(y, y0)
-    dz = np.subtract.outer(z, z0 * np.ones_like(x0))
+    dx = pairwise_difference(x, x0)
+    dy = pairwise_difference(y, y0)
+    dz = pairwise_difference(z, z0 * np.ones_like(x0))
     if areas is None:
         # Triangulate the current sheet to assign an effective area to each vertex.
         triangles = Delaunay(positions).simplices
