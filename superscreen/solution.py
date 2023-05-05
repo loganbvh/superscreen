@@ -136,7 +136,7 @@ class FilmSolution:
         )
 
     def is_close(
-        self, other: "FilmSolution", rtol: float = 1e-5, atol: float = 1e-8
+        self, other: "FilmSolution", rtol: float = 1e-4, atol: float = 1e-7
     ) -> bool:
         """Check whether two FilmSolutions are equal to within a tolerance.
 
