@@ -45,6 +45,9 @@ Polygon
 Meshing
 -------
 
+.. autoclass:: superscreen.Mesh
+    :members:
+
 .. autofunction:: superscreen.device.generate_mesh
 
 .. autofunction:: superscreen.device.smooth_mesh

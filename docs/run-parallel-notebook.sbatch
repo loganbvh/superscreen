@@ -9,7 +9,7 @@
 
 # Activate conda env
 source $GROUP_HOME/miniconda3/bin/activate
-conda activate superscreen-jax
+conda activate superscreen
 
 jupyter nbconvert --to notebook --execute --inplace notebooks/parallel.ipynb
 

@@ -241,23 +241,12 @@ class Solution:
         return self._version_info
 
     @staticmethod
-    def _select_interpolator(
-        method: str,
-    ) -> Union[
-        interpolate.NearestNDInterpolator,
-        interpolate.LinearNDInterpolator,
-        interpolate.CloughTocher2DInterpolator,
-    ]:
-        valid_methods = ("nearest", "linear", "cubic")
-        if method not in valid_methods:
-            raise ValueError(
-                f"Interpolation method must be one of {valid_methods} (got {method})."
-            )
-        if method == "nearest":
-            return interpolate.NearestNDInterpolator
-        if method == "linear":
-            return interpolate.LinearNDInterpolator
-        return interpolate.CloughTocher2DInterpolator
+    def _select_interpolator(method: str) -> type:
+        return {
+            "nearest": interpolate.NearestNDInterpolator,
+            "linear": interpolate.LinearNDInterpolator,
+            "cubic": interpolate.CloughTocher2DInterpolator,
+        }[method]
 
     def interp_current_density(
         self,

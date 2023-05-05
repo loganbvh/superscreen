@@ -1,2 +1,3 @@
 from .solve import solve
-from .utils import convert_field
+from .solve_film import LinearSystem, solve_film
+from .utils import FilmInfo, LambdaInfo, convert_field, field_conversion_factor

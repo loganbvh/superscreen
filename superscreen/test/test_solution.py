@@ -235,7 +235,7 @@ def test_interp_current_density(
     if positions is None:
         positions = solution1.device.meshes["disk"].sites
 
-    with pytest.raises(ValueError):
+    with pytest.raises(KeyError):
         _ = solution1.interp_current_density(
             positions,
             film=film,
