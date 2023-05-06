@@ -1,18 +1,7 @@
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pint
 import pytest
-
-try:
-    import jax  # noqa: F401
-
-    HAS_JAX = True
-    os.environ["JAX_PLATFORMS"] = "cpu"
-except (ModuleNotFoundError, ImportError, RuntimeError):
-    HAS_JAX = False
-
 
 import superscreen as sc
 import superscreen.geometry as geo

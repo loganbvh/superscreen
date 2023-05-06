@@ -83,8 +83,6 @@ def solve_many(
         log_level: Logging level to use, if any.
         use_shared_memory: Whether to use shared memory if parallel_method is not None.
         num_cpus: The number of processes to utilize.
-        gpu: Solve on a GPU if available (requires JAX and CUDA). gpu = True is only allowed
-            for serial execution, i.e., ``parallel_method in {None, False, "serial"}``.
 
     Returns:
         solutions, paths. If return_solutions is True, solutions is either a list of

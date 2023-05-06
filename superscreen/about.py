@@ -12,13 +12,6 @@ import ray
 import scipy
 from IPython.display import HTML
 
-try:
-    import jax
-
-    jax_version = jax.__version__
-except (ModuleNotFoundError, ImportError, RuntimeError):
-    jax_version = None
-
 import superscreen
 
 
@@ -60,7 +53,6 @@ def version_dict() -> Dict[str, str]:
         "SciPy": scipy.__version__,
         "matplotlib": matplotlib.__version__,
         "ray": ray.__version__,
-        "jax": str(jax_version),
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",
