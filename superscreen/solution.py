@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pint
 from scipy import interpolate
+from scipy.spatial.distance import cdist
 
 from .about import version_dict
 from .device import Device, Polygon
@@ -889,7 +890,6 @@ class Solution:
 
         # Compute the vector potential at the specified positions
         # from the currents in each film
-
         vector_potentials = {}
         for name, film in device.films.items():
             dz = zs - layers_by_film[name].z0
