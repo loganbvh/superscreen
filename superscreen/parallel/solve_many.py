@@ -2,11 +2,13 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import numba
 import pint
 
 from ..device import Device
 from ..parameter import Parameter
 from ..solution import Solution, Vortex
+from .utils import cpu_count
 
 logger = logging.getLogger("solve")
 
@@ -140,5 +142,17 @@ def solve_many(
         kwargs["num_cpus"] = 1
         kwargs["use_shared_memory"] = False
 
+    # Limit the number of threads used by numba to
+    # num_cpus_available // num_cpus_requested.
+    numba_threads = numba.get_num_threads()
+    cpus = cpu_count(logical=False)
+    if solver in (solve_many_mp, solve_many_ray):
+        if kwargs["num_cpus"] is None:
+            numba.set_num_threads(1)
+        elif kwargs["num_cpus"] > 1:
+            numba.set_num_threads(max(1, cpus // num_cpus))
+
     solutions, path = solver(**kwargs)
+
+    numba.set_num_threads(numba_threads)
     return solutions, path
