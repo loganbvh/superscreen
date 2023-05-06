@@ -19,6 +19,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: setup-env
+      run: |
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_OUTPUT
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_OUTPUT
+        echo "NUMBA_NUM_THREADS=2" >> $GITHUB_OUTPUT
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -50,9 +55,6 @@ jobs:
         flake8 . --count --exit-zero --select=C,E,F,W,B,B950 --extend-ignore=E203,E501,W503 --max-complexity=18 --max-line-length=88 --statistics
     - name: Test with pytest
       run: |
-        export OPENBLAS_NUM_THREADS=1
-        export OMP_NUM_THREADS=1
-        export NUMBA_NUM_THREADS=2
         pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2
