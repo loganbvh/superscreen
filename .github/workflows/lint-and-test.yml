@@ -55,7 +55,7 @@ jobs:
         flake8 . --count --exit-zero --select=C,E,F,W,B,B950 --extend-ignore=E203,E501,W503 --max-complexity=18 --max-line-length=88 --statistics
     - name: Test with pytest
       run: |
-        python -c "import superscreen as sc; print(sc.parallel.cpu_count())"
+        python -c "import superscreen as sc; print(sc.parallel.cpu_count(), sc.parallel.cpu_count(logical=True))"
         pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2
