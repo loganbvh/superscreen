@@ -1,9 +1,8 @@
+import joblib
 import numba
 import numpy as np
 
-from .parallel import cpu_count
-
-_use_parallel = cpu_count(logical=False) > 2
+_use_parallel = joblib.cpu_count(only_physical_cores=True) > 2
 
 
 @numba.njit(fastmath=True, parallel=_use_parallel)
