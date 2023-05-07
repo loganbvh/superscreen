@@ -31,15 +31,17 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.7, <3.11"
+PYTHON_VERSION = ">=3.8, <3.11"
 
 INSTALL_REQUIRES = [
     "dill",
+    "h5py",
     "ipython",
     "joblib",
     "jupyter",
     "matplotlib",
     "meshpy",
+    "numba",
     "numpy",
     "pandas",
     "pint",
@@ -60,9 +62,6 @@ EXTRAS_REQUIRE = {
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
     ],
-    "jax": [
-        "jax[cpu]",
-    ],
 }
 
 CLASSIFIERS = """\
@@ -74,7 +73,6 @@ Operating System :: POSIX
 Operating System :: Unix
 Operating System :: Microsoft :: Windows
 Programming Language :: Python
-Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10

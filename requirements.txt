@@ -1,9 +1,11 @@
 dill
+h5py
 ipython
 joblib
 jupyter
 matplotlib
 meshpy
+numba
 numpy
 pandas
 pint
