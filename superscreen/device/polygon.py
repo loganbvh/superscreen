@@ -2,6 +2,7 @@ import logging
 from copy import deepcopy
 from typing import Iterable, Optional, Tuple, Union
 
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import path
@@ -11,108 +12,10 @@ from shapely import geometry as geo
 from shapely.validation import explain_validity
 
 from ..geometry import close_curve
-from ..parameter import Parameter
-from .mesh import generate_mesh, smooth_mesh
+from .mesh import Mesh
+from .utils import generate_mesh
 
-logger = logging.getLogger(__name__)
-
-
-class Layer:
-    """A single layer of a superconducting device.
-
-    You can provide either an effective penetration depth Lambda,
-    or both a London penetration depth (lambda_london) and a layer
-    thickness. Lambda and london_lambda can either be real numers or
-    Parameters which compute the penetration depth as a function of
-    position.
-
-    Args:
-        name: Name of the layer.
-        Lambda: The effective magnetic penetration depth of the superconducting
-            film(s) in the layer.
-        thickness: Thickness of the superconducting film(s) located in the layer.
-        london_lambda: London penetration depth of the superconducting film(s)
-            located in the layer.
-        z0: Vertical location of the layer.
-    """
-
-    __slots__ = ("name", "thickness", "london_lambda", "z0", "_Lambda")
-
-    def __init__(
-        self,
-        name: str,
-        Lambda: Optional[Union[float, Parameter]] = None,
-        london_lambda: Optional[Union[float, Parameter]] = None,
-        thickness: Optional[float] = None,
-        z0: float = 0,
-    ):
-        self.name = name
-        self.thickness = thickness
-        self.london_lambda = london_lambda
-        self.z0 = z0
-        if Lambda is None:
-            if london_lambda is None or thickness is None:
-                raise ValueError(
-                    "You must provide either an effective penetration depth Lambda "
-                    "or both a london_lambda and a thickness."
-                )
-            self._Lambda = None
-        else:
-            if london_lambda is not None or thickness is not None:
-                raise ValueError(
-                    "You must provide either an effective penetration depth Lambda "
-                    "or both a london_lambda and a thickness (but not all three)."
-                )
-            self._Lambda = Lambda
-
-    @property
-    def Lambda(self) -> Union[float, Parameter]:
-        """Effective penetration depth of the superconductor."""
-        if self._Lambda is not None:
-            return self._Lambda
-        return self.london_lambda**2 / self.thickness
-
-    @Lambda.setter
-    def Lambda(self, value: Union[float, Parameter]) -> None:
-        """Effective penetration depth of the superconductor."""
-        if self._Lambda is None:
-            raise AttributeError(
-                "Can't set Lambda directly. Set london_lambda and/or thickness instead."
-            )
-        self._Lambda = value
-
-    def __repr__(self) -> str:
-        Lambda = self.Lambda
-        if isinstance(Lambda, (int, float)):
-            Lambda = f"{Lambda:.3f}"
-        d = self.thickness
-        if isinstance(d, (int, float)):
-            d = f"{d:.3f}"
-        london = self.london_lambda
-        if isinstance(london, (int, float)):
-            london = f"{london:.3f}"
-        return (
-            f'{self.__class__.__name__}("{self.name}", Lambda={Lambda}, '
-            f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
-        )
-
-    def __eq__(self, other) -> bool:
-        if other is self:
-            return True
-
-        if not isinstance(other, Layer):
-            return False
-
-        return (
-            self.name == other.name
-            and self.thickness == other.thickness
-            and self.london_lambda == other.london_lambda
-            and self.Lambda == other.Lambda
-            and self.z0 == other.z0
-        )
-
-    def copy(self):
-        return deepcopy(self)
+logger = logging.getLogger("device")
 
 
 class Polygon:
@@ -123,10 +26,9 @@ class Polygon:
         layer: Name of the layer in which the polygon is located.
         points: The polygon vertices. This can be a shape ``(n, 2)`` array of x, y
             coordinates or a shapely ``LineString``, ``LinearRing``, or ``Polygon``.
-        mesh: Whether to include this polygon when computing a mesh.
     """
 
-    __slots__ = ("name", "layer", "_points", "mesh")
+    __slots__ = ("name", "layer", "_points")
 
     def __init__(
         self,
@@ -139,12 +41,10 @@ class Polygon:
             geo.polygon.LinearRing,
             geo.polygon.Polygon,
         ],
-        mesh: bool = True,
     ):
         self.name = name
         self.layer = layer
         self.points = points
-        self.mesh = mesh
 
     @property
     def points(self) -> np.ndarray:
@@ -209,6 +109,16 @@ class Polygon:
         """A matplotlib.path.Path representing the polygon boundary."""
         return path.Path(self.points, closed=True)
 
+    def set_name(self, name: Union[str, None]) -> "Polygon":
+        """Sets the Polygon's name and returns ``self``."""
+        self.name = name
+        return self
+
+    def set_layer(self, layer: Union[str, None]) -> "Polygon":
+        """Sets the Polygon's layer and returns ``self``."""
+        self.layer = layer
+        return self
+
     def contains_points(
         self,
         points: np.ndarray,
@@ -266,35 +176,31 @@ class Polygon:
     def make_mesh(
         self,
         min_points: Optional[int] = None,
+        max_edge_length: Optional[float] = None,
+        convex_hull: bool = False,
         smooth: int = 0,
         **meshpy_kwargs,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """Returns the vertices and triangles of a Delaunay mesh covering the Polygon.
+    ) -> Mesh:
+        """Creates a :class:`Mesh` for the polygon.
 
         Args:
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
+            max_edge_length: The maximum distance between vertices in the resulting mesh.
+            convex_hull: If True, then the entire convex hull of the polygon (minus holes)
+                will be meshed. Otherwise, only the polygon interior is meshed.
             smooth: Number of Laplacian smoothing steps to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
-
-        Returns:
-            Mesh vertex coordinates and triangle indices
         """
         points, triangles = generate_mesh(
             self.points,
             min_points=min_points,
-            convex_hull=False,
+            max_edge_length=max_edge_length,
+            convex_hull=convex_hull,
             **meshpy_kwargs,
         )
-        if smooth:
-            logger.debug(f"Optimizing mesh with {points.shape[0]} vertices.")
-            points, triangles = smooth_mesh(points, triangles, smooth)
-        logger.debug(
-            f"Finished generating mesh with {points.shape[0]} points and "
-            f"{triangles.shape[0]} triangles."
-        )
-        return points, triangles
+        return Mesh.from_triangulation(points, triangles).smooth(smooth)
 
     def rotate(
         self,
@@ -462,7 +368,6 @@ class Polygon:
             name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, "union"),
-            mesh=self.mesh,
         ).union(*rest, name=name)
 
     def intersection(
@@ -493,7 +398,6 @@ class Polygon:
             name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, "intersection"),
-            mesh=self.mesh,
         ).intersection(*rest, name=name)
 
     def difference(
@@ -530,7 +434,6 @@ class Polygon:
             name=name or self.name,
             layer=self.layer,
             points=self._join_via(first, operation),
-            mesh=self.mesh,
         ).difference(*rest, symmetric=symmetric, name=name)
 
     def buffer(
@@ -568,12 +471,10 @@ class Polygon:
             mitre_limit=mitre_limit,
             single_sided=single_sided,
         )
-
         polygon = Polygon(
-            name=f"{self.name} ({distance:+.3f})",
+            name=f"{self.name}",
             layer=self.layer,
             points=poly,
-            mesh=self.mesh,
         )
         npts = max(polygon.points.shape[0], self.points.shape[0])
         polygon = polygon.resample(npts)
@@ -611,7 +512,6 @@ class Polygon:
             name=self.name,
             layer=self.layer,
             points=points,
-            mesh=self.mesh,
         )
 
     def plot(self, ax: Optional[plt.Axes] = None, **kwargs) -> plt.Axes:
@@ -648,7 +548,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the union of a sequence of polygons.
 
@@ -656,13 +555,12 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
 
         Returns:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.union(*rest)
 
     @classmethod
@@ -680,7 +578,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the intersection
         of a sequence of polygons.
@@ -689,13 +586,12 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
 
         Returns:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.intersection(*rest)
 
     @classmethod
@@ -713,7 +609,6 @@ class Polygon:
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
-        mesh: bool = True,
         symmetric: bool = False,
     ) -> "Polygon":
         """Creates a new :class:`Polygon` from the difference
@@ -723,7 +618,6 @@ class Polygon:
             items: A sequence of polygon-like objects to join.
             name: Name of the polygon.
             layer: Name of the layer in which the polygon is located.
-            mesh: Whether to include this polygon when computing a mesh.
             symmetric: If True, creates a new :class:`Polygon` from the
                 "symmetric difference" (aka XOR) of the inputs.
 
@@ -731,7 +625,7 @@ class Polygon:
             A new :class:`Polygon`.
         """
         first, *rest = items
-        polygon = cls(name=name, layer=layer, points=first, mesh=mesh)
+        polygon = cls(name=name, layer=layer, points=first)
         return polygon.difference(*rest, symmetric=symmetric)
 
     def __repr__(self) -> str:
@@ -739,7 +633,7 @@ class Polygon:
         layer = f'"{self.layer}"' if self.layer is not None else None
         return (
             f"{self.__class__.__name__}(name={name}, layer={layer}, "
-            f"points=<ndarray: shape={self.points.shape}>, mesh={self.mesh})"
+            f"points=<ndarray: shape={self.points.shape}>)"
         )
 
     def __eq__(self, other) -> bool:
@@ -757,3 +651,18 @@ class Polygon:
 
     def copy(self) -> "Polygon":
         return deepcopy(self)
+
+    def to_hdf5(self, h5group: h5py.Group):
+        if self.name:
+            h5group.attrs["name"] = self.name
+        if self.layer:
+            h5group.attrs["layer"] = self.layer
+        h5group["points"] = self.points
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "Polygon":
+        return Polygon(
+            name=h5group.attrs.get("name", None),
+            layer=h5group.attrs.get("layer", None),
+            points=np.asarray(h5group["points"]),
+        )
