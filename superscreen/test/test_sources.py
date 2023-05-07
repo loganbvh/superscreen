@@ -215,7 +215,8 @@ def test_pearl_vortex_field(shape, vortex_position):
 
 def test_sheet_current():
     wire = sc.Polygon(points=sc.geometry.box(12, 1))
-    points, _ = wire.make_mesh(min_points=2000)
+    mesh = wire.make_mesh(min_points=2000)
+    points = mesh.sites
 
     current_densities = np.array([1, 0]) * np.ones((points.shape[0], 1))
 
