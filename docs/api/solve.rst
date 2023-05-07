@@ -41,46 +41,15 @@ Fluxoid
 .. autofunction:: superscreen.fluxoid.find_fluxoid_solution
 
 
-IO
---
-
-.. autofunction:: superscreen.io.save_solutions
-
-.. autofunction:: superscreen.io.load_solutions
-
-.. autofunction:: superscreen.io.iload_solutions
-
-.. autofunction:: superscreen.io.zip_solution
-
-.. autofunction:: superscreen.io.unzip_solution
-
-
 Supporting Functions
 --------------------
 
-Brandt Core
-===========
+.. autofunction:: superscreen.solver.solve_film.solve_film
 
-.. autofunction:: superscreen.solve.solve_layer
+.. autofunction:: superscreen.solver.convert_field
 
-.. autofunction:: superscreen.solve.q_matrix
+.. autofunction:: superscreen.solver.field_conversion_factor
 
-.. autofunction:: superscreen.solve.C_vector
-
-.. autofunction:: superscreen.solve.Q_matrix
-
-.. autofunction:: superscreen.solve.convert_field
-
-.. autofunction:: superscreen.solve.field_conversion_factor
-
-
-Parallel Processing
-===================
+.. autofunction:: superscreen.parallel.cpu_count
 
 .. autofunction:: superscreen.parallel.create_models
-
-.. autofunction:: superscreen.parallel.solve_many_serial
-
-.. autofunction:: superscreen.parallel.solve_many_mp
-
-.. autofunction:: superscreen.parallel.solve_many_ray
