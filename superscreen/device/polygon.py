@@ -17,6 +17,14 @@ from .utils import generate_mesh
 
 logger = logging.getLogger("device")
 
+PolygonType = Union[
+    "Polygon",
+    np.ndarray,
+    geo.linestring.LineString,
+    geo.polygon.LinearRing,
+    geo.polygon.Polygon,
+]
+
 
 class Polygon:
     """A polygonal region located in a Layer.
@@ -35,12 +43,7 @@ class Polygon:
         name: Optional[str] = None,
         *,
         layer: Optional[str] = None,
-        points: Union[
-            np.ndarray,
-            geo.linestring.LineString,
-            geo.polygon.LinearRing,
-            geo.polygon.Polygon,
-        ],
+        points: PolygonType,
     ):
         self.name = name
         self.layer = layer
@@ -280,12 +283,7 @@ class Polygon:
 
     def _join_via(
         self,
-        other: Union[
-            np.ndarray,
-            "Polygon",
-            geo.polygon.Polygon,
-            geo.polygon.LinearRing,
-        ],
+        other: PolygonType,
         operation: str,
     ) -> geo.polygon.Polygon:
         """Joins ``self.polygon`` with another polygon-like object
@@ -342,13 +340,7 @@ class Polygon:
 
     def union(
         self,
-        *others: Union[
-            "Polygon",
-            np.ndarray,
-            geo.linestring.LineString,
-            geo.polygon.LinearRing,
-            geo.polygon.Polygon,
-        ],
+        *others: PolygonType,
         name: Optional[str] = None,
     ) -> "Polygon":
         """Returns the union of the polygon and zero or more other polygons.
@@ -372,13 +364,7 @@ class Polygon:
 
     def intersection(
         self,
-        *others: Union[
-            "Polygon",
-            np.ndarray,
-            geo.linestring.LineString,
-            geo.polygon.LinearRing,
-            geo.polygon.Polygon,
-        ],
+        *others: PolygonType,
         name: Optional[str] = None,
     ) -> "Polygon":
         """Returns the intersection of the polygon and zero or more other polygons.
@@ -402,13 +388,7 @@ class Polygon:
 
     def difference(
         self,
-        *others: Union[
-            "Polygon",
-            np.ndarray,
-            geo.linestring.LineString,
-            geo.polygon.LinearRing,
-            geo.polygon.Polygon,
-        ],
+        *others: PolygonType,
         symmetric: bool = False,
         name: Optional[str] = None,
     ) -> "Polygon":
@@ -536,15 +516,7 @@ class Polygon:
     @classmethod
     def from_union(
         cls,
-        items: Iterable[
-            Union[
-                "Polygon",
-                np.ndarray,
-                geo.linestring.LineString,
-                geo.polygon.LinearRing,
-                geo.polygon.Polygon,
-            ],
-        ],
+        items: Iterable[PolygonType],
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
@@ -566,15 +538,7 @@ class Polygon:
     @classmethod
     def from_intersection(
         cls,
-        items: Iterable[
-            Union[
-                "Polygon",
-                np.ndarray,
-                geo.linestring.LineString,
-                geo.polygon.LinearRing,
-                geo.polygon.Polygon,
-            ],
-        ],
+        items: Iterable[PolygonType],
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,
@@ -597,15 +561,7 @@ class Polygon:
     @classmethod
     def from_difference(
         cls,
-        items: Iterable[
-            Union[
-                "Polygon",
-                np.ndarray,
-                geo.linestring.LineString,
-                geo.polygon.LinearRing,
-                geo.polygon.Polygon,
-            ],
-        ],
+        items: Iterable[PolygonType],
         *,
         name: Optional[str] = None,
         layer: Optional[str] = None,

@@ -8,6 +8,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
@@ -31,6 +32,8 @@ from .parameter import Constant
 from .sources.current import biot_savart_2d
 
 logger = logging.getLogger("solution")
+
+InterpolatorType = Literal["nearest", "linear", "cubic"]
 
 
 class Fluxoid(NamedTuple):
@@ -242,7 +245,7 @@ class Solution:
         return self._version_info
 
     @staticmethod
-    def _select_interpolator(method: str) -> type:
+    def _select_interpolator(method: InterpolatorType) -> type:
         return {
             "nearest": interpolate.NearestNDInterpolator,
             "linear": interpolate.LinearNDInterpolator,
@@ -254,7 +257,7 @@ class Solution:
         positions: np.ndarray,
         *,
         film: str,
-        method: str = "linear",
+        method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
@@ -346,7 +349,7 @@ class Solution:
         *,
         film: str,
         dataset: str = "field",
-        method: str = "linear",
+        method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
         **kwargs,
@@ -428,16 +431,16 @@ class Solution:
         """
         from .solver import convert_field
 
-        if name not in self.device.polygons:
-            raise ValueError(f"Unknown polygon: {name!r}.")
-
         device = self.device
         ureg = device.ureg
+        polygons = {p.name: p for p in device.get_polygons(include_terminals=False)}
+        if name not in polygons:
+            raise ValueError(f"Unknown polygon: {name!r}.")
+
         new_units = units or f"{self.field_units} * {device.length_units}**2"
         if isinstance(new_units, str):
             new_units = ureg(new_units)
-
-        polygon = device.polygons[name]
+        polygon = polygons[name]
         if name in device.films:
             mesh = device.meshes[name]
             polygon_name = name
@@ -469,7 +472,7 @@ class Solution:
         polygon_coords: Union[np.ndarray, Polygon],
         *,
         film: str,
-        interp_method: str = "linear",
+        interp_method: InterpolatorType = "linear",
         units: Optional[str] = "Phi_0",
         with_units: bool = True,
     ) -> Dict[str, Fluxoid]:
@@ -549,7 +552,7 @@ class Solution:
         self,
         hole_name: str,
         points: Optional[np.ndarray] = None,
-        interp_method: str = "linear",
+        interp_method: InterpolatorType = "linear",
         units: Optional[str] = "Phi_0",
         with_units: bool = True,
     ) -> Fluxoid:
@@ -597,7 +600,7 @@ class Solution:
         *,
         zs: Union[float, np.ndarray, None] = None,
         vector: bool = False,
-        interp_method: str = "linear",
+        interp_method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = True,
         return_sum: bool = True,
@@ -710,7 +713,7 @@ class Solution:
         positions: np.ndarray,
         *,
         zs: Union[float, np.ndarray, None] = None,
-        interp_method: str = "linear",
+        interp_method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = True,
         return_sum: bool = True,
