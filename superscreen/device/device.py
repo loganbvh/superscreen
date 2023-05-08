@@ -20,7 +20,6 @@ from . import utils
 from .layer import Layer
 from .mesh import Mesh
 from .polygon import Polygon
-from .transport import TerminalSet
 
 logger = logging.getLogger("device")
 
@@ -34,7 +33,8 @@ class Device:
         layers: ``Layers`` making up the device.
         films: ``Polygons`` representing regions of superconductor.
         holes: ``Holes`` representing holes in superconducting films.
-        terminals: ``TerminalSets` representing transport terminals in the device.
+        terminals: A dict of ``{film_name: terminals}` representing transport
+            terminals in the device.
         abstract_regions: ``Polygons`` representing abstract regions in a device.
             Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
@@ -50,9 +50,7 @@ class Device:
         layers: Union[Sequence[Layer], Dict[str, Layer]],
         films: Union[Sequence[Polygon], Dict[str, Polygon]],
         holes: Optional[Union[Sequence[Polygon], Dict[str, Polygon]]] = None,
-        terminals: Optional[
-            Union[Sequence[TerminalSet], Dict[str, TerminalSet]]
-        ] = None,
+        terminals: Optional[Dict[str, List[Polygon]]] = None,
         abstract_regions: Optional[Union[Sequence[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
         solve_dtype: Union[str, np.dtype] = "float32",
@@ -74,12 +72,14 @@ class Device:
         self.holes = {hole.name: hole for hole in holes}
 
         if terminals is None:
-            terminals = []
-        if isinstance(terminals, dict):
-            terminals = list(terminals.values())
-        self.terminals = {terminal.film: terminal for terminal in terminals}
-        for film, terminal_set in self.terminals.items():
-            for terminal in terminal_set.to_list():
+            terminals = {}
+        self.terminals = terminals
+        if not set(self.terminals).issubset(self.films):
+            raise ValueError(
+                f"terminals.keys() must be a subset of films.keys() ({list(self.films)!r})."
+            )
+        for film, terminals in self.terminals.items():
+            for terminal in terminals:
                 terminal.layer = self.films[film].layer
 
         if abstract_regions is None:
@@ -145,8 +145,8 @@ class Device:
         for attr_name in ("films", "holes", "abstract_regions"):
             polygons.extend(list(getattr(self, attr_name).values()))
         if include_terminals:
-            for terminal_set in self.terminals.values():
-                polygons.extend(terminal_set.to_list())
+            for terminals in self.terminals.values():
+                polygons.extend(terminals)
         return polygons
 
     @property
@@ -229,7 +229,10 @@ class Device:
         layers = [layer.copy() for layer in self.layers.values()]
         films = [film.copy() for film in self.films.values()]
         holes = [hole.copy() for hole in self.holes.values()]
-        terminals = [terms.copy() for terms in self.terminals.values()]
+        terminals = {
+            film: [term.copy() for term in film_terms]
+            for film, film_terms in self.terminals.items()
+        }
         abstract_regions = [region.copy() for region in self.abstract_regions.values()]
 
         device = Device(
@@ -496,7 +499,7 @@ class Device:
             return indices
         # Ensure that the indices wrap around outside of any terminals.
         indices_list = indices.tolist()
-        for term in self.terminals[film].to_list():
+        for term in self.terminals[film]:
             boundary = points[indices]
             term_ix = indices[term.contains_points(boundary)]
             discont = np.abs(np.diff(term_ix)) > 1
@@ -689,7 +692,7 @@ class Device:
             for hole in holes_by_film[name]:
                 _ = hole.plot(ax=ax, **kwargs)
             if name in terminals:
-                for terminal in terminals[name].to_list():
+                for terminal in terminals[name]:
                     _ = terminal.plot(ax=ax, **kwargs)
             if subplots:
                 ax.set_title(name)
@@ -960,8 +963,10 @@ class Device:
                 polygon.to_hdf5(hole_grp.create_group(name))
             for name, polygon in self.abstract_regions.items():
                 polygon.to_hdf5(abs_grp.create_group(name))
-            for film_name, terminal_set in self.terminals.items():
-                terminal_set.to_hdf5(terminals_grp.create_group(film_name))
+            for film_name, terminals in self.terminals.items():
+                grp = terminals_grp.create_group(film_name)
+                for i, terminal in enumerate(terminals):
+                    terminal.to_hdf5(grp.create_group(str(i)))
             if save_mesh and self.meshes:
                 mesh_grp = h5group.create_group("mesh")
                 for name, mesh in self.meshes.items():
@@ -981,14 +986,17 @@ class Device:
         else:
             read_context = h5py.File(path_or_group, "r")
         with read_context as h5group:
+            terminals = {}
+            for film, grp in h5group["terminals"].items():
+                terminals[film] = []
+                for i in range(len(grp)):
+                    terminals[film].append(Polygon.from_hdf5(grp[str(i)]))
             device = Device(
                 name=h5group.attrs["name"],
                 layers=[Layer.from_hdf5(grp) for grp in h5group["layers"].values()],
                 films=[Polygon.from_hdf5(grp) for grp in h5group["films"].values()],
                 holes=[Polygon.from_hdf5(grp) for grp in h5group["holes"].values()],
-                terminals=[
-                    TerminalSet.from_hdf5(grp) for grp in h5group["terminals"].values()
-                ],
+                terminals=terminals,
                 abstract_regions=[
                     Polygon.from_hdf5(grp)
                     for grp in h5group["abstract_regions"].values()
@@ -1014,12 +1022,18 @@ class Device:
             items = [f"{t}{value}" for value in L]
             return "[" + nt + (", " + nt).join(items) + "," + nt + "]"
 
+        def format_dict(D):
+            if not D:
+                return None
+            items = [f"{t}{key!r}: {value}" for key, value in D.items()]
+            return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
+
         args = [
             f'"{self.name}"',
             f"layers={format_list(self.layers.values())}",
             f"films={format_list(self.films.values())}",
             f"holes={format_list(self.holes.values())}",
-            f"terminals={format_list(self.terminals.values())}",
+            f"terminals={format_dict(self.terminals)}",
             f"abstract_regions={format_list(self.abstract_regions.values())}",
             f'length_units="{self.length_units}"',
         ]

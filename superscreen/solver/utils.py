@@ -4,8 +4,10 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pint
+from scipy import integrate
 
 from ..device import Device, Polygon
+from ..geometry import path_vectors
 from ..parameter import Constant
 from ..solution import Vortex
 
@@ -278,3 +280,54 @@ def field_conversion_factor(
         # field_units is flux density B = mu0 * H
         field = (field / ureg("mu0")).to(target_units)
     return field / ureg(field_units)
+
+
+def stream_from_current_density(points: np.ndarray, J: np.ndarray) -> np.ndarray:
+    """Computes the scalar stream function corresonding to a
+    given current density :math:`J`, according to:
+
+    .. math::
+
+        g(\\vec{r})=g(\\vec{r}_0)+\\int_{\\vec{r}_0}^\\vec{r}
+        (\\hat{z}\\times\\vec{J})\\cdot\\mathrm{d}\\vec{\\ell}
+
+    Args:
+        points: Shape ``(n, 2)`` array of ``(x, y)`` positions at which to
+            compute the stream function :math:`g`.
+        J: Shape ``(n, 2)`` array of the current density ``(Jx, Jy)`` at the
+            given ``points``.s
+
+    Returns:
+        A shape ``(n, )`` array of the stream function at the given ``points``.
+    """
+    # (0, 0, 1) X (Jx, Jy, 0) == (-Jy, Jx, 0)
+    zhat_cross_J = J[:, [1, 0]]
+    zhat_cross_J[:, 0] *= -1
+    dl = np.diff(points, axis=0, prepend=points[:1])
+    integrand = np.sum(zhat_cross_J * dl, axis=1)
+    return integrate.cumulative_trapezoid(integrand, initial=0)
+
+
+def stream_from_terminal_current(points: np.ndarray, current: float) -> np.ndarray:
+    """Computes the terminal stream function corresponding to a given terminal current.
+
+    We assume that the current :math:`I` is uniformly distributed along the terminal
+    with a current density :math:`\\vec{J}` which is perpendicular to the terminal.
+    Then for :math:`\\vec{r}` along the terminal, the stream function is given by
+
+    .. math::
+
+        g(\\vec{r})=g(\\vec{r}_0)+\\int_{\\vec{r}_0}^\\vec{r}
+        (\\hat{z}\\times\\vec{J})\\cdot\\mathrm{d}\\vec{\\ell}
+
+    Args:
+        points: A shape ``(n, 2)`` array of terminal vertex positions.
+        current: The total current sources by the terminal.
+
+    Returns:
+        A shape ``(n, )`` array of the stream function along the terminal.
+    """
+    edge_lengths, unit_normals = path_vectors(points)
+    J = current * unit_normals / np.sum(edge_lengths)
+    g = stream_from_current_density(points, J)
+    return g * current / g[-1]

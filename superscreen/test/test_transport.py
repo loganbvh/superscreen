@@ -21,14 +21,12 @@ def plus_device():
         term = terminal.rotate(i * 90)
         term.name = name
         terminals.append(term)
-    drain, *sources = terminals
-    terminals = sc.TerminalSet("plus", sources, drain)
 
     device = sc.Device(
         "plus",
         films=[plus],
         layers=[layer],
-        terminals=[terminals],
+        terminals={"plus": terminals},
         length_units="um",
     )
     device.make_mesh(max_edge_length=0.2)
@@ -85,7 +83,6 @@ def holey_device():
     drain_terminal = sc.Polygon(
         "drain", points=sc.geometry.box(width, height / 100, center=(0, -height / 2))
     )
-    terminals = sc.TerminalSet("film", [source_terminal], drain_terminal)
 
     device = sc.Device(
         "constriction",
@@ -103,7 +100,7 @@ def holey_device():
                 points=sc.geometry.circle(width / 4, center=(0, -height / 4)),
             ),
         ],
-        terminals=[terminals],
+        terminals={"film": [source_terminal, drain_terminal]},
         length_units=length_units,
     ).translate(dx=dx, dy=dy)
     device.make_mesh(max_edge_length=0.2)
@@ -117,8 +114,27 @@ def test_multi_terminal_currents(plus_device, applied_field):
     rs = np.stack([xs, ys], axis=1)
     sections = [sc.geometry.rotate(rs, i * 90) for i in range(4)]
 
+    with pytest.raises(ValueError):
+        # Current not conserved
+        terminal_currents = {
+            "plus": {
+                "drain": -5,
+                "source1": "1 uA",
+                "source2": sc.ureg("2 uA"),
+                "source3": 3,
+            }
+        }
+        solution = sc.solve(
+            plus_device,
+            terminal_currents=terminal_currents,
+            applied_field=sc.sources.ConstantField(applied_field),
+            current_units="uA",
+            field_units="uT",
+        )[-1]
+
     terminal_currents = {
         "plus": {
+            "drain": -6,
             "source1": "1 uA",
             "source2": sc.ureg("2 uA"),
             "source3": 3,
@@ -140,17 +156,15 @@ def test_multi_terminal_currents(plus_device, applied_field):
         _, unit_normals = sc.geometry.path_vectors(coords)
         dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
         currents.append(np.sum(J * dr * unit_normals))
-    drain_current, *source_currents = currents
     target_currents = solution.terminal_currents["plus"].values()
-    total_current = sum(target_currents)
-    assert np.isclose(drain_current, total_current, rtol=5e-2)
-    for actual, target in zip(source_currents, target_currents):
+    assert np.abs(np.sum(currents) / terminal_currents["plus"]["drain"]) < 5e-2
+    for actual, target in zip(currents, target_currents):
         assert np.isclose(-actual, target, rtol=5e-2)
 
 
 def test_holey_device(holey_device):
     device = holey_device
-    terminal_currents = {"film": {"source": "2 uA"}}
+    terminal_currents = {"film": {"source": "2 uA", "drain": "-2 uA"}}
     circulating_currents = {
         "hole1": "1 uA",
         "hole2": "-1 uA",

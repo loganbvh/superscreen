@@ -97,6 +97,11 @@ def solve(
         film_name: utils.currents_to_floats(currents, device.ureg, current_units)
         for film_name, currents in terminal_currents.items()
     }
+    for film_name, currents in terminal_currents.items():
+        if sum(currents.values()):
+            raise ValueError(
+                f"Terminal currents in film {film_name!r} are not conserved."
+            )
     applied_field = applied_field or ConstantField(0)
     vortices = vortices or []
 

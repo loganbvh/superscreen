@@ -1,6 +1,6 @@
 from . import distance, fem, geometry, parallel, sources
 from .about import version_dict, version_table
-from .device import Device, Layer, Mesh, Polygon, TerminalSet
+from .device import Device, Layer, Mesh, Polygon
 from .fluxoid import find_fluxoid_solution, make_fluxoid_polygons
 from .parallel import solve_many
 from .parameter import Constant, Parameter

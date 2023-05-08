@@ -5,9 +5,8 @@ import numpy as np
 import scipy.linalg as la
 
 from ..device import Device
-from ..device.transport import stream_from_terminal_current
 from ..solution import FilmSolution
-from .utils import FilmInfo
+from .utils import FilmInfo, stream_from_terminal_current
 
 logger = logging.getLogger("solve")
 
@@ -121,12 +120,7 @@ def solve_for_terminal_current_stream(
     # device._check_current_mapping(terminal_currents)
     terminal_currents = terminal_currents.copy()
     # The drain terminal must sink all current
-    terminals = device.terminals[film_info.name]
-    drain_terminal = terminals.drain_terminal
-    source_terminals = terminals.source_terminals
-    terminal_currents[drain_terminal.name] = -sum(
-        terminal_currents.get(term.name, 0) for term in source_terminals
-    )
+    terminals = device.terminals[film_info.name].copy()
     mesh = device.meshes[film_info.name]
     points = mesh.sites
     inhomogeneous = film_info.lambda_info.inhomogeneous
@@ -154,7 +148,8 @@ def solve_for_terminal_current_stream(
     def min_index(terminal):
         return terminal.contains_points(boundary_points, index=True).max()
 
-    terminals = sorted(terminals.to_list(), key=min_index)
+    drain_terminal = terminals[-1]
+    terminals = sorted(terminals, key=min_index)
     # Rotate terminals so that the drain is the last element
     while terminals[-1] is not drain_terminal:
         terminals.append(terminals.pop(0))
