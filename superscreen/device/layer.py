@@ -82,7 +82,7 @@ class Layer:
         if isinstance(london, (int, float)):
             london = f"{london:.3f}"
         return (
-            f'{self.__class__.__name__}("{self.name}", Lambda={Lambda}, '
+            f"{self.__class__.__name__}({self.name!r}, Lambda={Lambda}, "
             f"thickness={d}, london_lambda={london}, z0={self.z0:.3f})"
         )
 
