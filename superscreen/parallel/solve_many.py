@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numba
 import pint
@@ -16,7 +16,9 @@ logger = logging.getLogger("solve")
 def solve_many(
     device: Device,
     *,
-    parallel_method: Optional[str] = None,
+    parallel_method: Optional[
+        Literal[False, "serial", "multiprocessing", "mp", "ray"]
+    ] = None,
     applied_fields: Optional[Union[Parameter, List[Parameter]]] = None,
     circulating_currents: Optional[
         Union[
