@@ -9,6 +9,8 @@ _use_parallel = joblib.cpu_count(only_physical_cores=True) > 2
 def pairwise_difference(xA: np.ndarray, xB: np.ndarray):
     """Pairwise different between two 1D arrays.
 
+    This is equivalent to ``numpy.subtract.outer(XA, XB)``.
+
     Args:
         xA: A shape (n,) array
         xB: A shep (m,) array
@@ -73,6 +75,9 @@ def euclidean_distance_3d(XA: np.ndarray, XB: np.ndarray):
 
 def cdist(XA: np.ndarray, XB: np.ndarray, metric: str = "euclidean"):
     """Pointwise distance between observations in 2D or 3D space.
+
+    This function provides a subset of the functionality of
+    ``scipy.spatial.distance.cdist``.
 
     Args:
         XA: An (mA, n) array of observations, where n is 2 or 3.
