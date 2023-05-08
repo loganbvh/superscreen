@@ -83,8 +83,10 @@ def create_models(
         for kwargs in layer_update_kwargs:
             # This does a deepcopy of Layers and Polygons
             d = device.copy(with_mesh=False)
-            updated_layers = [layer_updater(layer, **kwargs) for layer in d.layers_list]
-            d.layers_list = updated_layers
+            updated_layers = {
+                name: layer_updater(layer, **kwargs) for name, layer in d.layers.items()
+            }
+            d.layers = updated_layers
             devices.append(d)
     else:
         devices = [device.copy(with_mesh=False)]

@@ -377,24 +377,24 @@ def gradient_vertices(
     return sp.csr_array(gx), sp.csr_array(gy)
 
 
-def gradient_edges(
-    points: np.ndarray,
-    edges: np.ndarray,
-    edge_lengths: np.ndarray,
-) -> sp.csr_array:
-    """Build the gradient for a function living on the sites onto the edges.
+# def gradient_edges(
+#     points: np.ndarray,
+#     edges: np.ndarray,
+#     edge_lengths: np.ndarray,
+# ) -> sp.csr_array:
+#     """Build the gradient for a function living on the sites onto the edges.
 
-    Args:
-        points: Mesh vertex positions
-        edges: Mesh edge indices.
-        edge_lengths: Mesh edge lengths.
+#     Args:
+#         points: Mesh vertex positions
+#         edges: Mesh edge indices.
+#         edge_lengths: Mesh edge lengths.
 
-    Returns:
-        The gradient matrix.
-    """
-    edge_indices = np.arange(len(edges))
-    weights = 1 / edge_lengths
-    rows = np.concatenate([edge_indices, edge_indices])
-    cols = np.concatenate([edges[:, 1], edges[:, 0]])
-    values = np.concatenate([weights, -weights])
-    return sp.csr_array((values, (rows, cols)), shape=(len(edges), len(points)))
+#     Returns:
+#         The gradient matrix.
+#     """
+#     edge_indices = np.arange(len(edges))
+#     weights = 1 / edge_lengths
+#     rows = np.concatenate([edge_indices, edge_indices])
+#     cols = np.concatenate([edges[:, 1], edges[:, 0]])
+#     values = np.concatenate([weights, -weights])
+#     return sp.csr_array((values, (rows, cols)), shape=(len(edges), len(points)))
