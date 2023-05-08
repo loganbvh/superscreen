@@ -4,7 +4,7 @@ from typing import Dict, NamedTuple, Optional, Tuple, Union
 import numpy as np
 import scipy.linalg as la
 
-from ..device import Device, TransportDevice
+from ..device import Device
 from ..device.transport import stream_from_terminal_current
 from ..solution import FilmSolution
 from .utils import FilmInfo
@@ -60,7 +60,7 @@ def build_linear_systems(
             film_indices = np.setdiff1d(
                 film_indices, np.concatenate(list(hole_indices.values()))
             )
-        if isinstance(device, TransportDevice):
+        if film_name in device.terminals:
             film_indices = np.setdiff1d(film_indices, film_info.boundary_indices)
 
         # Form the linear system for the film:
@@ -106,7 +106,7 @@ def _build_system_2d(
 
 
 def solve_for_terminal_current_stream(
-    device: TransportDevice,
+    device: Device,
     film_info: FilmInfo,
     film_system: LinearSystem,
     terminal_currents: Dict[str, float],
@@ -118,13 +118,15 @@ def solve_for_terminal_current_stream(
     function found in step 1.
     3. Re-solve for the stream function in the film with the new hole boundary conditions.
     """
-    device._check_current_mapping(terminal_currents)
+    # device._check_current_mapping(terminal_currents)
     terminal_currents = terminal_currents.copy()
     # The drain terminal must sink all current
-    if device.drain_terminal is not None:
-        terminal_currents[device.drain_terminal.name] = -sum(
-            terminal_currents.get(term.name, 0) for term in device.source_terminals
-        )
+    terminals = device.terminals[film_info.name]
+    drain_terminal = terminals.drain_terminal
+    source_terminals = terminals.source_terminals
+    terminal_currents[drain_terminal.name] = -sum(
+        terminal_currents.get(term.name, 0) for term in source_terminals
+    )
     mesh = device.meshes[film_info.name]
     points = mesh.sites
     inhomogeneous = film_info.lambda_info.inhomogeneous
@@ -135,7 +137,7 @@ def solve_for_terminal_current_stream(
     hole_indices = film_info.hole_indices
     in_hole = film_info.in_hole
     grad_Lambda_term = film_system.grad_Lambda_term
-    boundary_indices = device.boundary_vertices()
+    boundary_indices = film_info.boundary_indices
     on_boundary = np.zeros(len(points), dtype=bool)
     boundary_points = points[boundary_indices]
     on_boundary[boundary_indices] = True
@@ -152,9 +154,9 @@ def solve_for_terminal_current_stream(
     def min_index(terminal):
         return terminal.contains_points(boundary_points, index=True).max()
 
-    terminals = sorted(device.source_terminals + [device.drain_terminal], key=min_index)
+    terminals = sorted(terminals.to_list(), key=min_index)
     # Rotate terminals so that the drain is the last element
-    while terminals[-1] is not device.drain_terminal:
+    while terminals[-1] is not drain_terminal:
         terminals.append(terminals.pop(0))
     for terminal in terminals:
         current = terminal_currents[terminal.name]
@@ -177,7 +179,7 @@ def solve_for_terminal_current_stream(
     Ha_eff += -(A @ g[ix])
     # First solve for the stream function inside the film, ignoring the
     # presence of holes completely.
-    film = device.film
+    film = device.films[film_info.name]
     ix1d = np.logical_and.reduce(
         [film.contains_points(points), np.logical_not(on_boundary)]
     )
@@ -274,8 +276,7 @@ def solve_film(
         grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
         Lambda_info: A LambdaInfo instance defining Lambda(x, y).
         terminal_currents: A dict of ``{source_name: source_current}`` for
-            each source terminal. This argument is only allowed if ``device``
-            as an instance of ``TransportDevice``.
+            each terminal in the film.
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
@@ -288,15 +289,9 @@ def solve_film(
     Returns:
         A FilmSolution containing the results
     """
-    if isinstance(device, TransportDevice):
-        transport_device = True
-    else:
-        # if terminal_currents:
-        #     raise TypeError("Terminal currents are only allowed for TransportDevices.")
-        transport_device = False
 
     circulating_currents = film_info.circulating_currents
-    terminal_currents = film_info.terminal_currents
+    terminal_currents = film_info.terminal_currents or {}
     mesh = device.meshes[film_info.name]
     points = mesh.sites
     # Dense arrays
@@ -325,7 +320,7 @@ def solve_film(
         g[indices] += current  # g[hole] = I_circ
         Ha_eff += -(A @ g[indices])
 
-    if transport_device:
+    if film_info.name in device.terminals:
         g_transport, on_boundary = solve_for_terminal_current_stream(
             device,
             film_info,
@@ -346,7 +341,7 @@ def solve_film(
         hsim = -(A @ gf)
         if not np.allclose(hsim, h):
             logger.warning(
-                f"Unable to solve for stream function in {film_info.name}), "
+                f"Unable to solve for stream function in {film_info.name!r}), "
                 f"maximum error {np.abs(hsim - h).max():.3e}."
             )
     K = None  # Matrix inverse of A

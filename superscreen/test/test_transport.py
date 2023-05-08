@@ -22,33 +22,13 @@ def plus_device():
         term.name = name
         terminals.append(term)
     drain, *sources = terminals
+    terminals = sc.TerminalSet("plus", sources, drain)
 
-    with pytest.raises(ValueError):
-        device = sc.TransportDevice(
-            "plus",
-            film=plus,
-            layer=layer,
-            source_terminals=None,
-            drain_terminal=drain,
-            length_units="um",
-        )
-
-    with pytest.raises(ValueError):
-        device = sc.TransportDevice(
-            "plus",
-            film=plus,
-            layer=layer,
-            source_terminals=sources,
-            drain_terminal=None,
-            length_units="um",
-        )
-
-    device = sc.TransportDevice(
+    device = sc.Device(
         "plus",
-        film=plus,
-        layer=layer,
-        source_terminals=sources,
-        drain_terminal=drain,
+        films=[plus],
+        layers=[layer],
+        terminals=[terminals],
         length_units="um",
     )
     device.make_mesh(max_edge_length=0.2)
@@ -64,12 +44,11 @@ def plus_device_no_terminals():
     plus = bar.union(bar.rotate(90)).resample(501)
     plus.name = "plus"
     plus.layer = layer.name
-    device = sc.TransportDevice(
+    device = sc.Device(
         "plus",
-        film=plus,
-        layer=layer,
-        source_terminals=None,
-        drain_terminal=None,
+        films=[plus],
+        layers=[layer],
+        terminals=None,
         length_units="um",
     )
     device.make_mesh(max_edge_length=0.2)
@@ -106,11 +85,12 @@ def holey_device():
     drain_terminal = sc.Polygon(
         "drain", points=sc.geometry.box(width, height / 100, center=(0, -height / 2))
     )
+    terminals = sc.TerminalSet("film", [source_terminal], drain_terminal)
 
-    device = sc.TransportDevice(
+    device = sc.Device(
         "constriction",
-        layer=sc.Layer("base", Lambda=2),
-        film=film,
+        layers=[sc.Layer("base", Lambda=2)],
+        films=[film],
         holes=[
             sc.Polygon(
                 "hole1",
@@ -123,8 +103,7 @@ def holey_device():
                 points=sc.geometry.circle(width / 4, center=(0, -height / 4)),
             ),
         ],
-        source_terminals=[source_terminal],
-        drain_terminal=drain_terminal,
+        terminals=[terminals],
         length_units=length_units,
     ).translate(dx=dx, dy=dy)
     device.make_mesh(max_edge_length=0.2)
@@ -139,9 +118,11 @@ def test_multi_terminal_currents(plus_device, applied_field):
     sections = [sc.geometry.rotate(rs, i * 90) for i in range(4)]
 
     terminal_currents = {
-        "source1": "1 uA",
-        "source2": sc.ureg("2 uA"),
-        "source3": 3,
+        "plus": {
+            "source1": "1 uA",
+            "source2": sc.ureg("2 uA"),
+            "source3": 3,
+        }
     }
     solution = sc.solve(
         plus_device,
@@ -160,7 +141,7 @@ def test_multi_terminal_currents(plus_device, applied_field):
         dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
         currents.append(np.sum(J * dr * unit_normals))
     drain_current, *source_currents = currents
-    target_currents = solution.terminal_currents.values()
+    target_currents = solution.terminal_currents["plus"].values()
     total_current = sum(target_currents)
     assert np.isclose(drain_current, total_current, rtol=5e-2)
     for actual, target in zip(source_currents, target_currents):
@@ -169,9 +150,7 @@ def test_multi_terminal_currents(plus_device, applied_field):
 
 def test_holey_device(holey_device):
     device = holey_device
-    terminal_currents = {
-        "source": "2 uA",
-    }
+    terminal_currents = {"film": {"source": "2 uA"}}
     circulating_currents = {
         "hole1": "1 uA",
         "hole2": "-1 uA",

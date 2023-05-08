@@ -82,9 +82,9 @@ def test_polygon_flux(solution2: sc.Solution, units, with_units):
         _ = solution2.polygon_flux(name="invalid_polygon")
 
     flux_dict = {}
-    for name in solution2.device.polygons:
-        flux_dict[name] = solution2.polygon_flux(
-            name, units=units, with_units=with_units
+    for polygon in solution2.device.get_polygons(include_terminals=False):
+        flux_dict[polygon.name] = solution2.polygon_flux(
+            polygon.name, units=units, with_units=with_units
         )
 
     units = units or f"{solution2.field_units} * {solution2.device.length_units}**2"

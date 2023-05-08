@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import pint
 
-from ..device import Device, Polygon, TransportDevice
+from ..device import Device, Polygon
 from ..parameter import Constant
 from ..solution import Vortex
 
@@ -105,7 +105,7 @@ def make_film_info(
         if isinstance(london_lambda, (int, float)) and london_lambda <= d:
             length_units = device.ureg(device.length_units).units
             logger.warning(
-                f"Layer '{name}': The film thickness, d = {d:.4f} {length_units:~P},"
+                f"Layer {name!r}: The film thickness, d = {d:.4f} {length_units:~P},"
                 f" is greater than or equal to the London penetration depth, resulting"
                 f" in an effective penetration depth {LambdaInfo.Lambda_str} = {Lambda:.4f}"
                 f" {length_units:~P} <= {LambdaInfo.lambda_str} = {london_lambda:.4f}"
@@ -150,8 +150,11 @@ def make_film_info(
             grad_y = mesh.operators.gradient_y.toarray().astype(dtype, copy=False)
             grad = np.array([grad_x, grad_y])
         boundary_indices = None
-        if isinstance(device, TransportDevice):
-            boundary_indices = device.boundary_vertices()
+        if name in device.terminals:
+            boundary_indices = device.boundary_vertices(name)
+        term_currents = None
+        if terminal_currents:
+            term_currents = terminal_currents[name]
         film_info[name] = FilmInfo(
             name=name,
             layer=layer.name,
@@ -161,7 +164,7 @@ def make_film_info(
             hole_indices=hole_indices,
             in_hole=in_hole,
             circulating_currents=circ_currents,
-            terminal_currents=terminal_currents,
+            terminal_currents=term_currents,
             weights=weights,
             kernel=Q,
             gradient=grad,

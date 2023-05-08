@@ -2,7 +2,7 @@ import itertools
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from scipy import interpolate
 
 from .device.mesh import Mesh
-from .solution import Solution
+from .solution import InterpolatorType, Solution
 from .solver import convert_field
 
 
@@ -207,7 +207,7 @@ def cross_section(
     dataset_coords: np.ndarray,
     dataset_values: np.ndarray,
     cross_section_coords: Union[np.ndarray, Sequence[np.ndarray]],
-    interp_method: str = "linear",
+    interp_method: InterpolatorType = "linear",
 ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
     """Takes a cross-section of the specified dataset values along
     a path given by the given dataset coordinates.
@@ -269,7 +269,7 @@ def plot_streams(
     max_cols: int = 3,
     cmap: str = "coolwarm",
     colorbar: bool = True,
-    shading: str = "flat",
+    shading: Literal["flat", "gouraud"] = "flat",
     auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = True,
@@ -371,7 +371,7 @@ def plot_fields(
     dataset: str = "field",
     normalize: bool = False,
     units: Optional[str] = None,
-    shading: str = "flat",
+    shading: Literal["flat", "gouraud"] = "flat",
     max_cols: int = 3,
     cmap: str = "cividis",
     colorbar: bool = True,
@@ -553,7 +553,7 @@ def plot_currents(
     max_cols: int = 3,
     cmap: str = "inferno",
     colorbar: bool = True,
-    shading: str = "flat",
+    shading: Literal["flat", "gouraud"] = "flat",
     auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
     share_color_scale: bool = False,
     symmetric_color_scale: bool = False,
@@ -711,7 +711,7 @@ def plot_field_at_positions(
     positions: Union[np.ndarray, Mesh],
     zs: Optional[Union[float, np.ndarray]] = None,
     units: Optional[str] = None,
-    shading: str = "gouraud",
+    shading: Literal["flat", "gouraud"] = "gouraud",
     cmap: str = "cividis",
     colorbar: bool = True,
     auto_range_cutoff: Optional[Union[float, Tuple[float, float]]] = None,
@@ -973,12 +973,12 @@ def plot_polygon_flux(
     i0 = int(iteration_offset)
     iterations = np.arange(len(solutions))
     plot_kwargs = kwargs.copy()
-    polygon_names = list(device.polygons)
+    polygons = device.get_polygons(include_terminals=False)
     polygon_flux = defaultdict(list)
     for solution in solutions:
-        for name in polygon_names:
-            polygon_flux[name].append(
-                solution.polygon_flux(name, units=units, with_units=False)
+        for polygon in polygons:
+            polygon_flux[polygon.name].append(
+                solution.polygon_flux(polygon.name, units=units, with_units=False)
             )
     units = device.ureg(units)
     for name, flux_vals in polygon_flux.items():

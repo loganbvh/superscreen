@@ -161,14 +161,6 @@ def device_with_mesh():
     assert films[0] == films[0].copy()
     assert films[0] is not films[0].copy()
     assert device != layers[0]
-    with pytest.raises(TypeError):
-        device.layers = []
-    with pytest.raises(TypeError):
-        device.films = []
-    with pytest.raises(TypeError):
-        device.holes = []
-    with pytest.raises(TypeError):
-        device.abstract_regions = []
     device.layers["layer1"].Lambda = sc.Constant(3)
 
     assert (

@@ -21,7 +21,9 @@ def solve(
     device: Device,
     *,
     applied_field: Optional[Callable] = None,
-    terminal_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
+    terminal_currents: Optional[
+        Dict[str, Dict[str, Union[float, str, pint.Quantity]]]
+    ] = None,
     circulating_currents: Optional[Dict[str, Union[float, str, pint.Quantity]]] = None,
     vortices: Optional[List[Vortex]] = None,
     field_units: str = "mT",
@@ -52,9 +54,8 @@ def solve(
         device: The Device to simulate.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y, z coordinates.
-        terminal_currents: A dict of ``{source_name: source_current}`` for
-            each source terminal. This argument is only allowed if ``device``
-            as an instance of ``TransportDevice``.
+        terminal_currents: A dict like ``{film_name: {source_name: source_current}}`` for
+            each film and terminal.
         circulating_currents: A dict of ``{hole_name: circulating_current}``.
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
@@ -92,9 +93,10 @@ def solve(
         circulating_currents, device.ureg, current_units
     )
     terminal_currents = terminal_currents or {}
-    terminal_currents = utils.currents_to_floats(
-        terminal_currents, device.ureg, current_units
-    )
+    terminal_currents = {
+        film_name: utils.currents_to_floats(currents, device.ureg, current_units)
+        for film_name, currents in terminal_currents.items()
+    }
     applied_field = applied_field or ConstantField(0)
     vortices = vortices or []
 
@@ -146,7 +148,7 @@ def solve(
     # Compute the stream functions and fields for each film
     # given only the applied field.
     for film_name in device.films:
-        logger.info(f"Calculating {film_name} response to applied field.")
+        logger.info(f"Calculating {film_name!r} response to applied field.")
         film_solutions[film_name] = solve_film(
             device=device,
             applied_field=applied_fields[film_name],
@@ -204,8 +206,8 @@ def solve(
             layer = device.layers[film_info[film].layer]
             other_layer = device.layers[film_info[other_film].layer]
             logger.debug(
-                f"Calculating screening field at {film} "
-                f"from {other_film} ({i+1}/{iterations})."
+                f"Calculating screening field at {film!r} "
+                f"from {other_film!r} ({i+1}/{iterations})."
             )
             weights = film_info[other_film].weights
             g = film_solutions[other_film].stream
@@ -236,7 +238,7 @@ def solve(
         film_solutions = {}
         for film_name, film in device.films.items():
             logger.info(
-                f"Calculating {film_name} response to applied field and "
+                f"Calculating {film_name!r} response to applied field and "
                 f"screening field from other films ({i+1}/{iterations})."
             )
             film_solutions[film_name] = solve_film(
