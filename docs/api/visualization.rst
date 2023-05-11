@@ -46,6 +46,4 @@ Supporting Functions
 
 .. autofunction:: superscreen.visualization.setup_color_limits
 
-.. autofunction:: superscreen.visualization.plot_streams_layer
-
 .. autofunction:: superscreen.visualization.cross_section
