@@ -247,7 +247,7 @@ def solve(
     )
 
     if model is None:
-        logger.info("Factorizing model...")
+        logger.info("Factorizing model.")
         model = factorize_model(
             device=device,
             current_units=current_units,
