@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 import pint
 from scipy import integrate
@@ -46,6 +47,27 @@ class LambdaInfo:
         if np.any(self.Lambda < 0):
             raise ValueError(f"Negative Lambda in film {film!r}.")
 
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        """Save the LambdaInfo instance to an h5py.Group."""
+        h5group.attrs["film"] = self.film
+        h5group.attrs["thickness"] = self.thickness
+        if self.london_lambda is not None:
+            h5group["london_lambda"] = self.london_lambda
+        h5group["Lambda"] = self.Lambda
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "LambdaInfo":
+        """Load a LambdaInfo instance from an h5py.Group."""
+        london_lambda = None
+        if "london_lambda" in h5group:
+            london_lambda = np.array(h5group["london_lambda"])
+        return LambdaInfo(
+            film=h5group.attrs["film"],
+            Lambda=np.array(h5group["Lambda"]),
+            london_lambda=london_lambda,
+            thickness=h5group.attrs["thickness"],
+        )
+
 
 @dataclass
 class FilmInfo:
@@ -64,8 +86,78 @@ class FilmInfo:
     terminal_currents: Optional[Dict[str, float]] = None
     boundary_indices: Optional[np.ndarray] = None
 
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        """Save the FilmInfo instance to a h5py.Group."""
+        h5group.attrs["name"] = self.name
+        h5group.attrs["layer"] = self.layer
+        self.lambda_info.to_hdf5(h5group.create_group("lambda_info"))
+        vortices_grp = h5group.create_group("vortices")
+        for i, vortex in enumerate(self.vortices):
+            vortex.to_hdf5(vortices_grp.create_group(str(i)))
+        h5group["film_indices"] = self.film_indices
+        hole_indices_grp = h5group.create_group("hole_indices")
+        for hole, indices in self.hole_indices.items():
+            hole_indices_grp[hole] = indices
+        h5group["in_hole"] = self.in_hole
+        circ_grp = h5group.create_group("circulating_currents")
+        for hole, current in self.circulating_currents.items():
+            circ_grp.attrs[hole] = current
+        h5group["weights"] = self.weights
+        h5group["kernel"] = self.kernel
+        h5group["laplacian"] = self.laplacian
+        if self.gradient is not None:
+            h5group["gradient"] = self.gradient
+        if self.terminal_currents is not None:
+            term_grp = h5group.create_group("terminal_currents")
+            for name, current in self.terminal_currents.items():
+                term_grp.attrs[name] = current
+        if self.boundary_indices is not None:
+            h5group["boundary_indices"] = self.boundary_indices
 
-def get_holes_vortices_by_film(
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "FilmInfo":
+        """Load a FilmInfo instance from an h5py.Group."""
+        name = h5group.attrs["name"]
+        layer = h5group.attrs["layer"]
+        lambda_info = LambdaInfo.from_hdf5(h5group["lambda_info"])
+        vortices = []
+        for i in sorted(h5group["vortices"], key=int):
+            vortices.append(Vortex.from_hdf5(h5group[f"vortices/{i}"]))
+        film_indices = np.array(h5group["film_indices"])
+        hole_indices = {}
+        for hole, indices in h5group["hole_indices"].items():
+            hole_indices[hole] = np.array(indices)
+        in_hole = np.array(h5group["in_hole"])
+        circulating_currents = dict(h5group["circulating_currents"].attrs)
+        weights = np.array(h5group["weights"])
+        kernel = np.array(h5group["kernel"])
+        laplacian = np.array(h5group["laplacian"])
+        gradient = terminal_currents = boundary_indices = None
+        if "gradient" in h5group:
+            gradient = np.array(h5group["gradient"])
+        if "terminal_currents" in h5group:
+            terminal_currents = dict(h5group["terminal_currents"].attrs)
+        if "boundary_indices" in h5group:
+            boundary_indices = np.array(h5group["boundary_indices"])
+        return FilmInfo(
+            name,
+            layer,
+            lambda_info,
+            tuple(vortices),
+            film_indices,
+            hole_indices,
+            in_hole,
+            circulating_currents,
+            weights,
+            kernel,
+            laplacian,
+            gradient=gradient,
+            terminal_currents=terminal_currents,
+            boundary_indices=boundary_indices,
+        )
+
+
+def get_holes_and_vortices_by_film(
     device: Device, vortices: List[Vortex]
 ) -> Tuple[Dict[str, List[Polygon]], Dict[str, List[Vortex]]]:
     vortices_by_film = {film_name: [] for film_name in device.films}
@@ -91,11 +183,9 @@ def make_film_info(
     vortices: List[Vortex],
     circulating_currents: Dict[str, float],
     terminal_currents: Dict[str, float],
-    dtype: Union[np.dtype, str, None] = None,
 ) -> Dict[str, FilmInfo]:
-    if dtype is None:
-        dtype = device.solve_dtype
-    holes_by_film, vortices_by_film = get_holes_vortices_by_film(device, vortices)
+    dtype = device.solve_dtype
+    holes_by_film, vortices_by_film = get_holes_and_vortices_by_film(device, vortices)
     film_info = {}
     for name, film in device.films.items():
         mesh = device.meshes[name]
@@ -176,8 +266,10 @@ def make_film_info(
     return film_info
 
 
-# Convert all circulating and terminal currents to floats.
-def current_to_float(value, ureg, current_units: str):
+def current_to_float(
+    value: Union[float, str, pint.Quantity], ureg: pint.UnitRegistry, current_units: str
+):
+    """Convert a current to a float in the given units."""
     if isinstance(value, str):
         value = ureg(value)
     if isinstance(value, pint.Quantity):
@@ -185,11 +277,16 @@ def current_to_float(value, ureg, current_units: str):
     return value
 
 
-def currents_to_floats(currents, ureg, current_units) -> Dict[str, float]:
-    _currents = currents.copy()
-    for name, val in _currents.items():
-        currents[name] = current_to_float(val, ureg, current_units)
-    return currents
+def currents_to_floats(
+    currents: Dict[str, Union[float, str, pint.Quantity]],
+    ureg: pint.UnitRegistry,
+    current_units: str,
+) -> Dict[str, float]:
+    """Converts a dict of currents to a dict of floats in the given units."""
+    return {
+        key: current_to_float(value, ureg, current_units)
+        for key, value in currents.items()
+    }
 
 
 def convert_field(

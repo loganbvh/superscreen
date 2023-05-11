@@ -1,6 +1,8 @@
 import logging
-from typing import Dict, NamedTuple, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple, Union
 
+import h5py
 import numpy as np
 import scipy.linalg as la
 
@@ -11,14 +13,46 @@ from .utils import FilmInfo, stream_from_terminal_current
 logger = logging.getLogger("solve")
 
 
-class LinearSystem(NamedTuple):
+@dataclass
+class LinearSystem:
     A: np.ndarray
     indices: np.ndarray
     lu_piv: Optional[Tuple[np.ndarray, np.ndarray]] = None
     grad_Lambda_term: Union[float, np.ndarray] = 0.0
 
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        """Save a LinearSystem instance to an h5py.Group."""
+        h5group["A"] = self.A
+        h5group["indices"] = self.indices
+        if self.lu_piv is not None:
+            h5group["lu"] = self.lu_piv[0]
+            h5group["piv"] = self.lu_piv[1]
+        if isinstance(self.grad_Lambda_term, np.ndarray):
+            h5group["grad_Lambda_term"] = self.grad_Lambda_term
+        else:
+            h5group.attrs["grad_Lambda_term"] = self.grad_Lambda_term
 
-def build_linear_systems(
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "LinearSystem":
+        """Load a LinearSystem instance to an h5py.Group."""
+        A = np.array(h5group["A"])
+        indices = np.array(h5group["indices"])
+        lu_piv = None
+        if "lu" in h5group:
+            lu = np.array(h5group["lu"])
+            piv = np.array(h5group["piv"])
+            lu_piv = (lu, piv)
+        grad_Lambda_term = 0.0
+        if "grad_Lambda_term" in h5group:
+            grad_Lambda_term = np.array(h5group["grad_Lambda_term"])
+        else:
+            grad_Lambda_term = h5group.attrs["grad_Lambda_term"]
+        return LinearSystem(
+            A, indices, lu_piv=lu_piv, grad_Lambda_term=grad_Lambda_term
+        )
+
+
+def factorize_linear_systems(
     device: Device, film_info_dict: Dict[str, FilmInfo]
 ) -> Tuple[Dict[str, LinearSystem], Dict[str, Dict[str, LinearSystem]]]:
     film_systems = {}
