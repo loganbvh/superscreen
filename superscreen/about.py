@@ -9,7 +9,6 @@ import joblib
 import matplotlib
 import numba
 import numpy
-import ray
 import scipy
 from IPython.display import HTML
 
@@ -54,7 +53,6 @@ def version_dict() -> Dict[str, str]:
         "Numba": numba.__version__,
         "SciPy": scipy.__version__,
         "matplotlib": matplotlib.__version__,
-        "ray": ray.__version__,
         "IPython": IPython.__version__,
         "Python": sys.version,
         "OS": f"{os.name} [{sys.platform}]",

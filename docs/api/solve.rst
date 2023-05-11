@@ -15,11 +15,6 @@ Solve
 
 .. autofunction:: superscreen.solve
 
-Solve Many
-----------
-
-.. autofunction:: superscreen.solve_many
-
 
 Solution
 --------
@@ -49,7 +44,3 @@ Supporting Functions
 .. autofunction:: superscreen.solver.convert_field
 
 .. autofunction:: superscreen.solver.field_conversion_factor
-
-.. autofunction:: superscreen.parallel.cpu_count
-
-.. autofunction:: superscreen.parallel.create_models
