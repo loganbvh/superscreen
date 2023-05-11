@@ -31,7 +31,7 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.8, <3.11"
+PYTHON_VERSION = ">=3.8, <=3.11"
 
 INSTALL_REQUIRES = [
     "dill",
@@ -48,7 +48,6 @@ INSTALL_REQUIRES = [
     "pre-commit",
     "pytest",
     "pytest-cov",
-    "ray[default]",
     "scipy",
     "shapely",
 ]

@@ -12,6 +12,5 @@ pint
 pre-commit
 pytest
 pytest-cov
-ray[default]
 scipy
 shapely
