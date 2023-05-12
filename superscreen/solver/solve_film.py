@@ -212,7 +212,7 @@ def solve_for_terminal_current_stream(
     Ha_eff = np.zeros(npoints)
 
     if not any(terminal_currents.values()):
-        return g, on_boundary
+        return g
 
     Lambda = 1e10 * np.ones_like(Lambda)
 
