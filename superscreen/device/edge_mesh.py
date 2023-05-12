@@ -1,4 +1,4 @@
-from typing import Dict, Sequence, Tuple
+from typing import Sequence, Tuple
 
 import h5py
 import numpy as np
@@ -117,13 +117,4 @@ class EdgeMesh:
             boundary_edge_indices=self.boundary_edge_indices.copy(),
             directions=self.directions.copy(),
             edge_lengths=self.edge_lengths.copy(),
-        )
-
-    def to_dict(self) -> Dict[str, np.ndarray]:
-        return dict(
-            centers=self.centers,
-            edges=self.edges,
-            boundary_edge_indices=self.boundary_edge_indices,
-            directions=self.directions,
-            edge_lengths=self.edge_lengths,
         )

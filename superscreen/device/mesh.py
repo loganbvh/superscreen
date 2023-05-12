@@ -323,36 +323,6 @@ class Mesh:
             mesh.operators = self.operators.copy()
         return mesh
 
-    def to_dict(
-        self,
-    ) -> Dict[str, Union[np.ndarray, Dict[str, Union[np.ndarray, sp.spmatrix]]]]:
-        mesh_as_dict = dict(
-            sites=self.sites,
-            elements=self.elements,
-            boundary_indices=self.boundary_indices,
-            vertex_areas=self.vertex_areas,
-            triangle_areas=self.triangle_areas,
-            edge_mesh=self.edge_mesh.to_dict(),
-        )
-        if self.operators is not None:
-            mesh_as_dict["operators"] = self.operators.to_dict()
-        return mesh_as_dict
-
-    @staticmethod
-    def from_dict(
-        mesh_as_dict: Dict[
-            str, Union[np.ndarray, Dict[str, Union[np.ndarray, sp.spmatrix]]]
-        ]
-    ) -> "Mesh":
-        mesh_as_dict = mesh_as_dict.copy()
-        operators_dict = mesh_as_dict.pop("operators", None)
-        edge_mesh_dict = mesh_as_dict.pop("edge_mesh")
-        mesh_as_dict["edge_mesh"] = EdgeMesh(**edge_mesh_dict)
-        mesh = Mesh(**mesh_as_dict)
-        if operators_dict:
-            mesh.operators = MeshOperators(**operators_dict)
-        return mesh
-
 
 class MeshOperators:
     def __init__(
@@ -369,16 +339,6 @@ class MeshOperators:
         self.gradient_x = gradient_x
         self.gradient_y = gradient_y
         self.laplacian = laplacian
-
-    def to_dict(self) -> Dict[str, Union[np.ndarray, sp.spmatrix]]:
-        return dict(
-            weights=self.weights,
-            Q=self.Q,
-            gradient_x=self.gradient_x,
-            gradient_y=self.gradient_y,
-            # gradient_edges=self.gradient_edges,
-            laplacian=self.laplacian,
-        )
 
     @staticmethod
     def from_mesh(mesh: Mesh) -> "MeshOperators":
