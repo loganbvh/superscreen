@@ -21,15 +21,6 @@ for ``SuperScreen`` to avoid dependency conflicts with other packages. To create
 After the environment has been created, run ``conda activate superscreen`` to activate it.
 
 
-.. important::
-
-  - On **Windows**, ensure that the latest
-    `Microsoft Visual C++ runtime
-    <https://support.microsoft.com/en-us/topic/the-latest-supported-visual-c-downloads-2647da03-1eea-4433-9aff-95f26a218cc0>`_
-    is installed before installing ``superscreen``.
-  - On **MacOS**, ensure that `Xcode command line tools <https://mac.install.guide/commandlinetools/>`_
-    are installed before installing ``superscreen``.
-
 Install via ``pip``
 -------------------
 

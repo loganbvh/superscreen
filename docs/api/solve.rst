@@ -22,6 +22,9 @@ Solution
 .. autoclass:: superscreen.Solution
     :members:
 
+.. autoclass:: superscreen.FilmSolution
+    :members:
+
 Fluxoid
 -------
 
@@ -29,18 +32,37 @@ Fluxoid
     :show-inheritance:
 
 .. autoclass:: superscreen.Vortex
-    :show-inheritance:
 
 .. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
 
 .. autofunction:: superscreen.fluxoid.find_fluxoid_solution
 
 
-Supporting Functions
+Supporting functions
 --------------------
 
-.. autofunction:: superscreen.solver.solve_film.solve_film
+.. autofunction:: superscreen.solver.solve_film
+
+.. autofunction:: superscreen.solver.factorize_model
+
+.. autofunction:: superscreen.solver.factorize_linear_systems
 
 .. autofunction:: superscreen.solver.convert_field
 
 .. autofunction:: superscreen.solver.field_conversion_factor
+
+
+Supporting classes
+------------------
+
+.. autoclass:: superscreen.solver.FactorizedModel
+    :members:
+
+.. autoclass:: superscreen.solver.FilmInfo
+    :members:
+
+.. autoclass:: superscreen.solver.LambdaInfo
+    :members:
+
+.. autoclass:: superscreen.solver.LinearSystem
+    :members:

@@ -68,6 +68,14 @@ def solution2(device: sc.Device) -> sc.Solution:
     return solutions[-1]
 
 
+def test_save_and_load_solutions(solution1, tmp_path):
+    h5path = tmp_path / "solution1.h5"
+    sc.Solution.save_solutions([solution1] * 5, h5path)
+
+    solutions = sc.Solution.load_solutions(h5path)
+    assert all(solution == solution1 for solution in solutions)
+
+
 def test_solution_equals(solution1: sc.Solution, solution2: sc.Solution):
     assert solution1 == solution1
     assert solution2 == solution2

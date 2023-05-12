@@ -93,6 +93,16 @@ class Vortex:
 
 
 class FilmSolution:
+    """Raw solution data for a single film.
+
+    Args:
+        stream: The stream function
+        current_density: The sheet current density
+        applied_field: The applied field
+        self_field: The field due to screening currents in the film
+        field_from_other_films: The field due to screening currents in other films
+    """
+
     def __init__(
         self,
         stream: np.ndarray,
@@ -112,6 +122,7 @@ class FilmSolution:
 
     @property
     def total_field(self) -> np.ndarray:
+        """The total magnetic field in the film."""
         if self._total_field is None:
             self._total_field = self.applied_field + self.self_field
             if self.field_from_other_films is not None:
@@ -119,6 +130,11 @@ class FilmSolution:
         return self._total_field
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
+        """Save the :class:`superscreen.FilmSolution` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` in which to save the :class:`superscreen.FilmSolution`
+        """
         h5group["stream"] = self.stream
         h5group["current_density"] = self.current_density
         h5group["applied_field"] = self.applied_field
@@ -128,6 +144,14 @@ class FilmSolution:
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "FilmSolution":
+        """Load a :class:`superscreen.FilmSolution` from an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the :class:`superscreen.FilmSolution`
+
+        Returns:
+            The loaded :class:`superscreen.FilmSolution`
+        """
         field_from_other_films = h5group.get("field_from_other_films", None)
         if field_from_other_films is not None:
             field_from_other_films = np.array(field_from_other_films)
@@ -146,8 +170,8 @@ class FilmSolution:
 
         Args:
             other: The other FilmSolution
-            rtol: Relative tolerance (see :func:`np.allclose`)
-            atol: Absolute tolerance (see :func:`np.allclose`)
+            rtol: Relative tolerance (see :func:`numpy.allclose`)
+            atol: Absolute tolerance (see :func:`numpy.allclose`)
 
         Returns:
             True if the two FilmSolutions are equal within the given tolerances.
@@ -181,8 +205,7 @@ class Solution:
     Args:
         device: The ``Device`` that was solved
         film_solutions: A dict of ``{film_name: film_solution}`` containing the raw
-            simulation results in ``field_units``, ``current_units``,
-            and ``device.length_units``.
+            simulation results in ``field_units``, ``current_units``, and ``device.length_units``.
         applied_field_func: The function defining the applied field
         field_units: Units of the applied field
         current_units: Units used for current quantities.
@@ -190,6 +213,7 @@ class Solution:
         terminal_currents: A dict of ``{terminal_name: terminal_current}``.
         vortices: A list of ``Vortex`` objects located in the ``Device``.
         solver: The solver method that generated the solution.
+
     """
 
     def __init__(
@@ -265,7 +289,7 @@ class Solution:
         """Interpolates the current density ``J = [dg/dy, -dg/dx]`` within a film.
 
         Additional keyword arguments are passed to the relevant interpolator:
-        :class``scipy.interpolate.NearestNDInterpolator`,
+        :class:`scipy.interpolate.NearestNDInterpolator`,
         :class:`scipy.interpolate.LinearNDInterpolator`, or
         :class:`scipy.interpolate.CloughTocher2DInterpolator`.
 
@@ -357,7 +381,7 @@ class Solution:
         """Interpolates the z-component of the field within a film.
 
         Additional keyword arguments are passed to the relevant interpolator:
-        :class``scipy.interpolate.NearestNDInterpolator`,
+        :class:`scipy.interpolate.NearestNDInterpolator`,
         :class:`scipy.interpolate.LinearNDInterpolator`, or
         :class:`scipy.interpolate.CloughTocher2DInterpolator`.
 

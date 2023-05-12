@@ -16,6 +16,15 @@ logger = logging.getLogger("solve")
 
 
 class LambdaInfo:
+    """An object containing information about the effective penetration depth for a given film.
+
+    Args:
+        film: The name of the film
+        Lambda: The effective penetration depth at each mesh site
+        london_lambda: The London penetration depth at each mesh site
+        thickness: The thickness of the layer in which the film exists
+    """
+
     lambda_str = "\u03bb"
     Lambda_str = "\u039b"
 
@@ -48,29 +57,66 @@ class LambdaInfo:
             raise ValueError(f"Negative Lambda in film {film!r}.")
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
-        """Save the LambdaInfo instance to an h5py.Group."""
+        """Save the ``LambdaInfo`` instance to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` in which to save the
+                ``LambdaInfo`` instance.
+        """
         h5group.attrs["film"] = self.film
-        h5group.attrs["thickness"] = self.thickness
         if self.london_lambda is not None:
             h5group["london_lambda"] = self.london_lambda
+        if self.thickness is not None:
+            h5group.attrs["thickness"] = self.thickness
         h5group["Lambda"] = self.Lambda
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "LambdaInfo":
-        """Load a LambdaInfo instance from an h5py.Group."""
-        london_lambda = None
+        """Load a LambdaInfo instance from an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the
+                ``LambdaInfo`` instance.
+
+        Returns:
+            The loaded ``LambdaInfo`` instance
+        """
+        london_lambda = thickness = None
         if "london_lambda" in h5group:
             london_lambda = np.array(h5group["london_lambda"])
+        if "thickness" in h5group:
+            thickness = float(h5group["thickness"])
         return LambdaInfo(
             film=h5group.attrs["film"],
             Lambda=np.array(h5group["Lambda"]),
             london_lambda=london_lambda,
-            thickness=h5group.attrs["thickness"],
+            thickness=thickness,
         )
 
 
 @dataclass
 class FilmInfo:
+    """A container for information about a single film required for the solver.
+
+    Args:
+        name: The film name
+        layer: The layer in which the film exists
+        lambda_info: A :class:`superscreen.solver.LambdaInfo` instance defining the
+            effective penetration depth in the film
+        vortices: Any :class:`superscreen.Vortex` instances located in the film
+        film_indices: The indices of the film in its mesh
+        hole_indices: A dict containing the indices of each hole in the film's mesh
+        in_hole: A boolean array indicated which mesh sites lie inside a hole
+        circulating_currents: A dict of ``{hole_name, circulating_current}``
+        weights: The mesh weights
+        kernel: The mesh self-field kernel :math:`\\mathbf{Q}`
+        laplacian: The mesh Laplacian :math:`\\nabla^2`
+        gradient: The mesh gradient operator :math:`\\vec{\\nabla}`
+        terminal_currents: A dict of ``{terminal_name: terminal_current}``
+        boundary_indices: Indices of the boundary vertices for the mesh,
+            ordered counterclockwise.
+    """
+
     name: str
     layer: str
     lambda_info: LambdaInfo
@@ -87,7 +133,11 @@ class FilmInfo:
     boundary_indices: Optional[np.ndarray] = None
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
-        """Save the FilmInfo instance to a h5py.Group."""
+        """Save the :class:`superscreen.solver.FilmInfo` instance to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` in which to save the ``FilmInfo``
+        """
         h5group.attrs["name"] = self.name
         h5group.attrs["layer"] = self.layer
         self.lambda_info.to_hdf5(h5group.create_group("lambda_info"))
@@ -116,7 +166,14 @@ class FilmInfo:
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "FilmInfo":
-        """Load a FilmInfo instance from an h5py.Group."""
+        """Load a :class:`superscreen.solver.FilmInfo` instance from an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the ``FilmInfo``
+
+        Returns:
+            The loaded :class:`superscreen.solver.FilmInfo` instance
+        """
         name = h5group.attrs["name"]
         layer = h5group.attrs["layer"]
         lambda_info = LambdaInfo.from_hdf5(h5group["lambda_info"])

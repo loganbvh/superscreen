@@ -27,13 +27,13 @@ PolygonType = Union[
 
 
 class Polygon:
-    """A polygonal region located in a Layer.
+    """A simply-connected polygon located in a Layer.
 
     Args:
         name: Name of the polygon.
         layer: Name of the layer in which the polygon is located.
         points: The polygon vertices. This can be a shape ``(n, 2)`` array of x, y
-            coordinates or a shapely ``LineString``, ``LinearRing``, or ``Polygon``.
+            coordinates or a shapely ``LineString``, ``LinearRing``, or :class:`superscreen.Polygon`.
     """
 
     __slots__ = ("name", "layer", "_points")
@@ -82,7 +82,7 @@ class Polygon:
 
     @property
     def is_valid(self) -> bool:
-        """True if the ``Polygon`` has a ``name`` and ``layer`` its geometry is valid."""
+        """True if the :class:`superscreen.Polygon` has a ``name`` and ``layer`` its geometry is valid."""
         polygon = self.polygon
         return (
             self.name is not None
@@ -104,7 +104,7 @@ class Polygon:
 
     @property
     def polygon(self) -> geo.polygon.Polygon:
-        """A shapely ``Polygon`` representing the Polygon."""
+        """A shapely :class:`superscreen.Polygon` representing the :class:`superscreen.Polygon`"""
         return geo.polygon.Polygon(self.points)
 
     @property
@@ -113,12 +113,26 @@ class Polygon:
         return path.Path(self.points, closed=True)
 
     def set_name(self, name: Union[str, None]) -> "Polygon":
-        """Sets the Polygon's name and returns ``self``."""
+        """Sets the Polygon's name and returns ``self``.
+
+        Args:
+            name: The new name for the :class:`superscreen.Polygon`
+
+        Returns:
+            ``self``
+        """
         self.name = name
         return self
 
     def set_layer(self, layer: Union[str, None]) -> "Polygon":
-        """Sets the Polygon's layer and returns ``self``."""
+        """Sets the Polygon's layer and returns ``self``.
+
+        Args:
+            layer: The new layer for the :class:`superscreen.Polygon`
+
+        Returns:
+            ``self``
+        """
         self.layer = layer
         return self
 
@@ -347,7 +361,7 @@ class Polygon:
 
         Args:
             others: One or more objects with which to join the polygon.
-            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
+            name: A name for the resulting joined :class:`superscreen.Polygon` (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the union
@@ -371,7 +385,7 @@ class Polygon:
 
         Args:
             others: One or more objects with which to join the polygon.
-            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
+            name: A name for the resulting joined :class:`superscreen.Polygon` (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the intersection
@@ -398,7 +412,7 @@ class Polygon:
             others: One or more objects with which to join the polygon.
             symmetric: Whether to join via a symmetric difference operation (aka XOR).
                 See the `shapely documentation`_.
-            name: A name for the resulting joined Polygon (defaults to ``self.name``.)
+            name: A name for the resulting joined :class:`superscreen.Polygon` (defaults to ``self.name``.)
 
         Returns:
             A new :class:`Polygon` instance representing the difference
@@ -424,7 +438,7 @@ class Polygon:
         single_sided: bool = True,
         as_polygon: bool = True,
     ) -> Union[np.ndarray, "Polygon"]:
-        """Returns polygon points or a new Polygon object with vertices offset from
+        """Returns polygon points or a new :class:`superscreen.Polygon` object with vertices offset from
         ``self.points`` by a given ``distance``. If ``distance > 0`` this "inflates"
         the polygon, and if ``distance < 0`` this shrinks the polygon.
 
@@ -435,11 +449,11 @@ class Polygon:
                 See the `shapely documentation`_.
             mitre_limit: See the `shapely documentation`_.
             single_sided: See the `shapely documentation`_.
-            as_polygon: If True, returns a new ``Polygon`` instance, otherwise
+            as_polygon: If True, returns a new :class:`superscreen.Polygon` instance, otherwise
                 returns a shape ``(n, 2)`` array of polygon vertices.
 
         Returns:
-            A new ``Polygon`` or an array of vertices offset by ``distance``.
+            A new :class:`superscreen.Polygon` or an array of vertices offset by ``distance``.
 
         .. _shapely documentation: https://shapely.readthedocs.io/en/stable/manual.html
         """

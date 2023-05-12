@@ -8,6 +8,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from IPython.display import HTML
 
 import superscreen as sc
 from superscreen.visualization import non_gui_backend
@@ -91,6 +92,9 @@ def device():
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
     d = device.copy()
     assert d == device
+
+    assert device.mesh_stats_dict() is None
+    assert device.mesh_stats() is None
 
     return device
 
@@ -187,6 +191,8 @@ def device_with_mesh():
     dz = 1
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
     d = device.copy(with_mesh=True, copy_mesh=True)
+    assert isinstance(device.mesh_stats_dict(), dict)
+    assert isinstance(device.mesh_stats(), HTML)
     return device
 
 

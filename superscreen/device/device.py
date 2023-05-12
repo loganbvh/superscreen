@@ -33,10 +33,9 @@ class Device:
         layers: ``Layers`` making up the device.
         films: ``Polygons`` representing regions of superconductor.
         holes: ``Holes`` representing holes in superconducting films.
-        terminals: A dict of ``{film_name: terminals}` representing transport
+        terminals: A dict of ``{film_name: terminals}`` representing transport
             terminals in the device.
         abstract_regions: ``Polygons`` representing abstract regions in a device.
-            Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
         solve_dtype: The float data type to use when solving the device.
     """
@@ -385,6 +384,7 @@ class Device:
             buffer_factor: Buffer for the film bounding box(es), in units of the maximum
                 film dimension. This argument is ignored if ``buffer`` is not None.
             buffer: Buffer for the film bounding box(es), in ``length_units``.
+            join_style: The join style for the buffered region (see :meth:`superscreen.Polygon.buffer`).
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
@@ -516,7 +516,7 @@ class Device:
             return None
         return {name: mesh.stats() for name, mesh in self.meshes.items()}
 
-    def mesh_stats(self, precision: int = 3) -> HTML:
+    def mesh_stats(self, precision: int = 3) -> Optional[HTML]:
         """When called with in Jupyter notebook, displays
         a table of information about the mesh.
 
@@ -940,7 +940,7 @@ class Device:
         Args:
             path_or_group: Path to an HDF5 file to create, or an open HD5F file.
             save_mesh: Whether to save the full mesh to file.
-            compressed: Save the minimum amount of data needed to recreate the mesh.
+            compress: Save the minimum amount of data needed to recreate the mesh.
         """
         if isinstance(path_or_group, h5py.Group):
             save_context = nullcontext(path_or_group)
@@ -976,6 +976,7 @@ class Device:
     def from_hdf5(path_or_group: Union[os.PathLike, h5py.Group]) -> "Device":
         """Loads a Device from an HDF5 file.
 
+        Args:
             path_or_group: Path to an HDF5 file to read, or an open HD5F file.
 
         Returns:

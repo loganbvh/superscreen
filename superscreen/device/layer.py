@@ -10,11 +10,11 @@ from ..parameter import Parameter
 class Layer:
     """A single layer of a superconducting device.
 
-    You can provide either an effective penetration depth Lambda,
-    or both a London penetration depth (lambda_london) and a layer
-    thickness. Lambda and london_lambda can either be real numers or
-    Parameters which compute the penetration depth as a function of
-    position.
+    You can provide either an effective penetration depth ``Lambda``,
+    or both a London penetration depth (``lambda_london``) and a layer
+    ``thickness``. ``Lambda`` and ``london_lambda`` can either be real numers or
+    instances of :class:`superscreen.Parameter` which compute the penetration
+    depth as a function of position.
 
     Args:
         name: Name of the layer.

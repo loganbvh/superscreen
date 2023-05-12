@@ -15,13 +15,29 @@ logger = logging.getLogger("solve")
 
 @dataclass
 class LinearSystem:
+    r"""The linear system representing a given film or hole.
+
+    Args:
+        A: The matrix quantity to be inverted,
+            :math:`\mathbf{Q}.\mathbf{w}^T-\mathbf{\Lambda}^T.\mathbf{\nabla}^2-\vec{\nabla}\mathbf{\Lambda}\cdot\vec{\nabla}`
+        indices: The indices into the corresponding mesh
+        lu_piv: The LU factorization ``lu_piv = scipy.linalg.lu_factor(-A)``,
+            see :func:`scipy.linalg.lu_factor`
+        grad_Lambda_term: The term corresponding to the gradient of the
+            effective penetration depth.
+    """
+
     A: np.ndarray
     indices: np.ndarray
     lu_piv: Optional[Tuple[np.ndarray, np.ndarray]] = None
     grad_Lambda_term: Union[float, np.ndarray] = 0.0
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
-        """Save a LinearSystem instance to an h5py.Group."""
+        """Save a :class:`superscreen.solver.LinearSystem` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` to which to save the ``LinearSystem``
+        """
         h5group["A"] = self.A
         h5group["indices"] = self.indices
         if self.lu_piv is not None:
@@ -34,7 +50,14 @@ class LinearSystem:
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "LinearSystem":
-        """Load a LinearSystem instance to an h5py.Group."""
+        """Load a :class:`superscreen.solver.LinearSystem` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the ``LinearSystem``
+
+        Returns:
+            The loaded :class:`superscreen.solver.LinearSystem`
+        """
         A = np.array(h5group["A"])
         indices = np.array(h5group["indices"])
         lu_piv = None
@@ -55,6 +78,17 @@ class LinearSystem:
 def factorize_linear_systems(
     device: Device, film_info_dict: Dict[str, FilmInfo]
 ) -> Tuple[Dict[str, LinearSystem], Dict[str, Dict[str, LinearSystem]]]:
+    """Build and factorize the linear systems for all films and holes.
+
+    Args:
+        device: The :class:`superscreen.Device` to solve
+        film_info_dict: A dict of ``{film_name: film_info}``, where each ``film_info``
+            is a :class:`superscreen.solver.FilmInfo` instance
+
+    Returns:
+        A dict of ``{film_name: film_system}`` and
+        a dict of ``{film_name: {hole_name: hole_system}}``
+    """
     film_systems = {}
     hole_systems = {}
     for film_name, film_info in film_info_dict.items():
@@ -110,7 +144,10 @@ def factorize_linear_systems(
         )
         lu_piv = la.lu_factor(-A)
         film_systems[film_name] = LinearSystem(
-            A=A, indices=film_indices, lu_piv=lu_piv, grad_Lambda_term=grad_Lambda_term
+            A=A,
+            indices=film_indices,
+            lu_piv=lu_piv,
+            grad_Lambda_term=grad_Lambda_term,
         )
     return film_systems, hole_systems
 
@@ -143,7 +180,7 @@ def solve_for_terminal_current_stream(
     film_info: FilmInfo,
     film_system: LinearSystem,
     terminal_currents: Dict[str, float],
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> np.ndarray:
     """
     1. Solve for the stream function in the film assuming no applied field and
     ignoring the presence of any holes.
@@ -203,15 +240,19 @@ def solve_for_terminal_current_stream(
     ix = boundary_indices
     g[ix] += -g_ref
     A = _build_system_1d(
-        Q, weights, Lambda, laplacian, grad_Lambda_term, ix, inhomogeneous=inhomogeneous
+        Q,
+        weights,
+        Lambda,
+        laplacian,
+        grad_Lambda_term,
+        ix,
+        inhomogeneous=inhomogeneous,
     )
     Ha_eff += -(A @ g[ix])
     # First solve for the stream function inside the film, ignoring the
     # presence of holes completely.
     film = device.films[film_info.name]
-    ix1d = np.logical_and.reduce(
-        [film.contains_points(points), np.logical_not(on_boundary)]
-    )
+    ix1d = np.logical_and(film.contains_points(points), np.logical_not(on_boundary))
     ix1d = np.where(ix1d)[0]
     A = _build_system_2d(
         Q,
@@ -231,7 +272,7 @@ def solve_for_terminal_current_stream(
         name: hole for name, hole in device.holes.items() if hole.layer == film.layer
     }
     if len(holes) == 0:
-        return g, on_boundary
+        return g
 
     # Set the stream function in each hole to the average value
     # obtained when ignoring holes.
@@ -252,7 +293,13 @@ def solve_for_terminal_current_stream(
 
     ix = boundary_indices
     A = _build_system_1d(
-        Q, weights, Lambda, laplacian, grad_Lambda_term, ix, inhomogeneous=inhomogeneous
+        Q,
+        weights,
+        Lambda,
+        laplacian,
+        grad_Lambda_term,
+        ix,
+        inhomogeneous=inhomogeneous,
     )
     Ha_eff += -(A @ g[ix])
 
@@ -278,7 +325,7 @@ def solve_for_terminal_current_stream(
     lu_piv = la.lu_factor(-A)
     gf = la.lu_solve(lu_piv, -Ha_eff[ix1d])
     g[ix1d] = gf
-    return g, on_boundary
+    return g
 
 
 def solve_film(
@@ -292,31 +339,24 @@ def solve_film(
     vortex_flux: float,
     field_from_other_films: Optional[np.ndarray] = None,
     check_inversion: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Computes the stream function and magnetic field within a single layer of a ``Device``.
+) -> FilmSolution:
+    """Computes the stream function and magnetic field within a single film
+    in a :class:`superscreen.Device`.
 
     Args:
-        device: The Device to simulate.
-        layer: Name of the layer to analyze.
+        device: The :class:`superscreen.Device` to simulate.
         applied_field: The applied magnetic field evaluated at the mesh vertices.
-        weights: The Device's weight vector.
-        kernel: The Device's kernel matrix ``Q``.
-        Del2: The Device's Laplacian operator.
-        grad: The Device's vertex gradient matrix, shape (num_vertices, 2, num_vertices).
-        Lambda_info: A LambdaInfo instance defining Lambda(x, y).
-        terminal_currents: A dict of ``{source_name: source_current}`` for
-            each terminal in the film.
-        circulating_currents: A dict of ``{hole_name: circulating_current}``.
-            If circulating_current is a float, then it is assumed to be in units
-            of current_units. If circulating_current is a string, then it is
-            converted to a pint.Quantity.
-        vortices: A list of Vortex objects located in films in this film.
-        current_units: Units to use for current quantities. The applied field will be
-            converted to units of ``{current_units} / {device.length_units}``.
+        film_info: The :class:`superscreen.solver.FilmInfo` instance for the film
+        film_system: The :class:`superscreen.solver.LinearSystem` for the film
+        hole_systems: A dict of ``{hole_name: hole_system}``, where each ``hole_system``
+            is an instance of :class:`superscreen.solver.LinearSystem`
+        field_conversion: The field conversion factor from user units to solver units
+        vortex_flux: The flux associated with a single Phi_0 vortex in the solver units
+        field_from_other_films: The magnetic field from any other films in the ``Device``
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
     Returns:
-        A FilmSolution containing the results
+        A :class:`superscreen.FilmSolution` containing the results
     """
 
     circulating_currents = film_info.circulating_currents
@@ -350,7 +390,7 @@ def solve_film(
         Ha_eff += -(A @ g[indices])
 
     if film_info.name in device.terminals:
-        g_transport, on_boundary = solve_for_terminal_current_stream(
+        g_transport = solve_for_terminal_current_stream(
             device,
             film_info,
             film_system,
@@ -390,9 +430,7 @@ def solve_film(
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     J = np.array([grad_y @ g, -(grad_x @ g)]).T
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = np.asarray(Q @ (weights[:, 0] * g))
-    # Above is equivalent to the following, but faster
-    # screening_field = np.einsum("ij, ji, j -> i", Q, weights, g)
+    screening_field = Q @ (weights[:, 0] * g)
     if field_from_other_films is not None:
         field_from_other_films = field_from_other_films / field_conversion
     return FilmSolution(

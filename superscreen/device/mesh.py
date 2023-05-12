@@ -27,7 +27,8 @@ class Mesh:
             connecting vertices 0, 1, and 2 and another triangle connecting vertices
             0, 1, and 3.
         boundary_indices: Indices corresponding to the boundary.
-        areas: The areas corresponding to the sites.
+        vertex_areas: The areas corresponding to the sites or vertices.
+        triangle_areas: The areas of the triangular mesh elements.
         edge_mesh: The edge mesh.
     """
 

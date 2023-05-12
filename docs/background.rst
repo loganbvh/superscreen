@@ -51,8 +51,8 @@ of the superconducting film (equal to half the Pearl length [Pearl-APL-1964]_).
 .. note::
 
     The assumption :math:`\vec{j}(x, y, z)\approx\vec{j}_{z_0}(x, y)` is valid for
-    films that are thinner than their London penetration depth (i.e. :math:`d<\lambda`),
-    such that :math:`\Lambda=\lambda^2/d>\lambda`. However the model has been applied
+    films that are much thinner than their London penetration depth (i.e. :math:`d\ll\lambda`),
+    such that :math:`\Lambda=\lambda^2/d\gg\lambda`. However the model has been applied
     with some success in structures with :math:`\lambda\lesssim d`
     [Kirtley-RSI-2016]_ [Kirtley-SST-2016]_. Aside from this limitation, the method described
     below can in principle to used to model films with any effective penetration depth
@@ -137,7 +137,7 @@ The goal, then, is to solve (invert) :eq:`eq7` for a given :math:`H_{z,\,\mathrm
 and film geometry :math:`S` to obtain :math:`g` for all points inside the film
 (with :math:`g=0` enforced outside the film). Once :math:`g(\vec{r})` is known,
 the full vector magnetic field :math:`\vec{H}` can be calculated at any point :math:`\vec{r}`
-from :eq:`eq4`.
+from :eq:`eq4` or the Biot-Savart law.
 
 Films with holes
 ================
@@ -165,28 +165,26 @@ In this case, we modify the left-hand side of :eq:`eq7` as follows:
         Q_z(\vec{r},\vec{r}')-\delta(\vec{r}-\vec{r}')\Lambda\nabla^2\right
     ]g(\vec{r}')\,\mathrm{d}^2r'
 
-Films in multiple planes
-========================
+Structures with multiple films
+==============================
 
-For structures with multiple films lying in different planes or "layers",
-with layer :math:`\ell` lying in the plane :math:`z=z_\ell`,
-the stream functions and fields for all layers can be computed self-consistently
-using the following recipe:
+The magnetic response of structures composed of multiple films can be found self-consistently using an iterative approach.
+Each film :math:`F` exists in a layer :math:`\ell` lying in the plane :math:`z=z_F=z_\ell`, and a single layer can contain multiple films.
+The stream functions and fields for all films can be computed self-consistently using the following recipe:
 
-1. Calculate the stream function :math:`g_\ell(\vec{r})` for each layer :math:`\ell` by solving
-   :eq:`eq9` given an applied field :math:`H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell)`.
-2. For each layer :math:`\ell`, calculate the :math:`z`-component of the field due to the
-   currents in all other layers :math:`k\neq\ell` (encoded in the stream function :math:`g_k(\vec{r})`)
+1. Calculate the stream function :math:`g_F(\vec{r})` for each film :math:`F` by solving
+   :eq:`eq9` given an applied field :math:`H_{z,\,\mathrm{applied}}(\vec{r}, z_F)`.
+2. For each film :math:`F`, calculate the :math:`z`-component of the field due to the
+   currents in all other films :math:`k\neq F` (encoded in the stream function :math:`g_k(\vec{r})`)
    using :eq:`eq4`.
-3. Re-solve :eq:`eq9` taking the new applied field at each layer to be the original
-   applied field plus the sum of screening fields from all other layers. This is accomplished
-   via the substitution:
+3. Re-solve :eq:`eq9` taking the new applied field for each film to be the original
+   applied field plus the sum of screening fields from all other films. This is accomplished by setting:
 
    .. math::
 
-        H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell) \to
-        H_{z,\,\mathrm{applied}}(\vec{r}, z_\ell)
-        + \sum_{k\neq\ell}
+        H_{z,\,\mathrm{applied}}(\vec{r}, z_F) \leftarrow
+        H_{z,\,\mathrm{applied}}(\vec{r}, z_F)
+        + \sum_{k\neq F}
         \int_S Q_z(\vec{r},\vec{r}')g_k(\vec{r}')\,\mathrm{d}^2r'.
     
 4. Repeat steps 1-3 until the stream functions and fields converge.
@@ -195,7 +193,7 @@ using the following recipe:
 Applied bias currents
 =====================
 
-For devcies composed of a single film in a single layer, a bias current can be applied through one or more terminals or current contacts.
+A bias current can be applied to a given film through one or more terminals or current contacts.
 See `Terminal currents <notebooks/terminal-currents.ipynb>`_ for more details.
 
 ---------------------------------------------------------------
@@ -440,7 +438,7 @@ If one defines an inhomogeneous effective penetration depth :math:`\Lambda(x, y)
 
 .. math::
 
-    &\mathbf{Q}.\mathbf{w}^T-\Lambda\mathbf{\nabla}^2\to\\
+    &\mathbf{Q}.\mathbf{w}^T-\Lambda\mathbf{\nabla}^2\leftarrow\\
     &\mathbf{Q}.\mathbf{w}^T-\mathbf{\Lambda}^T.\mathbf{\nabla}^2-\vec{\nabla}\mathbf{\Lambda}\cdot\vec{\nabla}
 
 The notation :math:`\vec{\nabla}\mathbf{f}\cdot\vec{\nabla}` indicates an inner (dot) product over the two spatial dimensions, resulting in an :math:`n\times n` matrix such that :math:`(\vec{\nabla}\mathbf{f}\cdot\vec{\nabla})\mathbf{g}` computes :math:`(\vec{\nabla}f(x, y))\cdot(\vec{\nabla}g(x, y))` (see :ref:`Laplace and gradient operators <laplace-operator>`).

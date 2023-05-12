@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import pytest
 
@@ -104,7 +105,40 @@ def holey_device():
         length_units=length_units,
     ).translate(dx=dx, dy=dy)
     device.make_mesh(max_edge_length=0.2)
+    print(device)
     return device
+
+
+def test_save_and_load_device_with_terminals(holey_device: sc.Device, tmp_path):
+    h5path = tmp_path / "holey_device.h5"
+    holey_device.to_hdf5(h5path)
+    loaded_device = sc.Device.from_hdf5(h5path)
+    assert loaded_device == holey_device
+
+
+@pytest.fixture()
+def factorized_model(holey_device) -> sc.solver.FactorizedModel:
+    model = sc.solver.factorize_model(
+        device=holey_device,
+        current_units="uA",
+        terminal_currents={"film": {"source": "10 uA", "drain": "-10 uA"}},
+        circulating_currents={"hole1": "5 uA"},
+        vortices=[sc.Vortex(x=0, y=0, film="film")],
+    )
+    return model
+
+
+def test_save_and_load_factorized_model(
+    factorized_model: sc.solver.FactorizedModel, tmp_path
+):
+    h5path = tmp_path / "factorized-model.h5"
+    with h5py.File(h5path, "x") as f:
+        factorized_model.to_hdf5(f)
+
+    with h5py.File(h5path, "r") as f:
+        loaded_model = sc.solver.FactorizedModel.from_hdf5(f)
+
+    assert isinstance(loaded_model, sc.solver.FactorizedModel)
 
 
 @pytest.mark.parametrize("applied_field", [0, -1, 2])

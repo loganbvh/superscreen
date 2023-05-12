@@ -8,7 +8,7 @@ Devices & Geometry
 ******************
 
 The classes defined in ``superscreen.device``, ``superscreen.geometry``,
-and ``superscreen.parameters`` are used to set up the inputs to a
+and ``superscreen.parameter`` are used to set up the inputs to a
 ``SuperScreen`` simulation, namely:
 
 - The geometry and penetration depth of all superconducting films
@@ -39,6 +39,9 @@ Meshing
 -------
 
 .. autoclass:: superscreen.Mesh
+    :members:
+
+.. autoclass:: superscreen.device.EdgeMesh
     :members:
 
 .. autofunction:: superscreen.device.generate_mesh

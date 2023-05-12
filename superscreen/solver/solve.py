@@ -39,7 +39,11 @@ class FactorizedModel:
     vortices: Dict[str, Sequence[Vortex]]
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
-        """Save a FactorizedModel instance to an h5py.Group."""
+        """Save a :class:`superscreen.solver.FactorizedModel` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` in which to save the model
+        """
         film_info_grp = h5group.create_group("film_info")
         for film, info in self.film_info.items():
             info.to_hdf5(film_info_grp.create_group(film))
@@ -55,17 +59,22 @@ class FactorizedModel:
         for film, terminals in self.terminal_currents.items():
             film_grp = term_grp.create_group(film)
             film_grp.attrs.update(terminals)
-        circ_grp = h5group.create_dataset("circulating_currents")
+        circ_grp = h5group.create_group("circulating_currents")
         circ_grp.attrs.update(self.circulating_currents)
         vortex_grp = h5group.create_group("vortices")
-        for film, vortices in self.vortices.items():
-            film_grp = vortex_grp.create_group(film)
-            for i, vortex in enumerate(vortices):
-                vortex.to_hdf5(film_grp.create_group(str(i)))
+        for i, vortex in enumerate(self.vortices):
+            vortex.to_hdf5(vortex_grp.create_group(str(i)))
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "FactorizedModel":
-        """Load a FactorizedModel instance from an h5py.Group."""
+        """Load a :class:`superscreen.solver.FactorizedModel` from an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the model
+
+        Returns:
+            The loaded :class:`superscreen.solver.FactorizedModel`
+        """
         film_info = {
             film: FilmInfo.from_hdf5(grp) for film, grp in h5group["film_info"].items()
         }
@@ -82,12 +91,10 @@ class FactorizedModel:
             film: dict(grp.attrs) for film, grp in h5group["terminal_currents"].items()
         }
         circulating_currents = dict(h5group["circulating_currents"].attrs)
-        vortices = {}
         vortex_grp = h5group["vortices"]
-        for film, grp in vortex_grp.items():
-            vortices[film] = [
-                Vortex.from_hdf5(vortex_grp[i]) for i in sorted(vortex_grp, key=int)
-            ]
+        vortices = [
+            Vortex.from_hdf5(vortex_grp[i]) for i in sorted(vortex_grp, key=int)
+        ]
         return FactorizedModel(
             film_info,
             film_systems,
@@ -112,7 +119,7 @@ def factorize_model(
     factorizing the linear system describing each film and hole.
 
     Args:
-        device: The Device to simulate.
+        device: The :class:`superscreen.Device` to simulate.
         current_units: Units to use for current quantities. The applied field will be
             converted to units of [current_units / device.length_units].
         terminal_currents: A dict like ``{film_name: {source_name: source_current}}`` for
@@ -121,10 +128,11 @@ def factorize_model(
             If circulating_current is a float, then it is assumed to be in units
             of current_units. If circulating_current is a string, then it is
             converted to a pint.Quantity.
-        vortices: A list of Vortex objects located in the Device.
+        vortices: A list of :class:`superscreen.Vortex` objects
+            located in the :class:`superscreen.Device`.
 
     Returns:
-        A FactorizedModel instance that can be used to solve the model.
+        A :class:`superscreen.solver.FactorizedModel` instance that can be used to solve the model.
     """
     ureg = device.ureg
     circulating_currents = circulating_currents or {}
@@ -192,6 +200,7 @@ def solve(
     and the screening fields from all other films.
 
     3. Repeat step 2 (iterations - 1) times.
+
 
     Args:
         device: The Device to simulate.

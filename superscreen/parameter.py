@@ -197,21 +197,21 @@ class Parameter:
 
 
 class CompositeParameter(Parameter):
-    """A callable object that behaves like a Parameter
+    """A callable object that behaves like a :class:`superscreen.Parameter`
     (i.e. it computes a scalar or vector quantity as a function of
-    position coordinates x, y, z). A CompositeParameter object is created as
-    a result of mathematical operations between Parameters, CompositeParameters,
-    and/or real numbers.
+    position coordinates x, y, z). A :class:`superscreen.parameter.CompositeParameter`
+    object is created as a result of mathematical operations between ``Parameters``,
+    ``CompositeParameters``, and/or real numbers.
 
     Addition, subtraction, multiplication, division, and exponentiation
-    between Parameters, CompositeParameters and real numbers (ints and floats)
+    between ``Parameters``, ``CompositeParameters`` and real numbers (ints and floats)
     are supported. The result of any of these operations is a new
-    CompositeParameter object.
+    :class:`superscreen.parameter.CompositeParameter` object.
 
     Args:
         left: The object on the left-hand side of the operator.
         right: The object on the right-hand side of the operator.
-        operator_: The operator acting on left and right (or its string representation).
+        op: The operator acting on left and right (or its string representation).
     """
 
     VALID_OPERATORS = {
@@ -226,7 +226,7 @@ class CompositeParameter(Parameter):
         self,
         left: Union[int, float, Parameter, "CompositeParameter"],
         right: Union[int, float, Parameter, "CompositeParameter"],
-        operator_: Union[Callable, str],
+        op: Union[Callable, str],
     ):
         valid_types = (int, float, Parameter, CompositeParameter)
         if not isinstance(left, valid_types):
@@ -243,17 +243,17 @@ class CompositeParameter(Parameter):
             raise TypeError(
                 "Either left or right must be a Parameter or CompositeParameter."
             )
-        if isinstance(operator_, str):
+        if isinstance(op, str):
             operators = {v: k for k, v in self.VALID_OPERATORS.items()}
-            operator_ = operators.get(operator_.strip(), None)
-        if operator_ not in self.VALID_OPERATORS:
+            op = operators.get(op.strip(), None)
+        if op not in self.VALID_OPERATORS:
             raise ValueError(
-                f"Unknown operator, {operator_!r}. "
+                f"Unknown operator, {op!r}. "
                 f"Valid operators are {list(self.VALID_OPERATORS)!r}."
             )
         self.left = left
         self.right = right
-        self.operator = operator_
+        self.operator = op
 
     def __call__(
         self,

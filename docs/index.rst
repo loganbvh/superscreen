@@ -10,8 +10,7 @@ SuperScreen
 .. image:: images/logo_currents.png
    :alt: SuperScreen Logo
    :target: https://github.com/loganbvh/superscreen
-   :height: 300px
-   :width: 300px
+   :height: 200px
    :align: center
 
 .. image:: https://img.shields.io/pypi/v/superscreen
