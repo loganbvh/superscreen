@@ -278,6 +278,12 @@ def test_make_mesh(
         for mesh in device.meshes.values():
             assert len(mesh.sites) >= min_points
 
+    mesh = device.meshes["disk"]
+    for weight_method in ("uniform", "inv_euclidean", "half_cotangent"):
+        _ = sc.fem.laplace_operator(
+            mesh.sites, mesh.elements, weight_method=weight_method
+        )
+
 
 @pytest.mark.parametrize("save_mesh", [False, True])
 @pytest.mark.parametrize("compress", [False, True])

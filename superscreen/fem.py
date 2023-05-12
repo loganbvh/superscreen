@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 import scipy.linalg as la
@@ -237,7 +237,9 @@ def laplace_operator(
     points: np.ndarray,
     triangles: np.ndarray,
     masses: Optional[np.ndarray] = None,
-    weight_method: str = "half_cotangent",
+    weight_method: Literal[
+        "uniform", "half_cotangent", "inv_euclidean"
+    ] = "half_cotangent",
     sparse: bool = True,
 ) -> Union[np.ndarray, sp.csr_array]:
     """Laplacian operator for the mesh (sometimes called
