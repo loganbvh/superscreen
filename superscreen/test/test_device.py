@@ -92,6 +92,10 @@ def device():
     assert isinstance(device.translate(dx, dy, dz=dz), sc.Device)
     d = device.copy()
     assert d == device
+    assert d.translate(dx, dy, dz=dz, inplace=True) is d
+
+    with d.translation(-dx, -dy, dz=-dz):
+        assert d == device
 
     assert device.mesh_stats_dict() is None
     assert device.mesh_stats() is None
