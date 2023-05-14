@@ -7,7 +7,6 @@ matplotlib
 meshpy
 numba
 numpy
-pandas
 pint
 pre-commit
 pytest

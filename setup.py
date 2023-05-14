@@ -43,7 +43,6 @@ INSTALL_REQUIRES = [
     "meshpy",
     "numba",
     "numpy",
-    "pandas",
     "pint",
     "pre-commit",
     "pytest",
