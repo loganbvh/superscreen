@@ -372,7 +372,9 @@ class Solution:
         positions: np.ndarray,
         *,
         film: str,
-        dataset: str = "field",
+        dataset: Literal[
+            "field", "self_field", "applied_field", "field_from_other_films"
+        ] = "field",
         method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
