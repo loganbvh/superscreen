@@ -111,6 +111,8 @@ def test_polygon_flux(solution2: sc.Solution, units, with_units):
     "positions, zs",
     [
         (np.array([[-1, 1, -2], [1, -1, 2]]), None),
+        (np.array([[-1, 1], [1, -1]]), 0.0),
+        (np.array([[-1, 1], [1, -1]]), 0.5),
         (np.array([[-1, 1], [1, -1]]), 2),
         (np.array([[-1, 1], [1, -1]]), np.array([2, 2])),
         (np.array([[-1, 1], [1, -1]]), np.array([[2], [2]])),
