@@ -92,10 +92,13 @@ def two_rings():
     return device
 
 
+@pytest.mark.parametrize("pre_factorize", [False, True])
 @pytest.mark.parametrize("return_solutions", [False, True])
 @pytest.mark.parametrize("save", [False, True])
 @pytest.mark.parametrize("inhomogeneous", [False, True])
-def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
+def test_current_value(
+    device, pre_factorize, return_solutions, save, tmp_path, inhomogeneous
+):
     applied_field = sc.sources.ConstantField(0)
 
     circulating_currents = {
@@ -115,15 +118,32 @@ def test_current_value(device, return_solutions, save, tmp_path, inhomogeneous):
             device.layers["layer1"].london_lambda = sc.Parameter(
                 linear, offset=old_lambda
             )
-        solutions = sc.solve(
-            device=device,
-            applied_field=applied_field,
-            circulating_currents=circulating_currents,
-            field_units="mT",
-            iterations=1,
-            return_solutions=return_solutions,
-            save_path=save_path,
-        )
+        if pre_factorize:
+            model = sc.solver.factorize_model(
+                device=device,
+                circulating_currents=circulating_currents,
+                current_units="uA",
+            )
+            solutions = sc.solve(
+                device=device,
+                model=model,
+                applied_field=applied_field,
+                field_units="mT",
+                iterations=1,
+                return_solutions=return_solutions,
+                save_path=save_path,
+            )
+        else:
+            solutions = sc.solve(
+                device=device,
+                applied_field=applied_field,
+                circulating_currents=circulating_currents,
+                field_units="mT",
+                current_units="uA",
+                iterations=1,
+                return_solutions=return_solutions,
+                save_path=save_path,
+            )
     finally:
         device.layers["layer1"].london_lambda = old_lambda
 
