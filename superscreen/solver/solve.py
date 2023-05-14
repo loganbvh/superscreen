@@ -51,6 +51,7 @@ def biot_savart_film_to_film(
     assert film1_areas.shape[0] == film1_sites.shape[0]
     assert film1_J.shape[1] == 2
     one_over_4pi = 1 / (4 * np.pi)
+    minus_three_halves = -3.0 / 2.0
     out = np.empty(film2_sites.shape[0], dtype=film1_J.dtype)
     dz2 = (film2_z0 - film1_z0) ** 2
     for i in numba.prange(film2_sites.shape[0]):
@@ -62,7 +63,7 @@ def biot_savart_film_to_film(
                 one_over_4pi
                 * film1_areas[j]
                 * (film1_J[j, 0] * dy - film1_J[j, 1] * dx)
-                * (dx**2 + dy**2 + dz2) ** (-3 / 2)
+                * (dx**2 + dy**2 + dz2) ** minus_three_halves
             )
         out[i] = tmp
     return out
@@ -411,7 +412,7 @@ def solve(
             other_screening_fields[film] += biot_savart_film_to_film(
                 film1_sites=meshes[source_film].sites,
                 film1_z0=other_layer.z0,
-                film1_areas=film_info[source_film].weights[:, 0],
+                film1_areas=film_info[source_film].weights,
                 film1_J=film_solutions[source_film].current_density,
                 film2_sites=meshes[film].sites,
                 film2_z0=layer.z0,

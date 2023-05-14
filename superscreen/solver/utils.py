@@ -290,7 +290,7 @@ def make_film_info(
             london_lambda=london_lambda,
             thickness=layer.thickness,
         )
-        weights = mesh.operators.weights.astype(dtype, copy=False)[:, np.newaxis]
+        weights = mesh.operators.weights.astype(dtype, copy=False)
         Q = mesh.operators.Q.astype(dtype, copy=False)
         laplacian = mesh.operators.laplacian.toarray().astype(dtype, copy=False)
         grad = None

@@ -160,7 +160,7 @@ def _build_system_1d(
         grad_Lambda = grad_Lambda_term[:, ix]
     else:
         grad_Lambda = 0
-    return Q[:, ix] * weights[ix, 0] - Lambda[ix, 0] * laplacian[:, ix] - grad_Lambda
+    return Q[:, ix] * weights[ix] - Lambda[ix, 0] * laplacian[:, ix] - grad_Lambda
 
 
 def _build_system_2d(
@@ -172,7 +172,7 @@ def _build_system_2d(
         grad_Lambda = grad_Lambda_term[ix2d]
     else:
         grad_Lambda = 0
-    return Q[ix2d] * weights[ix1d, 0] - Lambda[ix1d, 0] * laplacian[ix2d] - grad_Lambda
+    return Q[ix2d] * weights[ix1d] - Lambda[ix1d, 0] * laplacian[ix2d] - grad_Lambda
 
 
 def solve_for_terminal_current_stream(
@@ -277,7 +277,7 @@ def solve_for_terminal_current_stream(
     Ha_eff = np.zeros(points.shape[0])
     for name in holes:
         ix = hole_indices[name]
-        g[ix] = np.average(g[ix], weights=weights[ix, 0])
+        g[ix] = np.average(g[ix], weights=weights[ix])
         A = _build_system_1d(
             Q,
             weights,
@@ -423,12 +423,12 @@ def solve_film(
         # ... and in the full device mesh.
         j_device = np.argmin(la.norm(points - xy, axis=1))
         # Eq. 28 in [Brandt]
-        g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device]
+        g_vortex = vortex_flux * vortex.nPhi0 * K[:, j_film] / weights[j_device].T
         g[indices] += g_vortex
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     J = np.array([grad_y @ g, -(grad_x @ g)]).T
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = Q @ (weights[:, 0] * g)
+    screening_field = Q @ (weights * g)
     if field_from_other_films is not None:
         field_from_other_films = field_from_other_films / field_conversion
     return FilmSolution(
