@@ -387,7 +387,7 @@ class Device:
 
     def make_mesh(
         self,
-        buffer_factor: Union[float, Dict[str, float], None] = 0.025,
+        buffer_factor: Union[float, Dict[str, float], None] = 0.05,
         buffer: Union[float, Dict[str, float], None] = None,
         join_style: str = "round",
         min_points: Union[int, Dict[str, int], None] = None,

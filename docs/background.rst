@@ -82,32 +82,25 @@ density of tiny dipole sources. We can re-write :eq:`eq1` for a 2D film in terms
 
 where :math:`\nabla^2=\nabla\cdot\nabla` is the Laplace operator. (The last line follows from the
 fact that :math:`\nabla\cdot\left(g(x,y)\hat{z}\right) = 0`). From Ampere's Law, the
-three components of the magnetic field at position :math:`\vec{r}=(x, y, z)` due to a
+:math:`z`-component of the magnetic field at position :math:`\vec{r}=(x, y, z)` due to a
 sheet of current lying in the :math:`x-y` plane (at height :math:`z'`) with stream function
 :math:`g(x', y')` are given by:
 
 .. math::
     :label: eq4
 
-    H_x(\vec{r}) &= \int_S Q_x(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'\\
-    H_y(\vec{r}) &= \int_S Q_y(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'\\
-    H_z(\vec{r}) &= H_{z,\,\mathrm{applied}}(\vec{r})
+    H_z(\vec{r}) = H_{z,\,\mathrm{applied}}(\vec{r})
     + \int_S Q_z(\vec{r},\vec{r}')g(x', y')\,\mathrm{d}^2r'
 
 :math:`H_{z,\,\mathrm{applied}}(\vec{r})` is an externally-applied magnetic field (which we assume to have
 no :math:`x` or :math:`y` component), :math:`S` is the film area (with :math:`g = 0` outside of the film),
-and :math:`Q_x(\vec{r},\vec{r}')`, :math:`Q_y(\vec{r},\vec{r}')`, and :math:`Q_z(\vec{r},\vec{r}')`
-are dipole kernel functions which give the relevant component of the magnetic field at position :math:`\vec{r}=(x, y, z)`
-due to a dipole of unit strength at poition :math:`\vec{r}'=(x', y', z')`:
+and :math:`Q_z(\vec{r},\vec{r}')` is a dipole kernel function which gives  :math:`z`-component of the
+magnetic field at position :math:`\vec{r}=(x, y, z)` due to a dipole of unit strength at poition :math:`\vec{r}'=(x', y', z')`:
 
 .. math::
     :label: eq5
 
-    Q_x(\vec{r}, \vec{r}') &=  3\Delta z\frac{x-x'}
-    {4\pi[(\Delta z)^2+\rho^2]^{5/2}}\\
-    Q_y(\vec{r}, \vec{r}') &=  3\Delta z\frac{y-y'}
-    {4\pi[(\Delta z)^2+\rho^2]^{5/2}}\\
-    Q_z(\vec{r}, \vec{r}') &=  \frac{2(\Delta z)^2-\rho^2}
+    Q_z(\vec{r}, \vec{r}') =  \frac{2(\Delta z)^2-\rho^2}
     {4\pi[(\Delta z)^2+\rho^2]^{5/2}},
 
 where :math:`\Delta z = z - z'` and :math:`\rho=\sqrt{(x-x')^2 + (y-y')^2}`.
@@ -136,8 +129,8 @@ in the same plane as itself). From :eq:`eq6`, we arrive at an integral equation 
 The goal, then, is to solve (invert) :eq:`eq7` for a given :math:`H_{z,\,\mathrm{applied}}`
 and film geometry :math:`S` to obtain :math:`g` for all points inside the film
 (with :math:`g=0` enforced outside the film). Once :math:`g(\vec{r})` is known,
-the full vector magnetic field :math:`\vec{H}` can be calculated at any point :math:`\vec{r}`
-from :eq:`eq4` or the Biot-Savart law.
+full vector magnetic field :math:`\vec{H}` can be calculated at any point :math:`\vec{r}`
+using :eq:`eq2` and the Biot-Savart law.
 
 Films with holes
 ================
