@@ -1,7 +1,7 @@
 import logging
 import os
 from collections import defaultdict
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import dill
@@ -341,32 +341,55 @@ class Device:
         dx: float = 0,
         dy: float = 0,
         dz: float = 0,
+        inplace: bool = False,
     ) -> "Device":
-        """Translates the device polygons and layers in space by a given amount.
+        """Translates the device polygons, layers, and meshes in space by a given amount.
 
         Args:
             dx: Distance by which to translate along the x-axis.
             dy: Distance by which to translate along the y-axis.
             dz: Distance by which to translate layers along the z-axis.
+            inplace: If True, modifies the device (``self``) in-place and returns None,
+                otherwise, creates a new device, translates it, and returns it.
 
         Returns:
             The translated device.
         """
-        self._warn_if_mesh_exist("translate()")
-        device = self.copy(with_mesh=False)
+        if inplace:
+            device = self
+        else:
+            device = self.copy(with_mesh=True, copy_mesh=True)
         for polygon in device.get_polygons():
             polygon.translate(dx, dy, inplace=True)
+        if device.meshes:
+            for mesh in device.meshes.values():
+                mesh.sites += np.array([[dx, dy]])
         if dz:
             for layer in device.layers.values():
                 layer.z0 += dz
         return device
 
+    @contextmanager
+    def translation(self, dx: float, dy: float, dz: float = 0) -> None:
+        """A context manager that temporarily translates a device in-place,
+        then returns it to its original position.
+
+        Args:
+            dx: Distance by which to translate polygons along the x-axis.
+            dy: Distance by which to translate polygons along the y-axis.
+            dz: Distance by which to translate layers along the z-axis.
+        """
+        try:
+            self.translate(dx, dy, dz=dz, inplace=True)
+            yield
+        finally:
+            self.translate(-dx, -dy, dz=-dz, inplace=True)
+
     def make_mesh(
         self,
-        buffer_factor: Union[float, Dict[str, float], None] = 0.05,
+        buffer_factor: Union[float, Dict[str, float], None] = 0.025,
         buffer: Union[float, Dict[str, float], None] = None,
         join_style: str = "round",
-        # exclude_holes: Optional[List[str]] = None,
         min_points: Union[int, Dict[str, int], None] = None,
         max_edge_length: Union[float, Dict[str, float], None] = None,
         preserve_boundary: bool = False,
@@ -405,20 +428,10 @@ class Device:
             max_edge_length = {name: max_edge_length for name in films}
         if not isinstance(smooth, dict):
             smooth = {name: smooth for name in films}
-        # holes_by_film = self.holes_by_film()
-        # if exclude_holes is None:
-        #     exclude_holes = []
-        # if not set(exclude_holes).issubset(set(self.holes)):
-        #     raise ValueError(
-        #         f"exclude must be a subset of the device's holes,"
-        #         f" got {exclude_holes!r}."
-        #     )
         holes_by_layer = self.polygons_by_layer("hole")
         abs_regions_by_layer = self.polygons_by_layer("abstract")
         for name, film in films.items():
             film_terminals = self.terminals.get(name)
-            # List of coordinates for holes that will not be meshed.
-            hole_coords = []
             holes = holes_by_layer[film.layer]
             abs_regions = abs_regions_by_layer[film.layer]
             coords = [film.points]
@@ -429,11 +442,6 @@ class Device:
                 buffer_factor[name] is None and buffer[name] is None
             ):
                 boundary = film.points
-                # hole_coords = [
-                #     hole.points
-                #     for hole in holes_by_film[name]
-                #     if hole.name in exclude_holes
-                # ]
             else:
                 boundary = Polygon(points=film.points)
                 if buffer[name] is None:
@@ -448,22 +456,8 @@ class Device:
                 ).exterior.coords
                 boundary = Polygon(points=buffered).resample(len(film.points)).points
                 coords.append(boundary)
-                # for hole in holes_by_film[name]:
-                #     if hole.name in exclude_holes:
-                #         extents = hole.extents
-                #         buffer_size = 0.05 * max(extents)
-                #         if buffer_size < min(hole.extents) / 2:
-                #             try:
-                #                 hole_points = hole.buffer(
-                #                     -buffer_size, join_style=join_style
-                #                 ).points
-                #             except IndexError:
-                #                 pass
-                #             else:
-                #                 hole_coords.append(hole_points)
             points, triangles = utils.generate_mesh(
                 ensure_unique(np.concatenate(coords, axis=0)),
-                hole_coords=hole_coords,
                 min_points=min_points[name],
                 max_edge_length=max_edge_length[name],
                 boundary=boundary,
