@@ -238,18 +238,17 @@ def solve_for_terminal_current_stream(
     # The stream function on the "reference boundary" (i.e., the boundary
     # immediately after the output terminal in a CCW direction) should be zero.
     g_ref = g[ix_terminal.max()]
-    ix = boundary_indices
-    g[ix] += -g_ref
+    g[boundary_indices] += -g_ref
     A = _build_system_1d(
         Q,
         weights,
         Lambda,
         laplacian,
         grad_Lambda_term,
-        ix,
+        boundary_indices,
         inhomogeneous=inhomogeneous,
     )
-    Ha_eff += -(A @ g[ix])
+    Ha_eff += -(A @ g[boundary_indices])
     # First solve for the stream function inside the film, ignoring the
     # presence of holes completely.
     film = device.films[film_info.name]

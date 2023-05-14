@@ -485,15 +485,13 @@ class Device:
         if film not in self.terminals:
             return indices
         # Ensure that the indices wrap around outside of any terminals.
-        indices_list = indices.tolist()
-        for term in self.terminals[film]:
-            boundary = points[indices]
-            term_ix = indices[term.contains_points(boundary)]
-            discont = np.abs(np.diff(term_ix)) > 1
+        for terminal in self.terminals[film]:
+            boundary_points = points[indices]
+            terminal_indices = terminal.contains_points(boundary_points, index=True)
+            discont = np.diff(terminal_indices) != 1
             if np.any(discont):
-                i_discont = indices_list.index(term_ix[np.where(discont)[0][0]])
-                indices = np.roll(indices, -(i_discont + 2))
-                indices_list = indices.tolist()
+                i_discont = np.where(discont)[0][0]
+                indices = np.roll(indices, -(i_discont + 1))
                 break
         return indices
 
