@@ -103,8 +103,8 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    :caption: Tutorials
 
    notebooks/polygons.ipynb
-   notebooks/field-sources.ipynb
    notebooks/terminal-currents.ipynb
+   notebooks/field-sources.ipynb
    notebooks/logo.ipynb
 
 .. toctree::

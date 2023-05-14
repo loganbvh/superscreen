@@ -162,14 +162,13 @@ Structures with multiple films
 ==============================
 
 The magnetic response of structures composed of multiple films can be found self-consistently using an iterative approach.
-Each film :math:`F` exists in a layer :math:`\ell` lying in the plane :math:`z=z_F=z_\ell`, and a single layer can contain multiple films.
-The stream functions and fields for all films can be computed self-consistently using the following recipe:
+Each film :math:`F` exists in a layer :math:`\ell` lying in the plane :math:`z=z_F=z_\ell`, and a single layer can contain
+multiple non-overlapping films. The stream functions and fields for all films can be computed self-consistently using the following recipe:
 
 1. Calculate the stream function :math:`g_F(\vec{r})` for each film :math:`F` by solving
    :eq:`eq9` given an applied field :math:`H_{z,\,\mathrm{applied}}(\vec{r}, z_F)`.
 2. For each film :math:`F`, calculate the :math:`z`-component of the field due to the
-   currents in all other films :math:`k\neq F` (encoded in the stream function :math:`g_k(\vec{r})`)
-   using :eq:`eq4`.
+   currents in all other films :math:`k\neq F` using :eq:`eq2` and the Biot-Savart law.
 3. Re-solve :eq:`eq9` taking the new applied field for each film to be the original
    applied field plus the sum of screening fields from all other films. This is accomplished by setting:
 
