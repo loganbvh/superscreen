@@ -302,7 +302,7 @@ def make_film_info(
         if name in device.terminals:
             boundary_indices = device.boundary_vertices(name)
         term_currents = None
-        if terminal_currents:
+        if name in terminal_currents:
             term_currents = terminal_currents[name]
         film_info[name] = FilmInfo(
             name=name,

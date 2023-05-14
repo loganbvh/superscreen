@@ -193,6 +193,7 @@ def solve_for_terminal_current_stream(
     # The drain terminal must sink all current
     terminals = device.terminals[film_info.name].copy()
     mesh = device.meshes[film_info.name]
+    holes_by_film = device.holes_by_film()
     points = mesh.sites
     inhomogeneous = film_info.lambda_info.inhomogeneous
     Lambda = film_info.lambda_info.Lambda
@@ -267,10 +268,7 @@ def solve_for_terminal_current_stream(
     lu_piv = la.lu_factor(-A)
     gf = la.lu_solve(lu_piv, h)
     g[ix1d] = gf
-
-    holes = {
-        name: hole for name, hole in device.holes.items() if hole.layer == film.layer
-    }
+    holes = {hole.name: hole for hole in holes_by_film[film.name]}
     if len(holes) == 0:
         return g
 

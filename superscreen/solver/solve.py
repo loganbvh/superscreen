@@ -5,17 +5,67 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import h5py
+import joblib
+import numba
 import numpy as np
 import pint
 
 from ..device import Device
-from ..distance import cdist
 from ..solution import FilmSolution, Solution, Vortex
 from ..sources import ConstantField
 from .solve_film import LinearSystem, factorize_linear_systems, solve_film
 from .utils import FilmInfo, currents_to_floats, field_conversion_factor, make_film_info
 
 logger = logging.getLogger("solve")
+
+_numba_use_parallel = joblib.cpu_count(only_physical_cores=True) > 2
+
+
+@numba.njit(fastmath=True, parallel=_numba_use_parallel)
+def biot_savart_film_to_film(
+    *,
+    film1_sites: np.ndarray,
+    film1_z0: float,
+    film1_areas: np.ndarray,
+    film1_J: np.ndarray,
+    film2_sites: np.ndarray,
+    film2_z0: np.ndarray,
+) -> np.ndarray:
+    """Computes the Biot-Savart field at ``film2_sites`` due to sheet current density
+    ``film1_J`` flowing in ``film1_sites``.
+
+    Args:
+        film1_sites: Mesh sites for the source film, shape ``(n, 2)``
+        film1_z0: z-position of the source film
+        film1_areas: Mesh vertex areas for the source film, shape ``(n, )``
+        film1_J: Sheet current density in the source film, shape ``(n, 2)``
+        film2_sites: Mesh sites for the target film, shape ``(m, 2)``
+        film2_z0: z-position of the target film
+
+    Returns:
+        The Biot-Savart field at the target film in magnetization-like units, shape ``(m, )``
+    """
+    assert film1_sites.shape[1] == 2
+    assert film2_sites.shape[1] == 2
+    assert film1_J.shape[0] == film1_sites.shape[0]
+    assert film1_areas.shape[0] == film1_sites.shape[0]
+    assert film1_J.shape[1] == 2
+    one_over_4pi = 1 / (4 * np.pi)
+    out = np.empty(film2_sites.shape[0], dtype=film1_J.dtype)
+    dz2 = (film2_z0 - film1_z0) ** 2
+    for i in numba.prange(film2_sites.shape[0]):
+        tmp = 0.0
+        for j in range(film1_sites.shape[0]):
+            dx = film2_sites[i, 0] - film1_sites[j, 0]
+            dy = film2_sites[i, 1] - film1_sites[j, 1]
+            tmp += (
+                one_over_4pi
+                * film1_areas[j]
+                * (film1_J[j, 0] * dy - film1_J[j, 1] * dx)
+                * (dx**2 + dy**2 + dz2) ** (-3 / 2)
+            )
+        out[i] = tmp
+    return out
 
 
 @dataclass
@@ -183,7 +233,6 @@ def solve(
     iterations: int = 0,
     return_solutions: bool = True,
     save_path: Optional[os.PathLike] = None,
-    cache_kernels: bool = True,
     log_level: Optional[int] = None,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
@@ -221,8 +270,6 @@ def solve(
         iterations: Number of times to compute the interactions between layers.
         return_solutions: Whether to return a list of Solution objects.
         save_path: Path to an HDF5 file in which to save the results.
-        cache_kernels: Cache the film-to-film kernels in memory. This is much
-            faster than not caching, but uses more memory.
         log_level: Logging level to use, if any.
         _solver: Name of the solver method used.
 
@@ -287,7 +334,7 @@ def solve(
     applied_fields = {}
     for film, mesh in meshes.items():
         layer = device.layers[film_info[film].layer]
-        z0 = layer.z0 * np.ones(len(mesh.sites), dtype=dtype)
+        z0 = layer.z0 * np.ones(len(mesh.sites))
         # Units: current_units / device.length_units
         applied_fields[film] = (
             applied_field(mesh.sites[:, 0], mesh.sites[:, 1], z0)
@@ -346,49 +393,29 @@ def solve(
             return solutions
         return
 
-    film_sites = {
-        name: meshes[name].sites.astype(dtype, copy=False) for name in device.films
-    }
-    kernel_cache = {}
-
     for i in range(iterations):
         # Calculate the screening fields at each layer from every other layer
         other_screening_fields = {
             name: np.zeros(len(mesh.sites), dtype=dtype)
             for name, mesh in meshes.items()
         }
-        for other_film, film in itertools.product(device.films, repeat=2):
-            if film == other_film:
+        for source_film, film in itertools.product(device.films, repeat=2):
+            if film == source_film:
                 continue
             layer = device.layers[film_info[film].layer]
-            other_layer = device.layers[film_info[other_film].layer]
+            other_layer = device.layers[film_info[source_film].layer]
             logger.debug(
                 f"Calculating screening field at {film!r} "
-                f"from {other_film!r} ({i+1}/{iterations})."
+                f"from {source_film!r} ({i+1}/{iterations})."
             )
-            weights = film_info[other_film].weights
-            g = film_solutions[other_film].stream
-            key = (film, other_film)
-            if key in kernel_cache:
-                q = kernel_cache[key]
-            elif key[::-1] in kernel_cache:
-                q = kernel_cache[key[::-1]].T
-            else:
-                dz = layer.z0 - other_layer.z0
-                rho2 = cdist(
-                    film_sites[film], film_sites[other_film], metric="sqeuclidean"
-                ).astype(dtype, copy=False)
-                q = (2 * dz**2 - rho2) / (4 * np.pi * (dz**2 + rho2) ** (5 / 2))
-            if (
-                cache_kernels
-                and key not in kernel_cache
-                and key[::-1] not in kernel_cache
-            ):
-                kernel_cache[key] = q
-            # Calculate the dipole kernel and integrate
-            # Eqs. 1-2 in [Brandt], Eqs. 5-6 in [Kirtley1], Eqs. 5-6 in [Kirtley2].
-            other_screening_fields[film] += q @ (weights[:, 0] * g)
-            del q, g
+            other_screening_fields[film] += biot_savart_film_to_film(
+                film1_sites=meshes[source_film].sites,
+                film1_z0=other_layer.z0,
+                film1_areas=film_info[source_film].weights[:, 0],
+                film1_J=film_solutions[source_film].current_density,
+                film2_sites=meshes[film].sites,
+                film2_z0=layer.z0,
+            )
 
         # Solve again with the screening fields from all films.
         # Calculate applied fields only once per iteration.
