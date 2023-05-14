@@ -98,10 +98,6 @@ def test_polygon_join():
         bowtie = [(0, 0), (0, 2), (1, 1), (2, 2), (2, 0), (1, 1), (0, 0)]
         _ = sc.Polygon(name="bowtie", layer="layer", points=bowtie)
 
-    with pytest.raises(ValueError):
-        square1.name = None
-        sc.Device._validate_polygons([square1], "label")
-
 
 @pytest.mark.parametrize("min_points", [None, 1000])
 @pytest.mark.parametrize("max_edge_length", [None, 0.25])

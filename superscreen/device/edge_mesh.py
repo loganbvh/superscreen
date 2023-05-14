@@ -35,16 +35,6 @@ class EdgeMesh:
         self.directions = np.asarray(directions)
         self.edge_lengths = np.asarray(edge_lengths)
 
-    @property
-    def x(self) -> np.ndarray:
-        """The x-coordinates of the edge centers."""
-        return self.centers[:, 0]
-
-    @property
-    def y(self) -> np.ndarray:
-        """The y-coordinates of the edge centers."""
-        return self.centers[:, 1]
-
     @staticmethod
     def from_mesh(sites: np.ndarray, elements: np.ndarray) -> "EdgeMesh":
         """Create edge mesh from mesh.

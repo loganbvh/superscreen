@@ -124,13 +124,6 @@ class Device:
             raise ValueError(f"Invalid float dtype: {dtype}") from e
         self._solve_dtype = np.dtype(dtype)
 
-    @staticmethod
-    def _validate_polygons(polygons: Sequence[Polygon], label: str) -> List[Polygon]:
-        for polygon in polygons:
-            if not polygon.is_valid:
-                raise ValueError(f"The following {label} is not valid: {polygon}.")
-        return polygons
-
     def get_polygons(self, include_terminals: bool = True) -> List[Polygon]:
         """Returns list of all Polygons in the device.
 
@@ -190,8 +183,8 @@ class Device:
             all_polygons = self.abstract_regions.values()
         elif polygon_type == "terminal":
             all_polygons = []
-            for terminal_set in self.terminals.values():
-                all_polygons.extend(terminal_set.to_list())
+            for terminals in self.terminals.values():
+                all_polygons.extend(terminals)
         else:
             # Films + holes + terminals + abstract regions
             all_polygons = self.get_polygons()

@@ -93,16 +93,6 @@ class Mesh:
             # mean_vertex_area=_mean(vertex_areas),
         )
 
-    @property
-    def x(self) -> np.ndarray:
-        """The x-coordinates of the mesh sites."""
-        return self.sites[:, 0]
-
-    @property
-    def y(self) -> np.ndarray:
-        """The y-coordinates of the mesh sites."""
-        return self.sites[:, 1]
-
     def closest_site(self, xy: Tuple[float, float]) -> int:
         """Returns the index of the mesh site closest to ``(x, y)``.
 
@@ -369,10 +359,7 @@ class MeshOperators:
         return deepcopy(self)
 
     @staticmethod
-    def q_matrix(
-        points: np.ndarray,
-        dtype: Union[str, np.dtype, None] = None,
-    ) -> np.ndarray:
+    def q_matrix(points: np.ndarray) -> np.ndarray:
         """Computes the denominator matrix, q:
 
         .. math::
@@ -384,25 +371,19 @@ class MeshOperators:
 
         Args:
             points: Shape (n, 2) array of x,y coordinates of vertices.
-            dtype: Output dtype.
 
         Returns:
             Shape (n, n) array, qij
         """
         # Euclidean distance between points
         distances = cdist(points, points, metric="euclidean")
-        if dtype is not None:
-            distances = distances.astype(dtype, copy=False)
         with np.errstate(divide="ignore"):
             q = 1 / (4 * np.pi * distances**3)
         np.fill_diagonal(q, np.inf)
-        return q.astype(dtype, copy=False)
+        return q
 
     @staticmethod
-    def C_vector(
-        points: np.ndarray,
-        dtype: Optional[Union[str, np.dtype]] = None,
-    ) -> np.ndarray:
+    def C_vector(points: np.ndarray) -> np.ndarray:
         """Computes the edge vector, C:
 
         .. math::
@@ -416,7 +397,6 @@ class MeshOperators:
 
         Args:
             points: Shape (n, 2) array of x, y coordinates of vertices.
-            dtype: Output dtype.
 
         Returns:
             Shape (n, ) array, Ci
@@ -434,17 +414,10 @@ class MeshOperators:
             )
         C[np.isinf(C)] = 1e30
         C /= 4 * np.pi
-        if dtype is not None:
-            C = C.astype(dtype, copy=False)
         return C
 
     @staticmethod
-    def Q_matrix(
-        q: np.ndarray,
-        C: np.ndarray,
-        weights: np.ndarray,
-        dtype: Optional[Union[str, np.dtype]] = None,
-    ) -> np.ndarray:
+    def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
         """Computes the kernel matrix, Q:
 
         .. math::
@@ -460,7 +433,6 @@ class MeshOperators:
             q: Shape (n, n) matrix qij.
             C: Shape (n, ) vector Ci.
             weights: Shape (n, ) weight vector.
-            dtype: Output dtype.
 
         Returns:
             Shape (n, n) array, Qij
@@ -471,6 +443,4 @@ class MeshOperators:
         np.fill_diagonal(q, 0)
         Q = -q
         np.fill_diagonal(Q, (C + np.einsum("ij, j -> i", q, weights)) / weights)
-        if dtype is not None:
-            Q = Q.astype(dtype, copy=False)
         return Q

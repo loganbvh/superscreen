@@ -368,7 +368,9 @@ def plot_streams(
 def plot_fields(
     solution: Solution,
     films: Optional[Union[List[str], str]] = None,
-    dataset: str = "field",
+    dataset: Literal[
+        "field", "self_field", "applied_field", "field_from_other_films"
+    ] = "field",
     normalize: bool = False,
     units: Optional[str] = None,
     shading: Literal["flat", "gouraud"] = "flat",

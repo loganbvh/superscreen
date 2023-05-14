@@ -202,11 +202,15 @@ def device_with_mesh():
 
 @pytest.mark.parametrize("subplots", [False, True])
 @pytest.mark.parametrize("legend", [False, True])
+@pytest.mark.parametrize("show_sites", [False, True])
+@pytest.mark.parametrize("show_edges", [False, True])
 def test_plot_device(
     device: sc.Device,
     device_with_mesh: sc.Device,
     legend: bool,
     subplots: bool,
+    show_sites: bool,
+    show_edges: bool,
 ):
     with non_gui_backend():
         fig, axes = device.plot_polygons(legend=legend, subplots=subplots)
@@ -216,7 +220,9 @@ def test_plot_device(
             with pytest.raises(ValueError):
                 fig, ax = plt.subplots()
                 _ = device.plot_polygons(ax=ax, subplots=subplots)
-        fig, axes = device_with_mesh.plot_mesh(subplots=subplots)
+        fig, axes = device_with_mesh.plot_mesh(
+            subplots=subplots, show_sites=show_sites, show_edges=show_edges
+        )
         plt.close("all")
 
 

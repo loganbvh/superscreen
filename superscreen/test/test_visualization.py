@@ -154,6 +154,9 @@ def test_cross_section_bad_shape(solution: sc.Solution):
 @pytest.mark.parametrize("units", [None, "mA/um"])
 @pytest.mark.parametrize("streamplot", [False, True])
 @pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
+@pytest.mark.parametrize(
+    "dataset", ["field", "self_field", "applied_field", "field_from_other_films"]
+)
 # @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
 # @pytest.mark.parametrize("share_color_scale", [False, True])
 # @pytest.mark.parametrize("symmetric_color_scale", [False, True])
@@ -162,6 +165,7 @@ def test_plot_currents_and_fields(
     films,
     units,
     streamplot,
+    dataset,
     cross_section_coords,
     share_color_scale=True,
     symmetric_color_scale=True,
@@ -183,6 +187,7 @@ def test_plot_currents_and_fields(
 
         fig, ax = sc.plot_fields(
             solution,
+            dataset=dataset,
             films=films,
             units=units,
             cross_section_coords=cross_section_coords,
@@ -199,19 +204,22 @@ def test_plot_currents_and_fields(
         (np.random.rand(200).reshape((-1, 2)), np.random.rand(100)),
         (np.random.rand(200).reshape((-1, 2)), 1),
         (np.random.rand(300).reshape((-1, 3)), None),
+        (None, 1),
     ],
 )
 @pytest.mark.parametrize("units", [None, "mT"])
 @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
 @pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
 def test_plot_field_at_positions(
-    solution,
+    solution: sc.Solution,
     positions,
     zs,
     units,
     cross_section_coords,
     auto_range_cutoff,
 ):
+    if positions is None:
+        positions = list(solution.device.meshes.values())[0]
     with non_gui_backend():
         fig, ax = sc.plot_field_at_positions(
             solution,

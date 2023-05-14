@@ -121,7 +121,9 @@ def test_polygon_flux(solution2: sc.Solution, units, with_units):
 @pytest.mark.parametrize("units", [None, "mT", "mA/um"])
 @pytest.mark.parametrize("with_units", [False, True])
 @pytest.mark.parametrize("return_sum", [False, True])
-def test_field_at_positions(solution2, positions, zs, units, with_units, return_sum):
+def test_field_at_positions(
+    solution2: sc.Solution, positions, zs, units, with_units, return_sum
+):
     H = solution2.field_at_position(
         positions,
         zs=zs,
