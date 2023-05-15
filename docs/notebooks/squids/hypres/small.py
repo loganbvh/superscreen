@@ -1,7 +1,9 @@
 import os
 
 import numpy as np
+
 import superscreen as sc
+from superscreen.geometry import box
 
 from .layers import hypres_squid_layers
 
@@ -10,21 +12,16 @@ def make_polygons():
     coords = {}
     npz_path = os.path.join(os.path.dirname(__file__), "hypres-400nm.npz")
     with np.load(npz_path) as df:
-        for name, array in df.items():
-            coords[name] = array
+        coords = dict(df)
     films = ["fc", "fc_shield", "pl", "pl_shield"]
-    holes = ["fc_center", "pl_center"]
-    abstract_regions = ["bounding_box"]
-    sc_polygons = {name: sc.Polygon(name, points=coords[name]) for name in films}
+    holes = ["pl_center", "fc_center"]
+    sc_films = {name: sc.Polygon(name, points=coords[name]) for name in films}
     sc_holes = {name: sc.Polygon(name, points=coords[name]) for name in holes}
-    sc_abstract = {
-        name: sc.Polygon(name, points=coords[name]) for name in abstract_regions
-    }
-    return sc_polygons, sc_holes, sc_abstract
+    return sc_films, sc_holes
 
 
-def make_squid(align_layers: str = "top"):
-    polygons, holes, abstract_regions = make_polygons()
+def make_squid(with_terminals: bool = True, align_layers: str = "middle"):
+    films, holes = make_polygons()
     layers = hypres_squid_layers(align=align_layers)
     layer_mapping = {
         "fc": "BE",
@@ -34,19 +31,38 @@ def make_squid(align_layers: str = "top"):
         "pl_center": "W1",
         "pl_shield": "W2",
     }
-    for name, poly in polygons.items():
+
+    for name, poly in films.items():
         poly.layer = layer_mapping[name]
-        poly.points = poly.resample(201)
+        poly.points = poly.resample(151)
     for name, poly in holes.items():
         poly.layer = layer_mapping[name]
-        poly.points = poly.resample(201)
-    bbox = abstract_regions["bounding_box"]
-    bounding_box = sc.Polygon("bounding_box", layer="BE", points=bbox)
+        poly.points = poly.resample(151)
+
+    terminals = None
+    if with_terminals:
+        fc = films.pop("fc")
+        fc_center = holes.pop("fc_center")
+        fc_mask = sc.Polygon(points=box(5)).rotate(45).translate(dx=6.5, dy=-5.5)
+        fc = fc.difference(fc_mask, fc_center).resample(501).set_layer("BE")
+        films["fc"] = fc
+        source = (
+            sc.Polygon("source", layer="BE", points=box(2, 0.1))
+            .rotate(45)
+            .translate(dx=5.5, dy=-2.95)
+        )
+        drain = (
+            sc.Polygon("drain", layer="BE", points=box(2, 0.1))
+            .rotate(45)
+            .translate(dx=3.95, dy=-4.5)
+        )
+        terminals = {"fc": [source, drain]}
+
     return sc.Device(
         "hypres_400nm",
         layers=layers,
-        films=list(polygons.values()),
+        films=list(films.values()),
         holes=list(holes.values()),
-        abstract_regions=[bounding_box],
+        terminals=terminals,
         length_units="um",
     )

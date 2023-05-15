@@ -1,6 +1,7 @@
 import numpy as np
 
 import superscreen as sc
+from superscreen.geometry import box
 
 
 def huber_geometry(interp_points=101):
@@ -153,7 +154,7 @@ def huber_geometry(interp_points=101):
     return polygons
 
 
-def make_squid():
+def make_squid(with_terminals: bool = True):
     interp_points = 151
 
     # See Nick Koshnick thesis
@@ -185,36 +186,42 @@ def make_squid():
     ][::-1]
 
     films = [
-        sc.Polygon("fc", layer="BE", points=polygons["fc"]),
         sc.Polygon("fc_shield", layer="W1", points=polygons["fc_shield"]),
         sc.Polygon("pl", layer="W1", points=polygons["pl"]),
         sc.Polygon("pl_shield", layer="W2", points=polygons["pl_shield"]),
     ]
-
+    fc = sc.Polygon("fc", layer="BE", points=polygons["fc"])
+    fc_center = sc.Polygon("fc_center", layer="BE", points=polygons["fc_center"])
     holes = [
-        sc.Polygon("fc_center", layer="BE", points=polygons["fc_center"]),
         sc.Polygon("pl_center", layer="W1", points=polygons["pl_center"]),
     ]
 
-    bbox = np.array(
-        [
-            [-9.0, -15.0],
-            [-9.0, 9.0],
-            [14.5, 9.0],
-            [14.5, -15.0],
-        ]
-    )
+    terminals = None
+    if with_terminals:
+        fc_mask = sc.Polygon(points=box(10, 3)).rotate(45).translate(dx=9, dy=-9)
+        fc = fc.difference(fc_mask, fc_center).resample(1001)
+        source = (
+            sc.Polygon("source", layer="BE", points=box(3, 0.1))
+            .rotate(45)
+            .translate(dx=9.45, dy=-6.45)
+        )
+        drain = (
+            sc.Polygon("drain", layer="BE", points=box(3, 0.1))
+            .rotate(45)
+            .translate(dx=6.45, dy=-9.45)
+        )
+        terminals = {"fc": [source, drain]}
+    else:
+        holes.append(fc_center)
 
-    abstract_regions = [
-        sc.Polygon("bounding_box", layer="W1", points=bbox),
-    ]
+    films.insert(0, fc)
 
     device = sc.Device(
         "huber_squid",
         layers=layers,
         films=films,
         holes=holes,
-        abstract_regions=abstract_regions,
+        terminals=terminals,
         length_units="um",
     )
     return device

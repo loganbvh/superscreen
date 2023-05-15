@@ -109,6 +109,12 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
 
 .. toctree::
    :maxdepth: 2
+   :caption: Applications
+
+   notebooks/scanning-squid.ipynb
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference
 
    api/device.rst
