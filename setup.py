@@ -44,16 +44,18 @@ INSTALL_REQUIRES = [
     "numba",
     "numpy",
     "pint",
-    "pre-commit",
     "pytest",
-    "pytest-cov",
     "scipy",
     "shapely",
+    "tqdm",
 ]
 
 EXTRAS_REQUIRE = {
+    "dev": [
+        "pytest-cov",
+        "pre-commit",
+    ],
     "docs": [
-        "IPython",
         "sphinx",
         "sphinx_rtd_theme",
         "sphinx-autodoc-typehints",
@@ -74,6 +76,7 @@ Programming Language :: Python
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10
+Programming Language :: Python :: 3.11
 Topic :: Scientific/Engineering
 Topic :: Scientific/Engineering :: Physics
 """

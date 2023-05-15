@@ -1,13 +1,10 @@
 import argparse
-import logging
 
 import superscreen as sc
 
 from . import huber, hypres, ibm
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--iterations",
@@ -66,7 +63,7 @@ if __name__ == "__main__":
             M = sum(solution.hole_fluxoid("pl_center")) / sc.ureg(I_fc)
         M.ito("Phi_0 / A")
         mutuals[make_squid.__module__] = M.to("Phi_0 / A")
-        print(M)
+        print(f"{name!r}: {M:.3f~P}")
 
     for label, mutual in mutuals.items():
         print()

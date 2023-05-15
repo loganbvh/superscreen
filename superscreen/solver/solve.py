@@ -9,11 +9,17 @@ import joblib
 import numba
 import numpy as np
 import pint
+from tqdm import tqdm
 
 from ..device import Device
 from ..solution import FilmSolution, Solution, Vortex
 from ..sources import ConstantField
-from .solve_film import LinearSystem, factorize_linear_systems, solve_film
+from .solve_film import (
+    LinearSystem,
+    TerminalSystems,
+    factorize_linear_systems,
+    solve_film,
+)
 from .utils import FilmInfo, currents_to_floats, field_conversion_factor, make_film_info
 
 logger = logging.getLogger("solve")
@@ -77,6 +83,7 @@ class FactorizedModel:
         film_info: A dict of ``{film_name: FilmInfo}``
         film_systems: A dict of ``{film_name: LinearSystem}``
         hole_systems: A dict of ``{film_name: {hole_name: LinearSystem}}``
+        terminal_systems: A dict of ``{film_name: TerminalSystems}``
         terminal_currents: A dict of ``{film_name: {terminal_name: terminal_current}}``
         circulating_currents: A dict of ``{hole_name: circulating_current}``
         vortices: A dict of ``{film_name: vortices}``
@@ -85,6 +92,7 @@ class FactorizedModel:
     film_info: Dict[str, FilmInfo]
     film_systems: Dict[str, LinearSystem]
     hole_systems: Dict[str, Dict[str, LinearSystem]]
+    terminal_systems: Dict[str, TerminalSystems]
     terminal_currents: Dict[str, Dict[str, float]]
     circulating_currents: Dict[str, float]
     vortices: Dict[str, Sequence[Vortex]]
@@ -106,6 +114,9 @@ class FactorizedModel:
             film_grp = hole_systems_grp.create_group(film)
             for hole, system in holes.items():
                 system.to_hdf5(film_grp.create_group(hole))
+        terminal_systems_grp = h5group.create_group("terminal_systems")
+        for film, systems in self.terminal_systems.items():
+            systems.to_hdf5(terminal_systems_grp.create_group(film))
         term_grp = h5group.create_group("terminal_currents")
         for film, terminals in self.terminal_currents.items():
             film_grp = term_grp.create_group(film)
@@ -138,6 +149,10 @@ class FactorizedModel:
             hole_systems[film] = {
                 hole: LinearSystem.from_hdf5(subgrp) for hole, subgrp in grp.items()
             }
+        terminal_systems = {
+            film: TerminalSystems.from_hdf5(grp)
+            for film, grp in h5group["terminal_systems"].items()
+        }
         terminal_currents = {
             film: dict(grp.attrs) for film, grp in h5group["terminal_currents"].items()
         }
@@ -147,12 +162,13 @@ class FactorizedModel:
             Vortex.from_hdf5(vortex_grp[i]) for i in sorted(vortex_grp, key=int)
         ]
         return FactorizedModel(
-            film_info,
-            film_systems,
-            hole_systems,
-            terminal_currents,
-            circulating_currents,
-            vortices,
+            film_info=film_info,
+            film_systems=film_systems,
+            hole_systems=hole_systems,
+            terminal_systems=terminal_systems,
+            terminal_currents=terminal_currents,
+            circulating_currents=circulating_currents,
+            vortices=vortices,
         )
 
 
@@ -207,11 +223,14 @@ def factorize_model(
         terminal_currents=terminal_currents,
     )
     # Factorize linear systems for all films and holes.
-    film_systems, hole_systems = factorize_linear_systems(device, film_info)
+    film_systems, hole_systems, terminal_systems = factorize_linear_systems(
+        device, film_info
+    )
     return FactorizedModel(
         film_info,
         film_systems,
         hole_systems,
+        terminal_systems,
         terminal_currents,
         circulating_currents,
         vortices,
@@ -328,6 +347,7 @@ def solve(
     film_info = model.film_info
     film_systems = model.film_systems
     hole_systems = model.hole_systems
+    terminal_systems = model.terminal_systems
     terminal_currents = model.terminal_currents
     circulating_currents = model.circulating_currents
     vortices = model.vortices
@@ -374,6 +394,7 @@ def solve(
             film_info=film_info[film_name],
             field_conversion=field_conversion.magnitude,
             vortex_flux=vortex_flux,
+            terminal_systems=terminal_systems[film_name],
             check_inversion=check_inversion,
         )
 
@@ -394,7 +415,7 @@ def solve(
             return solutions
         return
 
-    for i in range(iterations):
+    for i in tqdm(range(iterations), desc="Solver iterations"):
         # Calculate the screening fields at each layer from every other layer
         other_screening_fields = {
             name: np.zeros(len(mesh.sites), dtype=dtype)
@@ -422,7 +443,7 @@ def solve(
         # Calculate applied fields only once per iteration.
         film_solutions = {}
         for film_name, film in device.films.items():
-            logger.info(
+            logger.debug(
                 f"Calculating {film_name!r} response to applied field and "
                 f"screening field from other films ({i+1}/{iterations})."
             )
@@ -435,6 +456,7 @@ def solve(
                 film_info=film_info[film_name],
                 field_conversion=field_conversion.magnitude,
                 vortex_flux=vortex_flux,
+                terminal_systems=terminal_systems[film_name],
                 check_inversion=check_inversion,
             )
 

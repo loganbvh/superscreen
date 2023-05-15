@@ -75,10 +75,85 @@ class LinearSystem:
         )
 
 
+@dataclass
+class TerminalSystems:
+    """A container for the :class:`superscreen.solver.LinearSystem` objects
+    needed to calculate the stream function associated with transport currents.
+
+    Args:
+        film: The film name:
+        boundary: The :class:`superscreen.solver.LinearSystem` for the film boundary
+        holes: A dict of :class:`superscreen.solver.LinearSystem` objects for the
+            holes in the film
+        film_without_boundary: The :class:`superscreen.solver.LinearSystem` for the
+            interior of the film, excluding the boundary
+        film_without_boundary_or_holes: The :class:`superscreen.solver.LinearSystem` for
+            the interior of the film, excluding the boundary and any holes in the film
+    """
+
+    film: str
+    boundary: LinearSystem
+    holes: Dict[str, LinearSystem]
+    film_without_boundary: LinearSystem
+    film_without_boundary_or_holes: Optional[LinearSystem] = None
+
+    def to_hdf5(self, h5group: h5py.Group) -> None:
+        """Save a :class:`superscreen.solver.TerminalSystems` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` to which to save the ``TerminalSystems``
+        """
+        h5group.attrs["film"] = self.film
+        self.boundary.to_hdf5(h5group.create_group("boundary"))
+        holes_grp = h5group.create_group("holes")
+        for name, system in self.holes.items():
+            system.to_hdf5(holes_grp.create_group(name))
+        self.film_without_boundary.to_hdf5(
+            h5group.create_group("film_without_boundary")
+        )
+        if self.film_without_boundary_or_holes is not None:
+            self.film_without_boundary_or_holes.to_hdf5(
+                h5group.create_group("film_without_boundary_or_holes")
+            )
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "TerminalSystems":
+        """Load a :class:`superscreen.solver.TerminalSystems` to an :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` from which to load the ``TerminalSystems``
+
+        Returns:
+            The loaded :class:`superscreen.solver.TerminalSystems`
+        """
+        film = h5group.attrs["film"]
+        boundary = LinearSystem.from_hdf5(h5group["boundary"])
+        holes = {}
+        for name, grp in h5group["holes"].items():
+            holes[name] = LinearSystem.from_hdf5(grp)
+        film_without_boundary = LinearSystem.from_hdf5(h5group["film_without_boundary"])
+        film_without_boundary_or_holes = None
+        if "film_without_boundary_or_holes" in h5group:
+            film_without_boundary_or_holes = LinearSystem.from_hdf5(
+                h5group["film_without_boundary_or_holes"]
+            )
+        return TerminalSystems(
+            film=film,
+            boundary=boundary,
+            holes=holes,
+            film_without_boundary=film_without_boundary,
+            film_without_boundary_or_holes=film_without_boundary_or_holes,
+        )
+
+
 def factorize_linear_systems(
     device: Device, film_info_dict: Dict[str, FilmInfo]
-) -> Tuple[Dict[str, LinearSystem], Dict[str, Dict[str, LinearSystem]]]:
-    """Build and factorize the linear systems for all films and holes.
+) -> Tuple[
+    Dict[str, LinearSystem],
+    Dict[str, Dict[str, LinearSystem]],
+    Dict[str, Optional[TerminalSystems]],
+]:
+    """Build and factorize the linear systems for all films, holes, and terminals.
 
     Args:
         device: The :class:`superscreen.Device` to solve
@@ -86,29 +161,30 @@ def factorize_linear_systems(
             is a :class:`superscreen.solver.FilmInfo` instance
 
     Returns:
-        A dict of ``{film_name: film_system}`` and
-        a dict of ``{film_name: {hole_name: hole_system}}``
+        A dict of ``{film_name: film_system}``,
+        a dict of ``{film_name: {hole_name: hole_system}}``,
+        and a dict of ``{film_name: TerminalSystems}``
     """
     film_systems = {}
     hole_systems = {}
+    terminal_systems = {}
     for film_name, film_info in film_info_dict.items():
         hole_systems[film_name] = {}
+        film_indices = film_info.film_indices
+        boundary_indices = film_info.boundary_indices
+        hole_indices = film_info.hole_indices
         Lambda_info = film_info.lambda_info
         inhomogeneous = Lambda_info.inhomogeneous
         Lambda = Lambda_info.Lambda
+        terminal_Lambda = 1e10 * np.ones_like(Lambda)
         if inhomogeneous:
             grad = film_info.gradient
             grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
         else:
             grad_Lambda_term = 0
 
-        hole_indices = film_info.hole_indices
-        for hole_name, indices in hole_indices.items():
-            # Effective field associated with the circulating currents:
-            # current is in [current_units], Lambda is in [device.length_units],
-            # and Del2 is in [device.length_units ** (-2)], so
-            # Ha_eff has units of [current_unit / device.length_units]
-            A = _build_system_1d(
+        def make_system_1d(indices, Lambda):
+            return _build_system_1d(
                 film_info.kernel,
                 film_info.weights,
                 Lambda,
@@ -117,39 +193,95 @@ def factorize_linear_systems(
                 indices,
                 inhomogeneous=inhomogeneous,
             )
-            hole_systems[film_name][hole_name] = LinearSystem(
-                A=A, indices=indices, grad_Lambda_term=grad_Lambda_term
+
+        def make_system_2d(indices, Lambda):
+            return _build_system_2d(
+                film_info.kernel,
+                film_info.weights,
+                Lambda,
+                film_info.laplacian,
+                grad_Lambda_term,
+                indices,
+                inhomogeneous=inhomogeneous,
             )
 
-        # We want all points that are in a film and not in a hole.
-        film_indices = film_info.film_indices
-        if hole_indices:
-            film_indices = np.setdiff1d(
-                film_indices, np.concatenate(list(hole_indices.values()))
+        for hole_name, indices in hole_indices.items():
+            # Effective field associated with the circulating currents:
+            # current is in [current_units], Lambda is in [device.length_units],
+            # and Del2 is in [device.length_units ** (-2)], so
+            # Ha_eff has units of [current_unit / device.length_units]
+            hole_systems[film_name][hole_name] = LinearSystem(
+                A=make_system_1d(indices, Lambda),
+                indices=indices,
+                grad_Lambda_term=grad_Lambda_term,
             )
+
+        terminal_systems[film_name] = None
         if film_name in device.terminals:
-            film_indices = np.setdiff1d(film_indices, film_info.boundary_indices)
+            # Make the boundary linear system
+            boundary_system = LinearSystem(
+                A=make_system_1d(boundary_indices, terminal_Lambda),
+                indices=boundary_indices,
+                grad_Lambda_term=grad_Lambda_term,
+            )
+            # Make the film interior linear system (including holes)
+            interior_indices = np.setdiff1d(film_indices, boundary_indices)
+            A = make_system_2d(interior_indices, terminal_Lambda)
+            film_without_boundary_system = LinearSystem(
+                A=A,
+                indices=interior_indices,
+                lu_piv=la.lu_factor(-A),
+                grad_Lambda_term=grad_Lambda_term,
+            )
+            # Make the hole linear systems
+            terminal_hole_systems = {}
+            for hole_name, indices in hole_indices.items():
+                terminal_hole_systems[hole_name] = LinearSystem(
+                    A=make_system_1d(indices, terminal_Lambda),
+                    indices=indices,
+                    grad_Lambda_term=grad_Lambda_term,
+                )
+            # Make the film interior linear system (excluding holes)
+            film_without_boundary_or_holes_system = None
+            if hole_indices:
+                interior_indices = np.setdiff1d(
+                    interior_indices, np.concatenate(list(hole_indices.values()))
+                )
+                A = make_system_2d(interior_indices, terminal_Lambda)
+                film_without_boundary_or_holes_system = LinearSystem(
+                    A=A,
+                    indices=interior_indices,
+                    lu_piv=la.lu_factor(-A),
+                    grad_Lambda_term=grad_Lambda_term,
+                )
+
+            terminal_systems[film_name] = TerminalSystems(
+                film=film_name,
+                boundary=boundary_system,
+                holes=terminal_hole_systems,
+                film_without_boundary=film_without_boundary_system,
+                film_without_boundary_or_holes=film_without_boundary_or_holes_system,
+            )
 
         # Form the linear system for the film:
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2 - grad_Lambda_term) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
-        A = _build_system_2d(
-            film_info.kernel,
-            film_info.weights,
-            Lambda,
-            film_info.laplacian,
-            grad_Lambda_term,
-            film_indices,
-            inhomogeneous=inhomogeneous,
-        )
-        lu_piv = la.lu_factor(-A)
+        # We want all points that are in a film and not in a hole.
+        interior_indices = film_indices
+        if hole_indices:
+            interior_indices = np.setdiff1d(
+                interior_indices, np.concatenate(list(hole_indices.values()))
+            )
+        if film_name in device.terminals:
+            interior_indices = np.setdiff1d(interior_indices, boundary_indices)
+        A = make_system_2d(interior_indices, Lambda)
         film_systems[film_name] = LinearSystem(
             A=A,
-            indices=film_indices,
-            lu_piv=lu_piv,
+            indices=interior_indices,
+            lu_piv=la.lu_factor(-A),
             grad_Lambda_term=grad_Lambda_term,
         )
-    return film_systems, hole_systems
+    return film_systems, hole_systems, terminal_systems
 
 
 def _build_system_1d(
@@ -178,58 +310,48 @@ def _build_system_2d(
 def solve_for_terminal_current_stream(
     device: Device,
     film_info: FilmInfo,
-    film_system: LinearSystem,
+    terminal_systems: TerminalSystems,
     terminal_currents: Dict[str, float],
 ) -> np.ndarray:
-    """
+    """Solves for the stream function associated with transport currents in a single film.
+
+    The algorithm is:
+
     1. Solve for the stream function in the film assuming no applied field and
     ignoring the presence of any holes.
     2. Set the stream function in each hole to the weighted average of the stream
     function found in step 1.
     3. Re-solve for the stream function in the film with the new hole boundary conditions.
-    """
-    # device._check_current_mapping(terminal_currents)
-    terminal_currents = terminal_currents.copy()
-    # The drain terminal must sink all current
-    terminals = device.terminals[film_info.name].copy()
-    mesh = device.meshes[film_info.name]
-    holes_by_film = device.holes_by_film()
-    points = mesh.sites
-    inhomogeneous = film_info.lambda_info.inhomogeneous
-    Lambda = film_info.lambda_info.Lambda
-    Q = film_info.kernel
-    laplacian = film_info.laplacian
-    weights = film_info.weights
-    hole_indices = film_info.hole_indices
-    in_hole = film_info.in_hole
-    grad_Lambda_term = film_system.grad_Lambda_term
-    boundary_indices = film_info.boundary_indices
-    on_boundary = np.zeros(len(points), dtype=bool)
-    boundary_points = points[boundary_indices]
-    on_boundary[boundary_indices] = True
-    npoints = len(points)
 
+    Args:
+        device: The :class:`superscreen.Device` to solve
+        film_info: The :class:`superscreen.solver.FilmInfo` instance for the film
+        terminal_systems: The :class:`superscreen.solver.TerminalSystems` instance
+            for the film
+        terminal_currents: A dict of ``{terminal_name: terminal_current}``
+
+    Returns:
+        The stream function associated with the transport current
+    """
+    terminal_currents = terminal_currents.copy()
+    mesh = device.meshes[film_info.name]
+    points = mesh.sites
+    weights = mesh.operators.weights
+    npoints = len(points)
+    if not any(terminal_currents.values()):
+        return np.zeros(npoints)
+
+    terminals = device.terminals[film_info.name].copy()
+    boundary_indices = terminal_systems.boundary.indices
+    boundary_points = points[boundary_indices]
+
+    # 1. Set the stream function on the boundary
+    # and solve for the effective applied field.
     g = np.zeros(npoints)
     Ha_eff = np.zeros(npoints)
-
-    if not any(terminal_currents.values()):
-        return g
-
-    Lambda = 1e10 * np.ones_like(Lambda)
-
-    def min_index(terminal):
-        return terminal.contains_points(boundary_points, index=True).max()
-
-    drain_terminal = terminals[-1]
-    terminals = sorted(terminals, key=min_index)
-    # Rotate terminals so that the drain is the last element
-    while terminals[-1] is not drain_terminal:
-        terminals.append(terminals.pop(0))
     for terminal in terminals:
         current = terminal_currents[terminal.name]
-        ix_boundary = sorted(
-            terminal.contains_points(boundary_points, index=True).tolist()
-        )
+        ix_boundary = np.sort(terminal.contains_points(boundary_points, index=True))
         remaining_boundary = boundary_indices[(ix_boundary[-1] + 1) :]
         ix_terminal = boundary_indices[ix_boundary]
         stream = stream_from_terminal_current(points[ix_terminal], -current)
@@ -239,89 +361,36 @@ def solve_for_terminal_current_stream(
     # immediately after the output terminal in a CCW direction) should be zero.
     g_ref = g[ix_terminal.max()]
     g[boundary_indices] += -g_ref
-    A = _build_system_1d(
-        Q,
-        weights,
-        Lambda,
-        laplacian,
-        grad_Lambda_term,
-        boundary_indices,
-        inhomogeneous=inhomogeneous,
-    )
+    A = terminal_systems.boundary.A
     Ha_eff += -(A @ g[boundary_indices])
-    # First solve for the stream function inside the film, ignoring the
-    # presence of holes completely.
-    film = device.films[film_info.name]
-    ix1d = np.logical_and(film.contains_points(points), np.logical_not(on_boundary))
-    ix1d = np.where(ix1d)[0]
-    A = _build_system_2d(
-        Q,
-        weights,
-        Lambda,
-        laplacian,
-        grad_Lambda_term,
-        ix1d,
-        inhomogeneous=inhomogeneous,
-    )
-    h = -Ha_eff[ix1d]
-    lu_piv = la.lu_factor(-A)
+
+    # 2. Solve for the stream function inside the film given the effective applied
+    # field, ignoring the presence of holes completely.
+    lu_piv = terminal_systems.film_without_boundary.lu_piv
+    h = -Ha_eff[terminal_systems.film_without_boundary.indices]
     gf = la.lu_solve(lu_piv, h)
-    g[ix1d] = gf
-    holes = {hole.name: hole for hole in holes_by_film[film.name]}
-    if len(holes) == 0:
+    g[terminal_systems.film_without_boundary.indices] = gf
+    if len(terminal_systems.holes) == 0:
         return g
 
     # Set the stream function in each hole to the average value
     # obtained when ignoring holes.
     Ha_eff = np.zeros(points.shape[0])
-    for name in holes:
-        ix = hole_indices[name]
+    for system in terminal_systems.holes.values():
+        ix = system.indices
         g[ix] = np.average(g[ix], weights=weights[ix])
-        A = _build_system_1d(
-            Q,
-            weights,
-            Lambda,
-            laplacian,
-            grad_Lambda_term,
-            ix,
-            inhomogeneous=inhomogeneous,
-        )
+        A = system.A
         Ha_eff += -(A @ g[ix])
 
-    ix = boundary_indices
-    A = _build_system_1d(
-        Q,
-        weights,
-        Lambda,
-        laplacian,
-        grad_Lambda_term,
-        ix,
-        inhomogeneous=inhomogeneous,
-    )
-    Ha_eff += -(A @ g[ix])
+    A = terminal_systems.boundary.A
+    Ha_eff += -(A @ g[boundary_indices])
 
-    # Solve for the stream function inside the superconducting film again,
+    # 3. Solve for the stream function inside the superconducting film again,
     # now with the new boundary conditions for the holes.
-    ix1d = np.logical_and.reduce(
-        [
-            film.contains_points(points),
-            np.logical_not(in_hole),
-            np.logical_not(on_boundary),
-        ]
-    )
-    ix1d = np.where(ix1d)[0]
-    A = _build_system_2d(
-        Q,
-        weights,
-        Lambda,
-        laplacian,
-        grad_Lambda_term,
-        ix1d,
-        inhomogeneous=inhomogeneous,
-    )
-    lu_piv = la.lu_factor(-A)
-    gf = la.lu_solve(lu_piv, -Ha_eff[ix1d])
-    g[ix1d] = gf
+    ix = terminal_systems.film_without_boundary_or_holes.indices
+    lu_piv = terminal_systems.film_without_boundary_or_holes.lu_piv
+    gf = la.lu_solve(lu_piv, -Ha_eff[ix])
+    g[ix] = gf
     return g
 
 
@@ -334,6 +403,7 @@ def solve_film(
     hole_systems: Dict[str, LinearSystem],
     field_conversion: float,
     vortex_flux: float,
+    terminal_systems: Optional[TerminalSystems] = None,
     field_from_other_films: Optional[np.ndarray] = None,
     check_inversion: bool = False,
 ) -> FilmSolution:
@@ -349,6 +419,9 @@ def solve_film(
             is an instance of :class:`superscreen.solver.LinearSystem`
         field_conversion: The field conversion factor from user units to solver units
         vortex_flux: The flux associated with a single Phi_0 vortex in the solver units
+        terminal_systems: An instance of :class:`superscreen.solver.TerminalSystems`
+            containing the linear systems required to calculate the stream function
+            associated with transport currents.
         field_from_other_films: The magnetic field from any other films in the ``Device``
         check_inversion: Whether to verify the accuracy of the matrix inversion.
 
@@ -390,7 +463,7 @@ def solve_film(
         g_transport = solve_for_terminal_current_stream(
             device,
             film_info,
-            film_system,
+            terminal_systems,
             terminal_currents,
         )
         g += g_transport

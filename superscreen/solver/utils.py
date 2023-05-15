@@ -45,7 +45,7 @@ class LambdaInfo:
             > 1e-6
         )
         if self.inhomogeneous:
-            logger.warning(
+            logger.info(
                 f"Inhomogeneous {LambdaInfo.Lambda_str} in film {self.film!r}, "
                 f"which violates the assumptions of the London model. "
                 f"Results may not be reliable."
@@ -253,7 +253,7 @@ def make_film_info(
         Lambda = layer.Lambda
         if isinstance(london_lambda, (int, float)) and london_lambda <= d:
             length_units = device.ureg(device.length_units).units
-            logger.warning(
+            logger.info(
                 f"Layer {name!r}: The film thickness, d = {d:.4f} {length_units:~P},"
                 f" is greater than or equal to the London penetration depth, resulting"
                 f" in an effective penetration depth {LambdaInfo.Lambda_str} = {Lambda:.4f}"

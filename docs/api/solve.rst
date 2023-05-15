@@ -43,6 +43,8 @@ Supporting functions
 
 .. autofunction:: superscreen.solver.solve_film
 
+.. autofunction:: superscreen.solver.solve_for_solve_for_terminal_current_stream
+
 .. autofunction:: superscreen.solver.factorize_model
 
 .. autofunction:: superscreen.solver.factorize_linear_systems
@@ -65,4 +67,7 @@ Supporting classes
     :members:
 
 .. autoclass:: superscreen.solver.LinearSystem
+    :members:
+
+.. autoclass:: superscreen.solver.TerminalSystems
     :members:
