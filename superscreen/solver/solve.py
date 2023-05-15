@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import h5py
-import joblib
 import numba
 import numpy as np
 import pint
@@ -24,10 +23,8 @@ from .utils import FilmInfo, currents_to_floats, field_conversion_factor, make_f
 
 logger = logging.getLogger("solve")
 
-_numba_use_parallel = joblib.cpu_count(only_physical_cores=True) > 2
 
-
-@numba.njit(fastmath=True, parallel=_numba_use_parallel)
+@numba.njit(fastmath=True, parallel=True)
 def biot_savart_film_to_film(
     *,
     film1_sites: np.ndarray,
