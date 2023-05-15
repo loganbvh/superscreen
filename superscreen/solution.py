@@ -413,6 +413,7 @@ class Solution:
             "applied_field",
             "field_from_other_films",
         )
+        points = self.device.meshes[film].sites
         if dataset not in valid_datasets:
             raise ValueError(
                 f"Invalid dataset: {dataset!r}. Expected one of {valid_datasets!r}"
@@ -426,9 +427,8 @@ class Solution:
         else:
             field = self.film_solutions[film].field_from_other_films
             if field is None:
-                field = np.zeros(len(positions))
+                field = np.zeros(len(points))
         positions = np.atleast_2d(positions)
-        points = self.device.meshes[film].sites
         Hz_interp = interpolator(points, field, **kwargs)
         Hz = convert_field(
             Hz_interp(positions),
