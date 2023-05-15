@@ -97,6 +97,7 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    installation.rst
    notebooks/quickstart.ipynb
    background.rst
+   gotchas.rst
 
 .. toctree::
    :maxdepth: 2
