@@ -10,6 +10,9 @@ Field Sources
 The ``superscreen.sources`` module provides factory functions for a few convenient
 :class:`superscreen.parameter.Parameter` classes used to define applied magnetic fields. 
 
+.. contents::
+    :depth: 2
+
 ConstantField
 -------------
 

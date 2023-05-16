@@ -14,6 +14,9 @@ and ``superscreen.parameter`` are used to set up the inputs to a
 - The geometry and penetration depth of all superconducting films
 - The spatial distribution of the applied magnetic field
 
+.. contents::
+    :depth: 2
+
 Devices
 -------
 

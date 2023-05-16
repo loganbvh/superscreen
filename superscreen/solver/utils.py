@@ -81,16 +81,14 @@ class LambdaInfo:
         Returns:
             The loaded ``LambdaInfo`` instance
         """
-        london_lambda = thickness = None
+        london_lambda = None
         if "london_lambda" in h5group:
             london_lambda = np.array(h5group["london_lambda"])
-        if "thickness" in h5group:
-            thickness = float(h5group["thickness"])
         return LambdaInfo(
             film=h5group.attrs["film"],
             Lambda=np.array(h5group["Lambda"]),
             london_lambda=london_lambda,
-            thickness=thickness,
+            thickness=h5group.attrs.get("thickness", None),
         )
 
 

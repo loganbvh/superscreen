@@ -1,3 +1,4 @@
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pint
@@ -119,13 +120,19 @@ def test_current_value(
                 linear, offset=old_lambda
             )
         if pre_factorize:
-            model = sc.solver.factorize_model(
+            model = sc.factorize_model(
                 device=device,
                 circulating_currents=circulating_currents,
                 current_units="uA",
             )
+            model_save_path = tmp_path / "model.h5"
+            with h5py.File(model_save_path, "x") as h5file:
+                model.to_hdf5(h5file)
+
+            with h5py.File(model_save_path, "r") as h5file:
+                model = sc.FactorizedModel.from_hdf5(h5file)
+
             solutions = sc.solve(
-                device=device,
                 model=model,
                 applied_field=applied_field,
                 field_units="mT",

@@ -10,6 +10,9 @@ Visualization
 The ``superscreen.visualization`` module contains functions used to visualize
 the results contained in a :class:`superscreen.Solution`.
 
+.. contents::
+    :depth: 2
+
 Fields
 ------
 

@@ -77,6 +77,7 @@ class FactorizedModel:
     """A pre-factorized SuperScreen model.
 
     Args:
+        device: The :class:`superscreen.Device`
         film_info: A dict of ``{film_name: FilmInfo}``
         film_systems: A dict of ``{film_name: LinearSystem}``
         hole_systems: A dict of ``{film_name: {hole_name: LinearSystem}}``
@@ -86,6 +87,7 @@ class FactorizedModel:
         vortices: A dict of ``{film_name: vortices}``
     """
 
+    device: Device
     film_info: Dict[str, FilmInfo]
     film_systems: Dict[str, LinearSystem]
     hole_systems: Dict[str, Dict[str, LinearSystem]]
@@ -95,11 +97,12 @@ class FactorizedModel:
     vortices: Dict[str, Sequence[Vortex]]
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
-        """Save a :class:`superscreen.solver.FactorizedModel` to an :class:`h5py.Group`.
+        """Save a :class:`superscreen.FactorizedModel` to an :class:`h5py.Group`.
 
         Args:
             h5group: The :class:`h5py.Group` in which to save the model
         """
+        self.device.to_hdf5(h5group.create_group("device"))
         film_info_grp = h5group.create_group("film_info")
         for film, info in self.film_info.items():
             info.to_hdf5(film_info_grp.create_group(film))
@@ -126,14 +129,15 @@ class FactorizedModel:
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "FactorizedModel":
-        """Load a :class:`superscreen.solver.FactorizedModel` from an :class:`h5py.Group`.
+        """Load a :class:`superscreen.FactorizedModel` from an :class:`h5py.Group`.
 
         Args:
             h5group: The :class:`h5py.Group` from which to load the model
 
         Returns:
-            The loaded :class:`superscreen.solver.FactorizedModel`
+            The loaded :class:`superscreen.FactorizedModel`
         """
+        device = Device.from_hdf5(h5group["device"])
         film_info = {
             film: FilmInfo.from_hdf5(grp) for film, grp in h5group["film_info"].items()
         }
@@ -159,6 +163,7 @@ class FactorizedModel:
             Vortex.from_hdf5(vortex_grp[i]) for i in sorted(vortex_grp, key=int)
         ]
         return FactorizedModel(
+            device=device,
             film_info=film_info,
             film_systems=film_systems,
             hole_systems=hole_systems,
@@ -196,7 +201,7 @@ def factorize_model(
             located in the :class:`superscreen.Device`.
 
     Returns:
-        A :class:`superscreen.solver.FactorizedModel` instance that can be used to solve the model.
+        A :class:`superscreen.FactorizedModel` instance that can be used to solve the model.
     """
     ureg = device.ureg
     circulating_currents = circulating_currents or {}
@@ -224,6 +229,7 @@ def factorize_model(
         device, film_info
     )
     return FactorizedModel(
+        device,
         film_info,
         film_systems,
         hole_systems,
@@ -235,7 +241,7 @@ def factorize_model(
 
 
 def solve(
-    device: Device,
+    device: Optional[Device] = None,
     *,
     model: Optional[FactorizedModel] = None,
     applied_field: Optional[Callable] = None,
@@ -269,7 +275,8 @@ def solve(
 
 
     Args:
-        device: The Device to simulate.
+        device: The Device to simulate. Required if ``model`` is not provided.
+        model: A :class:`superscreen.FactorizedModel` instance.
         applied_field: A callable that computes the applied magnetic field
             as a function of x, y, z coordinates.
         terminal_currents: A dict like ``{film_name: {source_name: source_current}}`` for
@@ -298,6 +305,42 @@ def solve(
     if log_level is not None:
         logging.basicConfig(level=log_level)
 
+    if model is None:
+        if device is None:
+            raise ValueError("Either a model or a device must be provided.")
+        logger.info("Factorizing model.")
+        model = factorize_model(
+            device=device,
+            current_units=current_units,
+            terminal_currents=terminal_currents,
+            circulating_currents=circulating_currents,
+            vortices=vortices,
+        )
+    elif (
+        device is not None
+        or terminal_currents is not None
+        or circulating_currents is not None
+        or vortices is not None
+    ):
+        raise ValueError(
+            "If model argument is provided, device, terminal_currents,"
+            " circulating_currents, and vortices must be None."
+        )
+
+    if not isinstance(model, FactorizedModel):
+        raise TypeError(
+            f"model must be an instance of FactorizedModel (got {type(model)})."
+        )
+
+    device = model.device
+    film_info = model.film_info
+    film_systems = model.film_systems
+    hole_systems = model.hole_systems
+    terminal_systems = model.terminal_systems
+    terminal_currents = model.terminal_currents
+    circulating_currents = model.circulating_currents
+    vortices = model.vortices
+
     if not device.meshes:
         raise ValueError(
             "The device does not have a mesh. Call device.make_mesh() to generate it."
@@ -318,36 +361,6 @@ def solve(
         f"Conversion factor from {ureg(field_units).units:~P} to "
         f"{ureg(current_units) / ureg(length_units):~P}: {field_conversion:~P}."
     )
-
-    if model is None:
-        logger.info("Factorizing model.")
-        model = factorize_model(
-            device=device,
-            current_units=current_units,
-            terminal_currents=terminal_currents,
-            circulating_currents=circulating_currents,
-            vortices=vortices,
-        )
-    elif (
-        terminal_currents is not None
-        or circulating_currents is not None
-        or vortices is not None
-    ):
-        raise ValueError(
-            "If model argument is provided, terminal_currents, circulating_currents,"
-            " and vortices must be None."
-        )
-    if not isinstance(model, FactorizedModel):
-        raise TypeError(
-            f"model must be an instance of FactorizedModel (got {type(model)})."
-        )
-    film_info = model.film_info
-    film_systems = model.film_systems
-    hole_systems = model.hole_systems
-    terminal_systems = model.terminal_systems
-    terminal_currents = model.terminal_currents
-    circulating_currents = model.circulating_currents
-    vortices = model.vortices
 
     applied_fields = {}
     for film, mesh in meshes.items():
@@ -391,7 +404,7 @@ def solve(
             film_info=film_info[film_name],
             field_conversion=field_conversion.magnitude,
             vortex_flux=vortex_flux,
-            terminal_systems=terminal_systems[film_name],
+            terminal_systems=terminal_systems.get(film_name, None),
             check_inversion=check_inversion,
         )
 
@@ -453,7 +466,7 @@ def solve(
                 film_info=film_info[film_name],
                 field_conversion=field_conversion.magnitude,
                 vortex_flux=vortex_flux,
-                terminal_systems=terminal_systems[film_name],
+                terminal_systems=terminal_systems.get(film_name, None),
                 check_inversion=check_inversion,
             )
 
