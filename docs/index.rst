@@ -64,12 +64,11 @@ Click :ref:`here <background>` to read more about the way ``SuperScreen`` solves
 models of superconducting devices.
 
 For quick demonstration of ``SuperScreen``, see the :ref:`quickstart notebook </notebooks/quickstart.ipynb>`.
-Better yet, click the badge below and navigate to ``docs/notebooks/`` to try ``SuperScreen``
-interactively online via `Binder <https://mybinder.org/>`_:
+Better yet, click the badge below to try ``SuperScreen`` interactively online via `Google Colab <https://colab.research.google.com/>`_:
 
 
-.. image:: https://mybinder.org/badge_logo.svg
- :target: https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD
+.. image:: https://colab.research.google.com/assets/colab-badge.svg
+ :target: https://colab.research.google.com/github/loganbvh/superscreen/blob/main/docs/notebooks/quickstart.ipynb
 
 If you use ``SuperScreen`` in your research, please cite the paper linked above.
 
