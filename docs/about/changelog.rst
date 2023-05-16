@@ -14,6 +14,9 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
       The public API SHOULD NOT be considered stable.
     - Version 1.0.0 defines the public API.
 
+.. contents::
+    :depth: 2
+
 ----
 
 Version 0.8.1

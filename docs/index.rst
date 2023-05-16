@@ -102,8 +102,8 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    :maxdepth: 2
    :caption: Tutorials
 
-   notebooks/polygons.ipynb
    notebooks/terminal-currents.ipynb
+   notebooks/polygons.ipynb
    notebooks/field-sources.ipynb
    notebooks/logo.ipynb
 
