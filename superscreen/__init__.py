@@ -4,7 +4,7 @@ from .device import Device, Layer, Mesh, Polygon
 from .fluxoid import find_fluxoid_solution, make_fluxoid_polygons
 from .parameter import Constant, Parameter
 from .solution import FilmSolution, Fluxoid, Solution, Vortex
-from .solver import convert_field, solve
+from .solver import FactorizedModel, convert_field, factorize_model, solve
 from .units import ureg
 from .version import __version__, __version_info__
 from .visualization import (

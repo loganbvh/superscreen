@@ -151,7 +151,7 @@ def factorize_linear_systems(
 ) -> Tuple[
     Dict[str, LinearSystem],
     Dict[str, Dict[str, LinearSystem]],
-    Dict[str, Optional[TerminalSystems]],
+    Dict[str, TerminalSystems],
 ]:
     """Build and factorize the linear systems for all films, holes, and terminals.
 
@@ -216,7 +216,6 @@ def factorize_linear_systems(
                 grad_Lambda_term=grad_Lambda_term,
             )
 
-        terminal_systems[film_name] = None
         if film_name in device.terminals:
             # Make the boundary linear system
             boundary_system = LinearSystem(

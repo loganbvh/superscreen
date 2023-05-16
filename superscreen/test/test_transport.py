@@ -117,8 +117,8 @@ def test_save_and_load_device_with_terminals(holey_device: sc.Device, tmp_path):
 
 
 @pytest.fixture()
-def factorized_model(holey_device) -> sc.solver.FactorizedModel:
-    model = sc.solver.factorize_model(
+def factorized_model(holey_device) -> sc.FactorizedModel:
+    model = sc.factorize_model(
         device=holey_device,
         current_units="uA",
         terminal_currents={"film": {"source": "10 uA", "drain": "-10 uA"}},
@@ -128,17 +128,15 @@ def factorized_model(holey_device) -> sc.solver.FactorizedModel:
     return model
 
 
-def test_save_and_load_factorized_model(
-    factorized_model: sc.solver.FactorizedModel, tmp_path
-):
+def test_save_and_load_factorized_model(factorized_model: sc.FactorizedModel, tmp_path):
     h5path = tmp_path / "factorized-model.h5"
     with h5py.File(h5path, "x") as f:
         factorized_model.to_hdf5(f)
 
     with h5py.File(h5path, "r") as f:
-        loaded_model = sc.solver.FactorizedModel.from_hdf5(f)
+        loaded_model = sc.FactorizedModel.from_hdf5(f)
 
-    assert isinstance(loaded_model, sc.solver.FactorizedModel)
+    assert isinstance(loaded_model, sc.FactorizedModel)
 
 
 @pytest.mark.parametrize("applied_field", [0, -1, 2])
