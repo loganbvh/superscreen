@@ -3,16 +3,18 @@
 import numpy as np
 
 import superscreen as sc
+from superscreen.geometry import box
 
 from .layers import ibm_squid_layers
 
 
 def make_squid(
-    interp_points: int = 310,
+    with_terminals: bool = True,
     align_layers: str = "middle",
     d_I1: float = 0.4,
     d_I2: float = 0.4,
 ) -> sc.Device:
+    interp_points = 301
     pl_length = 11.5
     ri_pl = 3.0
     ro_pl = 3.5
@@ -102,25 +104,29 @@ def make_squid(
         ),
     )
 
-    bbox = sc.Polygon(
-        "bounding_box", layer="BE", points=sc.geometry.box(24, 28, center=(2, -3.5))
-    )
-
-    films = [fc_shield, fc, pl_shield1, pl_shield2, pl]
+    films = [fc_shield, pl_shield1, pl_shield2, pl]
     holes = [fc_center, pl_center]
-    abstract_regions = [
-        bbox,
-        sc.Polygon(
-            "circle",
-            layer="W1",
-            points=sc.geometry.circle(ri_pl / 2, points=interp_points // 5),
-        ),
-    ]
     for polygon in films + holes:
-        if "shield" in polygon.name:
-            polygon.points = polygon.resample(interp_points // 2)
-        else:
-            polygon.points = polygon.resample(interp_points)
+        polygon.points = polygon.resample(interp_points)
+
+    terminals = None
+    if with_terminals:
+        fc_mask = sc.Polygon(points=box(8, 2)).rotate(33).translate(dx=8.5, dy=-11)
+        fc = fc.difference(fc_mask, fc_center).resample(1001)
+        source = (
+            sc.Polygon("source", layer="BE", points=box(3.5, 0.2))
+            .rotate(33)
+            .translate(dx=9.5, dy=-9.1)
+        )
+        drain = (
+            sc.Polygon("drain", layer="BE", points=box(3.5, 0.2))
+            .rotate(33)
+            .translate(dx=6.25, dy=-11.25)
+        )
+        terminals = {"fc": [source, drain]}
+        holes = [pl_center]
+
+    films.insert(0, fc)
 
     return sc.Device(
         "ibm_3000nm",
@@ -131,6 +137,6 @@ def make_squid(
         ),
         films=films,
         holes=holes,
-        abstract_regions=abstract_regions,
+        terminals=terminals,
         length_units="um",
     )

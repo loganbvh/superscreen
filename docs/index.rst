@@ -10,8 +10,7 @@ SuperScreen
 .. image:: images/logo_currents.png
    :alt: SuperScreen Logo
    :target: https://github.com/loganbvh/superscreen
-   :height: 300px
-   :width: 300px
+   :height: 200px
    :align: center
 
 .. image:: https://img.shields.io/pypi/v/superscreen
@@ -98,18 +97,22 @@ If you use ``SuperScreen`` in your research, please cite the paper linked above.
    installation.rst
    notebooks/quickstart.ipynb
    background.rst
+   gotchas.rst
 
 .. toctree::
    :maxdepth: 2
    :caption: Tutorials
 
    notebooks/polygons.ipynb
-   notebooks/field-sources.ipynb
    notebooks/terminal-currents.ipynb
-   notebooks/io.ipynb
-   notebooks/gpu.ipynb
-   notebooks/parallel.ipynb
+   notebooks/field-sources.ipynb
    notebooks/logo.ipynb
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Applications
+
+   notebooks/scanning-squid.ipynb
 
 .. toctree::
    :maxdepth: 2

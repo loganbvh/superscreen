@@ -1,4 +1,5 @@
-from .components import Layer, Polygon
 from .device import Device
-from .mesh import generate_mesh, smooth_mesh
-from .transport import TransportDevice
+from .layer import Layer
+from .mesh import EdgeMesh, Mesh
+from .polygon import Polygon
+from .utils import generate_mesh, smooth_mesh

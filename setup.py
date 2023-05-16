@@ -31,37 +31,36 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.7, <3.11"
+PYTHON_VERSION = ">=3.8, <3.12"
 
 INSTALL_REQUIRES = [
     "dill",
+    "h5py",
     "ipython",
     "joblib",
     "jupyter",
     "matplotlib",
     "meshpy",
+    "numba",
     "numpy",
-    "pandas",
     "pint",
-    "pre-commit",
     "pytest",
-    "pytest-cov",
-    "ray[default]",
     "scipy",
     "shapely",
+    "tqdm",
 ]
 
 EXTRAS_REQUIRE = {
+    "dev": [
+        "pytest-cov",
+        "pre-commit",
+    ],
     "docs": [
-        "IPython",
         "sphinx",
         "sphinx_rtd_theme",
         "sphinx-autodoc-typehints",
         "nbsphinx",
         "pillow",  # required for image scaling in RTD
-    ],
-    "jax": [
-        "jax[cpu]",
     ],
 }
 
@@ -74,10 +73,10 @@ Operating System :: POSIX
 Operating System :: Unix
 Operating System :: Microsoft :: Windows
 Programming Language :: Python
-Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10
+Programming Language :: Python :: 3.11
 Topic :: Scientific/Engineering
 Topic :: Scientific/Engineering :: Physics
 """

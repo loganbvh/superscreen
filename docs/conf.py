@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = "SuperScreen"
-copyright = "2021-2022, Logan Bishop-Van Horn"
+copyright = "2021-2023, Logan Bishop-Van Horn"
 author = "Logan Bishop-Van Horn"
 
 
@@ -88,4 +88,5 @@ intersphinx_mapping = {
     "scipy": ("http://docs.scipy.org/doc/scipy/reference", None),
     "matplotlib": ("http://matplotlib.org/stable", None),
     "shapely": ("https://shapely.readthedocs.io/en/stable/", None),
+    "h5py": ("https://docs.h5py.org/en/stable/", None),
 }

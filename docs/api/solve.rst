@@ -15,16 +15,14 @@ Solve
 
 .. autofunction:: superscreen.solve
 
-Solve Many
-----------
-
-.. autofunction:: superscreen.solve_many
-
 
 Solution
 --------
 
 .. autoclass:: superscreen.Solution
+    :members:
+
+.. autoclass:: superscreen.FilmSolution
     :members:
 
 Fluxoid
@@ -34,53 +32,42 @@ Fluxoid
     :show-inheritance:
 
 .. autoclass:: superscreen.Vortex
-    :show-inheritance:
 
 .. autofunction:: superscreen.fluxoid.make_fluxoid_polygons
 
 .. autofunction:: superscreen.fluxoid.find_fluxoid_solution
 
 
-IO
---
-
-.. autofunction:: superscreen.io.save_solutions
-
-.. autofunction:: superscreen.io.load_solutions
-
-.. autofunction:: superscreen.io.iload_solutions
-
-.. autofunction:: superscreen.io.zip_solution
-
-.. autofunction:: superscreen.io.unzip_solution
-
-
-Supporting Functions
+Supporting functions
 --------------------
 
-Brandt Core
-===========
+.. autofunction:: superscreen.solver.solve_film
 
-.. autofunction:: superscreen.solve.solve_layer
+.. autofunction:: superscreen.solver.solve_for_terminal_current_stream
 
-.. autofunction:: superscreen.solve.q_matrix
+.. autofunction:: superscreen.solver.factorize_model
 
-.. autofunction:: superscreen.solve.C_vector
+.. autofunction:: superscreen.solver.factorize_linear_systems
 
-.. autofunction:: superscreen.solve.Q_matrix
+.. autofunction:: superscreen.solver.convert_field
 
-.. autofunction:: superscreen.solve.convert_field
-
-.. autofunction:: superscreen.solve.field_conversion_factor
+.. autofunction:: superscreen.solver.field_conversion_factor
 
 
-Parallel Processing
-===================
+Supporting classes
+------------------
 
-.. autofunction:: superscreen.parallel.create_models
+.. autoclass:: superscreen.solver.FactorizedModel
+    :members:
 
-.. autofunction:: superscreen.parallel.solve_many_serial
+.. autoclass:: superscreen.solver.FilmInfo
+    :members:
 
-.. autofunction:: superscreen.parallel.solve_many_mp
+.. autoclass:: superscreen.solver.LambdaInfo
+    :members:
 
-.. autofunction:: superscreen.parallel.solve_many_ray
+.. autoclass:: superscreen.solver.LinearSystem
+    :members:
+
+.. autoclass:: superscreen.solver.TerminalSystems
+    :members:

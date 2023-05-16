@@ -5,7 +5,7 @@ import numpy as np
 
 from .device import Device
 from .solution import Solution
-from .solve import solve
+from .solver import solve
 
 logger = logging.getLogger(__name__)
 

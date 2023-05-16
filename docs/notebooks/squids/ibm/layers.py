@@ -34,10 +34,18 @@ def ibm_squid_layers(
     assert align in ("top", "middle", "bottom")
 
     # Metal layer vertical positions in microns.
-    scale = {"bottom": 0, "middle": 0.5, "top": 1}[align]
-    z0_W2 = z0 + scale * d_W2
-    z0_W1 = z0 + d_W2 + d_I2 + scale * d_W1
-    z0_BE = z0 + d_W2 + d_I2 + d_W1 + d_I1 + scale * d_W2
+    if align == "bottom":
+        z0_W2 = z0
+        z0_W1 = z0 + d_W2 + d_I2
+        z0_BE = z0 + d_W2 + d_I2 + d_W1 + d_I1
+    elif align == "middle":
+        z0_W2 = z0 + d_W2 / 2
+        z0_W1 = z0 + d_W2 / 2 + d_I2 + d_W1 / 2
+        z0_BE = z0 + d_W2 / 2 + d_I2 + d_W1 / 2 + d_I1 + d_BE / 2
+    else:
+        z0_W2 = z0 + d_W2
+        z0_W1 = z0 + d_W2 + d_I2 + d_W1
+        z0_BE = z0 + d_W2 + d_I2 + d_W1 + d_I1 + d_BE
 
     return [
         Layer("W2", london_lambda=london_lambda, thickness=d_W2, z0=z0_W2),

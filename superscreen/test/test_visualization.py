@@ -70,26 +70,24 @@ def test_plot_polygon_flux(solutions, diff, absolute, logy, units):
     plt.close(fig)
 
 
-@pytest.mark.parametrize("layers", [None, "layer0"])
+@pytest.mark.parametrize("films", [None, "disk", ["disk", "ring"]])
 @pytest.mark.parametrize("units", [None, "mA"])
-@pytest.mark.parametrize("filled", [False, True])
-def test_plot_streams(solution, layers, units, filled):
+def test_plot_streams(solution, films, units):
     with non_gui_backend():
         fig, ax = sc.plot_streams(
             solution,
-            layers=layers,
+            films=films,
             units=units,
-            filled=filled,
         )
         plt.close(fig)
 
 
 cross_section_coord_params = [
     None,
-    np.stack([np.linspace(-1, 1, 101), 1 * np.ones(101)], axis=1),
+    np.array([np.linspace(-1, 1, 101), 1 * np.ones(101)]).T,
     [
-        np.stack([np.linspace(-1, 1, 101), 1 * np.ones(101)], axis=1),
-        np.stack([1 * np.ones(101), np.linspace(-1, 1, 101)], axis=1),
+        np.array([np.linspace(-1, 1, 101), 1 * np.ones(101)]).T,
+        np.array([1 * np.ones(101), np.linspace(-1, 1, 101)]).T,
     ],
 ]
 thetas = np.linspace(0, 2 * np.pi, endpoint=False)
@@ -104,8 +102,8 @@ def test_cross_section(solution, cross_section_coords, interp_method):
     if cross_section_coords is None:
         return
 
-    dataset_coords = solution.device.points
-    dataset_values = solution.fields[list(solution.device.layers)[0]]
+    dataset_coords = solution.device.meshes["disk"].sites
+    dataset_values = solution.film_solutions["disk"].total_field
 
     with pytest.raises(ValueError):
         _ = sc.visualization.cross_section(
@@ -138,10 +136,10 @@ def test_cross_section(solution, cross_section_coords, interp_method):
         assert np.array_equal(coords[0], cross_section_coords)
 
 
-def test_cross_section_bad_shape(solution):
-    dataset_coords = solution.device.points
-    dataset_values = solution.fields[list(solution.device.layers)[0]]
-    cross_section_coords = np.stack([np.ones(101)] * 3, axis=1)
+def test_cross_section_bad_shape(solution: sc.Solution):
+    dataset_coords = solution.device.meshes["disk"].sites
+    dataset_values = solution.film_solutions["disk"].total_field
+    cross_section_coords = np.array([np.ones(101)] * 3).T
 
     with pytest.raises(ValueError):
         _ = sc.visualization.cross_section(
@@ -152,18 +150,22 @@ def test_cross_section_bad_shape(solution):
         )
 
 
-@pytest.mark.parametrize("layers", [None, "layer0"])
+@pytest.mark.parametrize("films", [None, "disk", ["disk", "ring"]])
 @pytest.mark.parametrize("units", [None, "mA/um"])
 @pytest.mark.parametrize("streamplot", [False, True])
 @pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
+@pytest.mark.parametrize(
+    "dataset", ["field", "self_field", "applied_field", "field_from_other_films"]
+)
 # @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
 # @pytest.mark.parametrize("share_color_scale", [False, True])
 # @pytest.mark.parametrize("symmetric_color_scale", [False, True])
 def test_plot_currents_and_fields(
     solution,
-    layers,
+    films,
     units,
     streamplot,
+    dataset,
     cross_section_coords,
     share_color_scale=True,
     symmetric_color_scale=True,
@@ -172,8 +174,8 @@ def test_plot_currents_and_fields(
     with non_gui_backend():
         fig, ax = sc.plot_currents(
             solution,
-            grid_shape=(100, 100),
-            layers=layers,
+            grid_shape=200,
+            films=films,
             units=units,
             cross_section_coords=cross_section_coords,
             streamplot=streamplot,
@@ -185,7 +187,8 @@ def test_plot_currents_and_fields(
 
         fig, ax = sc.plot_fields(
             solution,
-            layers=layers,
+            dataset=dataset,
+            films=films,
             units=units,
             cross_section_coords=cross_section_coords,
             auto_range_cutoff=auto_range_cutoff,
@@ -195,33 +198,33 @@ def test_plot_currents_and_fields(
         plt.close(fig)
 
 
-@pytest.mark.parametrize("vector", [False, True])
 @pytest.mark.parametrize(
     "positions, zs",
     [
         (np.random.rand(200).reshape((-1, 2)), np.random.rand(100)),
         (np.random.rand(200).reshape((-1, 2)), 1),
         (np.random.rand(300).reshape((-1, 3)), None),
+        (None, 1),
     ],
 )
 @pytest.mark.parametrize("units", [None, "mT"])
 @pytest.mark.parametrize("auto_range_cutoff", [None, 1])
 @pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
 def test_plot_field_at_positions(
-    solution,
+    solution: sc.Solution,
     positions,
     zs,
     units,
     cross_section_coords,
     auto_range_cutoff,
-    vector,
 ):
+    if positions is None:
+        positions = list(solution.device.meshes.values())[0]
     with non_gui_backend():
         fig, ax = sc.plot_field_at_positions(
             solution,
             positions,
             zs=zs,
-            vector=vector,
             units=units,
             cross_section_coords=cross_section_coords,
             auto_range_cutoff=auto_range_cutoff,

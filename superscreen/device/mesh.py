@@ -1,175 +1,415 @@
-import logging
-from typing import Optional, Tuple
+import itertools
+from copy import deepcopy
+from typing import Dict, Optional, Sequence, Tuple, Union
 
+import h5py
+import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.tri import Triangulation
-from meshpy import triangle
-from scipy import spatial
-from shapely.geometry import MultiLineString
-from shapely.geometry.polygon import orient
-from shapely.ops import polygonize
+import scipy.sparse as sp
 
-logger = logging.getLogger(__name__)
+from ..distance import q_matrix
+from ..fem import gradient_vertices, laplace_operator
+from . import utils
+from .edge_mesh import EdgeMesh
 
 
-def generate_mesh(
-    coords: np.ndarray,
-    min_points: Optional[int] = None,
-    convex_hull: bool = False,
-    boundary: Optional[np.ndarray] = None,
-    **kwargs,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Generates a Delaunay mesh for a given set of polygon vertex coordinates.
+class Mesh:
+    """A triangular mesh of a simply- or multiply-connected polygon.
 
-    Additional keyword arguments are passed to ``triangle.build()``.
+    .. tip::
+
+        Use :meth:`Mesh.from_triangulation` to create a new mesh from a triangulation.
 
     Args:
-        coords: Shape ``(n, 2)`` array of polygon ``(x, y)`` coordinates.
-        min_points: The minimimum number of vertices in the resulting mesh.
-        convex_hull: If True, then the entire convex hull of the polygon will be
-            meshed. Otherwise, only the polygon interior is meshed.
-
-    Returns:
-        Mesh vertex coordinates and triangle indices.
+        sites: The (x, y) coordinates of the mesh vertices.
+        elements: A list of triplets that correspond to the indices of he vertices that
+            form a triangle. [[0, 1, 2], [0, 1, 3]] corresponds to a triangle
+            connecting vertices 0, 1, and 2 and another triangle connecting vertices
+            0, 1, and 3.
+        boundary_indices: Indices corresponding to the boundary.
+        vertex_areas: The areas corresponding to the sites or vertices.
+        triangle_areas: The areas of the triangular mesh elements.
+        edge_mesh: The edge mesh.
     """
-    # Coords is a shape (n, 2) array of vertex coordinates.
-    coords = np.asarray(coords)
-    # Remove duplicate coordinates, otherwise triangle.build() will segfault.
-    # By default, np.unique() does not preserve order, so we have to remove
-    # duplicates this way:
-    _, ix = np.unique(coords, return_index=True, axis=0)
-    coords = coords[np.sort(ix)]
-    xmin = coords[:, 0].min()
-    dx = np.ptp(coords[:, 0])
-    ymin = coords[:, 1].min()
-    dy = np.ptp(coords[:, 1])
-    r0 = np.array([[xmin, ymin]]) + np.array([[dx, dy]]) / 2
-    # Center the coordinates at (0, 0) to avoid floating point issues.
-    coords = coords - r0
-    # Facets is a shape (m, 2) array of edge indices.
-    # coords[facets] is a shape (m, 2, 2) array of edge coordinates:
-    # [(x0, y0), (x1, y1)]
-    if convex_hull:
-        facets = spatial.ConvexHull(coords).simplices
-        if boundary is not None:
+
+    def __init__(
+        self,
+        sites: Sequence[Tuple[float, float]],
+        elements: Sequence[Tuple[int, int, int]],
+        boundary_indices: Sequence[int],
+        vertex_areas: Optional[Sequence[float]] = None,
+        triangle_areas: Optional[Sequence[float]] = None,
+        edge_mesh: Optional[EdgeMesh] = None,
+    ):
+        self.sites = np.asarray(sites).squeeze()
+        # Setting dtype to int64 is important when running on Windows.
+        # Using default dtype uint64 does not work as Scipy indices in some
+        # instances.
+        self.elements = np.asarray(elements, dtype=np.int64)
+        self.boundary_indices = np.asarray(boundary_indices, dtype=np.int64)
+        if vertex_areas is not None:
+            vertex_areas = np.asarray(vertex_areas)
+        self.vertex_areas = vertex_areas
+        if triangle_areas is not None:
+            triangle_areas = np.asarray(triangle_areas)
+        self.triangle_areas = triangle_areas
+        self.edge_mesh = edge_mesh
+        if (
+            self.edge_mesh is None
+            or self.vertex_areas is None
+            or self.triangle_areas is None
+        ):
+            self.operators = None
+        else:
+            self.operators = MeshOperators.from_mesh(self)
+
+    def stats(self) -> Dict[str, Union[int, float]]:
+        """Returns a dictionary of information about the mesh."""
+        edge_lengths = None
+        if self.edge_mesh is not None:
+            edge_lengths = self.edge_mesh.edge_lengths
+        vertex_areas = self.vertex_areas
+
+        def _min(arr):
+            if arr is not None:
+                return arr.min()
+
+        def _max(arr):
+            if arr is not None:
+                return arr.max()
+
+        # def _mean(arr):
+        #     if arr is not None:
+        #         return arr.mean()
+
+        return dict(
+            num_sites=len(self.sites),
+            num_elements=len(self.elements),
+            min_edge_length=_min(edge_lengths),
+            max_edge_length=_max(edge_lengths),
+            # mean_edge_length=_mean(edge_lengths),
+            min_vertex_area=_min(vertex_areas),
+            max_vertex_area=_max(vertex_areas),
+            # mean_vertex_area=_mean(vertex_areas),
+        )
+
+    def closest_site(self, xy: Tuple[float, float]) -> int:
+        """Returns the index of the mesh site closest to ``(x, y)``.
+
+        Args:
+            xy: A shape ``(2, )`` or ``(2, 1)`` sequence of floats, ``(x, y)``.
+
+        Returns:
+            The index of the mesh site closest to ``(x, y)``.
+        """
+        return np.argmin(np.linalg.norm(self.sites - np.atleast_2d(xy), axis=1))
+
+    @staticmethod
+    def from_triangulation(
+        sites: Sequence[Tuple[float, float]],
+        elements: Sequence[Tuple[int, int, int]],
+        build_operators: bool = True,
+    ) -> "Mesh":
+        """Create a triangular mesh from the coordinates of the triangle vertices
+        and a list of indices corresponding to the vertices that connect to triangles.
+
+        Args:
+            sites: The (x, y) coordinates of the mesh sites.
+            elements: A list of triplets that correspond to the indices of the vertices
+                that form a triangle.   E.g. [[0, 1, 2], [0, 1, 3]] corresponds to a
+                triangle connecting vertices 0, 1, and 2 and another triangle
+                connecting vertices 0, 1, and 3.
+
+        Returns:
+            A new :class:`tdgl.finite_volume.Mesh` instance
+        """
+        sites = np.asarray(sites).squeeze()
+        elements = np.asarray(elements).squeeze()
+        if sites.ndim != 2 or sites.shape[1] != 2:
             raise ValueError(
-                "Cannot have both boundary is not None and convex_hull = True."
+                f"The site coordinates must have shape (n, 2), got {sites.shape!r}"
             )
-    else:
-        indices = np.arange(coords.shape[0], dtype=int)
-        if boundary is not None:
-            boundary = np.asarray(boundary) - r0
-            boundary = list(map(tuple, boundary))
-            indices = [i for i in indices if tuple(coords[i]) in boundary]
-        facets = np.stack([indices, np.roll(indices, -1)], axis=1)
-
-    mesh_info = triangle.MeshInfo()
-    mesh_info.set_points(coords)
-    mesh_info.set_facets(facets)
-    kwargs = kwargs.copy()
-
-    max_vol = dx * dy / 100
-    kwargs["max_volume"] = max_vol
-
-    mesh = triangle.build(mesh_info=mesh_info, **kwargs)
-    points = np.array(mesh.points) + r0
-    triangles = np.array(mesh.elements)
-    if min_points is None:
-        return points, triangles
-
-    num_points = 0
-    i = 1
-    while num_points < min_points:
-        kwargs["max_volume"] = max_vol
-        mesh = triangle.build(
-            mesh_info=mesh_info,
-            **kwargs,
+        if elements.ndim != 2 or elements.shape[1] != 3:
+            raise ValueError(
+                f"The elements must have shape (m, 3), got {elements.shape!r}."
+            )
+        boundary_indices = Mesh.find_boundary_indices(elements)
+        edge_mesh = triangle_areas = vertex_areas = None
+        if build_operators:
+            edge_mesh = EdgeMesh.from_mesh(sites, elements)
+            triangle_areas = utils.triangle_areas(sites, elements)
+            vertex_areas = utils.vertex_areas(sites, elements, tri_areas=triangle_areas)
+        return Mesh(
+            sites=sites,
+            elements=elements,
+            boundary_indices=boundary_indices,
+            edge_mesh=edge_mesh,
+            vertex_areas=vertex_areas,
+            triangle_areas=triangle_areas,
         )
-        points = np.array(mesh.points) + r0
-        triangles = np.array(mesh.elements)
-        num_points = points.shape[0]
-        logger.debug(
-            f"Iteration {i}: Made mesh with {points.shape[0]} points and "
-            f"{triangles.shape[0]} triangles using max_volume={max_vol:.2e}. "
-            f"Target number of points: {min_points}."
+
+    @staticmethod
+    def find_boundary_indices(elements: np.ndarray) -> np.ndarray:
+        """Find the boundary vertices.
+
+        Args:
+            elements: The triangular elements.
+
+        Returns:
+            An array of site indices corresponding to the boundary.
+        """
+        edges, is_boundary = utils.get_edges(elements)
+        # Get the boundary edges and all boundary points
+        boundary_edges = edges[is_boundary]
+        return np.unique(boundary_edges.ravel())
+
+    def smooth(self, iterations: int) -> "Mesh":
+        """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
+        to the arithmetic average of its neighboring points.
+
+        Args:
+            iterations: The number of smoothing iterations to perform.
+
+        Returns:
+            A new Mesh with relaxed vertex positions.
+        """
+        mesh = self
+        elements = mesh.elements
+        edges, _ = utils.get_edges(elements)
+        n = len(mesh.sites)
+        shape = (n, 2)
+        boundary = mesh.boundary_indices
+        for i in range(iterations):
+            sites = mesh.sites
+            num_neighbors = np.bincount(edges.ravel(), minlength=shape[0])
+
+            new_sites = np.zeros(shape)
+            vals = sites[edges[:, 1]].T
+            new_sites += np.array(
+                [np.bincount(edges[:, 0], val, minlength=n) for val in vals]
+            ).T
+            vals = sites[edges[:, 0]].T
+            new_sites += np.array(
+                [np.bincount(edges[:, 1], val, minlength=n) for val in vals]
+            ).T
+            new_sites /= num_neighbors[:, np.newaxis]
+            # reset boundary points
+            new_sites[boundary] = sites[boundary]
+            mesh = Mesh.from_triangulation(
+                new_sites, elements, build_operators=(i == (iterations - 1))
+            )
+        return mesh
+
+    def plot(
+        self,
+        ax: Union[plt.Axes, None] = None,
+        show_sites: bool = False,
+        show_edges: bool = True,
+        site_color: Union[str, Sequence[float], None] = None,
+        edge_color: Union[str, Sequence[float], None] = "k",
+        linewidth: float = 0.75,
+        linestyle: str = "-",
+        marker: str = ".",
+    ) -> plt.Axes:
+        """Plot the mesh.
+
+        Args:
+            ax: A :class:`plt.Axes` instance on which to plot the mesh.
+            show_sites: Whether to show the mesh sites.
+            show_edges: Whether to show the mesh edges.
+            site_color: The color for the sites.
+            edge_color: The color for the edges.
+            linewidth: The line width for all edges.
+            linestyle: The line style for all edges.
+            marker: The marker to use for the mesh sites.
+
+        Returns:
+            The resulting :class:`plt.Axes`
+        """
+        if ax is None:
+            _, ax = plt.subplots()
+        ax.set_aspect("equal")
+        x, y = self.sites.T
+        tri = self.elements
+        if show_edges:
+            ax.triplot(x, y, tri, color=edge_color, ls=linestyle, lw=linewidth)
+        if show_sites:
+            ax.plot(x, y, marker=marker, ls="", color=site_color)
+        return ax
+
+    def to_hdf5(self, h5group: h5py.Group, compress: bool = True) -> None:
+        """Save the mesh to a :class:`h5py.Group`.
+
+        Args:
+            h5group: The :class:`h5py.Group` into which to store the mesh.
+            compress: If ``True``, store only the sites and elements.
+        """
+        h5group["sites"] = self.sites
+        h5group["elements"] = self.elements
+        if not compress:
+            h5group["boundary_indices"] = self.boundary_indices
+            h5group["vertex_areas"] = self.vertex_areas
+            h5group["triangle_areas"] = self.triangle_areas
+            self.edge_mesh.to_hdf5(h5group.create_group("edge_mesh"))
+
+    @staticmethod
+    def from_hdf5(h5group: h5py.Group) -> "Mesh":
+        """Load a mesh from an HDF5 file.
+
+        Args:
+            h5group: The HDF5 group to load the mesh from.
+
+        Returns:
+            The loaded mesh.
+        """
+        if not ("sites" in h5group and "elements" in h5group):
+            raise IOError("Could not load mesh due to missing data.")
+
+        if Mesh.is_restorable(h5group):
+            return Mesh(
+                sites=np.array(h5group["sites"]),
+                elements=np.array(h5group["elements"], dtype=np.int64),
+                boundary_indices=np.array(h5group["boundary_indices"], dtype=np.int64),
+                vertex_areas=np.array(h5group["vertex_areas"]),
+                triangle_areas=np.array(h5group["triangle_areas"]),
+                edge_mesh=EdgeMesh.from_hdf5(h5group["edge_mesh"]),
+            )
+        # Recreate mesh from triangulation data if not all data is available
+        return Mesh.from_triangulation(
+            sites=np.array(h5group["sites"]).squeeze(),
+            elements=np.array(h5group["elements"]),
         )
-        max_vol *= 0.9
-        i += 1
-    return points, triangles
+
+    @staticmethod
+    def is_restorable(h5group: h5py.Group) -> bool:
+        """Returns ``True`` if the :class:`h5py.Group` contains all of the data
+        necessary to create a :class:`Mesh` without re-computing any values.
+
+        Args:
+            h5group: The :class:`h5py.Group` to check.
+
+        Returns:
+            Whether the mesh can be restored from the given group.
+        """
+        return (
+            "sites" in h5group
+            and "elements" in h5group
+            and "boundary_indices" in h5group
+            and "vertex_areas" in h5group
+            and "triangle_areas" in h5group
+            and "edge_mesh" in h5group
+        )
+
+    def copy(self) -> "Mesh":
+        mesh = Mesh(
+            sites=self.sites.copy(),
+            elements=self.elements.copy(),
+            boundary_indices=self.boundary_indices.copy(),
+            vertex_areas=self.vertex_areas.copy(),
+            triangle_areas=self.triangle_areas.copy(),
+            edge_mesh=self.edge_mesh.copy(),
+        )
+        if self.operators is not None:
+            mesh.operators = self.operators.copy()
+        return mesh
 
 
-def get_edges(triangles: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Finds the edges from a list of triangle indices.
+class MeshOperators:
+    def __init__(
+        self,
+        *,
+        weights: np.ndarray,
+        Q: np.ndarray,
+        gradient_x: Union[np.ndarray, sp.spmatrix],
+        gradient_y: Union[np.ndarray, sp.spmatrix],
+        laplacian: Union[np.ndarray, sp.spmatrix],
+    ):
+        self.weights = weights
+        self.Q = Q
+        self.gradient_x = gradient_x
+        self.gradient_y = gradient_y
+        self.laplacian = laplacian
 
-    Args:
-        triangles: The triangle indices, shape ``(n, 3)``.
+    @staticmethod
+    def from_mesh(mesh: Mesh) -> "MeshOperators":
+        sites = mesh.sites
+        elements = mesh.elements
+        weights = mesh.vertex_areas
+        Q = MeshOperators.Q_matrix(sites, weights)
+        gradient_x, gradient_y = gradient_vertices(
+            sites, elements, areas=mesh.triangle_areas
+        )
+        # gradient_edges = gradient_edges(
+        #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
+        # )
+        laplacian = laplace_operator(sites, elements, weights)
+        return MeshOperators(
+            weights=weights,
+            Q=Q,
+            gradient_x=gradient_x,
+            gradient_y=gradient_y,
+            laplacian=laplacian,
+        )
 
-    Returns:
-        A tuple containing an integer array of edges and a boolean array
-        indicating whether each edge on in the boundary.
-    """
-    edges = np.concatenate([triangles[:, e] for e in [(0, 1), (1, 2), (2, 0)]])
-    edges = np.sort(edges, axis=1)
-    edges, counts = np.unique(edges, return_counts=True, axis=0)
-    return edges, counts == 1
+    def copy(self) -> "MeshOperators":
+        return deepcopy(self)
 
+    @staticmethod
+    def C_vector(points: np.ndarray) -> np.ndarray:
+        """Computes the edge vector, C:
 
-def smooth_mesh(
-    points: np.ndarray, triangles: np.ndarray, iterations: int
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
-    to the arithmetic average of its neighboring points.
+        .. math::
+            C_i &= \\frac{1}{4\\pi}\\sum_{p,q=\\pm1}\\sqrt{(\\Delta x - px_i)^{-2}
+                + (\\Delta y - qy_i)^{-2}}\\\\
+            \\Delta x &= \\frac{1}{2}(\\mathrm{max}(x) - \\mathrm{min}(x))\\\\
+            \\Delta y &= \\frac{1}{2}(\\mathrm{max}(y) - \\mathrm{min}(y))
 
-    Args:
-        points: Shape ``(n, 2)`` array of vertex coordinates.
-        triangles: Shape ``(m, 3)`` array of triangle indices.
-        iterations: The number of smoothing iterations to perform.
+        See Eq. 12 in [Brandt-PRB-2005]_, Eq. 16 in [Kirtley-RSI-2016]_,
+        and Eq. 15 in [Kirtley-SST-2016]_.
 
-    Returns:
-        Smoothed mesh vertex coordinates and triangle indices.
-    """
-    edges, _ = get_edges(triangles)
-    n = points.shape[0]
-    shape = (n, 2)
-    boundary = boundary_vertices(points, triangles)
-    for _ in range(iterations):
-        num_neighbors = np.bincount(edges.ravel(), minlength=shape[0])
-        new_points = np.zeros(shape)
-        vals = points[edges[:, 1]].T
-        new_points += np.array(
-            [np.bincount(edges[:, 0], val, minlength=n) for val in vals]
-        ).T
-        vals = points[edges[:, 0]].T
-        new_points += np.array(
-            [np.bincount(edges[:, 1], val, minlength=n) for val in vals]
-        ).T
-        new_points /= num_neighbors[:, np.newaxis]
-        # reset boundary points
-        new_points[boundary] = points[boundary]
-        points = new_points
-    return points, triangles
+        Args:
+            points: Shape (n, 2) array of x, y coordinates of vertices.
 
+        Returns:
+            Shape (n, ) array, Ci
+        """
+        x = points[:, 0]
+        y = points[:, 1]
+        x = x - x.mean()
+        y = y - y.mean()
+        a = np.ptp(x) / 2
+        b = np.ptp(y) / 2
+        with np.errstate(divide="ignore"):
+            C = sum(
+                np.sqrt((a - p * x) ** (-2) + (b - q * y) ** (-2))
+                for p, q in itertools.product((-1, 1), repeat=2)
+            )
+        C[np.isinf(C)] = 1e30
+        C /= 4 * np.pi
+        return C
 
-def boundary_vertices(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
-    """Returns an array of boundary vertex indices, ordered counterclockwise.
+    @staticmethod
+    def Q_matrix(points: np.ndarray, weights: np.ndarray) -> np.ndarray:
+        """Computes the kernel matrix, Q:
 
-    Args:
-        points: Shape ``(n, 2)`` array of vertex coordinates.
-        triangles: Shape ``(m, 3)`` array of triangle indices.
+        .. math::
 
-    Returns:
-        An array of boundary vertex indices, ordered counterclockwise.
-    """
-    tri = Triangulation(points[:, 0], points[:, 1], triangles)
-    boundary_edges = set()
-    for i, neighbors in enumerate(tri.neighbors):
-        for k in range(3):
-            if neighbors[k] == -1:
-                boundary_edges.add((triangles[i, k], triangles[i, (k + 1) % 3]))
-    edges = MultiLineString([points[edge, :] for edge in boundary_edges])
-    polygons = list(polygonize(edges))
-    assert len(polygons) == 1, polygons
-    polygon = orient(polygons[0])
-    points_list = [tuple(xy) for xy in points]
-    indices = np.array([points_list.index(xy) for xy in polygon.exterior.coords])
-    return indices[:-1]
+            Q_{ij} = (\\delta_{ij}-1)q_{ij}
+            + \\delta_{ij}\\frac{1}{w_{ij}}\\left(C_i
+            + \\sum_{l\\neq i}q_{il}w_{il}\\right)
+
+        See Eq. 10 in [Brandt-PRB-2005]_, Eq. 11 in [Kirtley-RSI-2016]_,
+        and Eq. 11 in [Kirtley-SST-2016]_.
+
+        Args:
+            points: Shape ``(n, 2)`` array of mesh sites.
+            weights: Shape ``(n, )`` weight vector.
+
+        Returns:
+            Shape (n, n) array, Qij
+        """
+        q = q_matrix(points)
+        C = MeshOperators.C_vector(points)
+        diag = -(C + np.einsum("ij, j -> i", q, weights)) / weights
+        np.fill_diagonal(q, diag)
+        return -q

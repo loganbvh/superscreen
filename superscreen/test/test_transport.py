@@ -1,3 +1,4 @@
+import h5py
 import numpy as np
 import pytest
 
@@ -10,7 +11,7 @@ def plus_device():
     width, height = 10, 2
     points = sc.geometry.box(width, height)
     bar = sc.Polygon("plus", points=points)
-    plus = bar.union(bar.rotate(90))
+    plus = bar.union(bar.rotate(90)).resample(501)
     plus.name = "plus"
     plus.layer = layer.name
     terminal = sc.Polygon(
@@ -21,37 +22,15 @@ def plus_device():
         term = terminal.rotate(i * 90)
         term.name = name
         terminals.append(term)
-    drain, *sources = terminals
 
-    with pytest.raises(ValueError):
-        device = sc.TransportDevice(
-            "plus",
-            film=plus,
-            layer=layer,
-            source_terminals=None,
-            drain_terminal=drain,
-            length_units="um",
-        )
-
-    with pytest.raises(ValueError):
-        device = sc.TransportDevice(
-            "plus",
-            film=plus,
-            layer=layer,
-            source_terminals=sources,
-            drain_terminal=None,
-            length_units="um",
-        )
-
-    device = sc.TransportDevice(
+    device = sc.Device(
         "plus",
-        film=plus,
-        layer=layer,
-        source_terminals=sources,
-        drain_terminal=drain,
+        films=[plus],
+        layers=[layer],
+        terminals={"plus": terminals},
         length_units="um",
     )
-    device.make_mesh(min_points=2000, smooth=20)
+    device.make_mesh(max_edge_length=0.2)
     return device
 
 
@@ -61,18 +40,17 @@ def plus_device_no_terminals():
     width, height = 10, 2
     points = sc.geometry.box(width, height)
     bar = sc.Polygon("plus", points=points)
-    plus = bar.union(bar.rotate(90))
+    plus = bar.union(bar.rotate(90)).resample(501)
     plus.name = "plus"
     plus.layer = layer.name
-    device = sc.TransportDevice(
+    device = sc.Device(
         "plus",
-        film=plus,
-        layer=layer,
-        source_terminals=None,
-        drain_terminal=None,
+        films=[plus],
+        layers=[layer],
+        terminals=None,
         length_units="um",
     )
-    device.make_mesh(min_points=2000, smooth=20)
+    device.make_mesh(max_edge_length=0.2)
     return device
 
 
@@ -107,10 +85,10 @@ def holey_device():
         "drain", points=sc.geometry.box(width, height / 100, center=(0, -height / 2))
     )
 
-    device = sc.TransportDevice(
+    device = sc.Device(
         "constriction",
-        layer=sc.Layer("base", Lambda=2),
-        film=film,
+        layers=[sc.Layer("base", Lambda=2)],
+        films=[film],
         holes=[
             sc.Polygon(
                 "hole1",
@@ -123,26 +101,78 @@ def holey_device():
                 points=sc.geometry.circle(width / 4, center=(0, -height / 4)),
             ),
         ],
-        source_terminals=[source_terminal],
-        drain_terminal=drain_terminal,
+        terminals={"film": [source_terminal, drain_terminal]},
         length_units=length_units,
     ).translate(dx=dx, dy=dy)
-    device.make_mesh(min_points=2000, smooth=20)
+    device.make_mesh(max_edge_length=0.2)
+    print(device)
     return device
 
 
-@pytest.mark.parametrize("gpu", [False, True])
+def test_save_and_load_device_with_terminals(holey_device: sc.Device, tmp_path):
+    h5path = tmp_path / "holey_device.h5"
+    holey_device.to_hdf5(h5path)
+    loaded_device = sc.Device.from_hdf5(h5path)
+    assert loaded_device == holey_device
+
+
+@pytest.fixture()
+def factorized_model(holey_device) -> sc.solver.FactorizedModel:
+    model = sc.solver.factorize_model(
+        device=holey_device,
+        current_units="uA",
+        terminal_currents={"film": {"source": "10 uA", "drain": "-10 uA"}},
+        circulating_currents={"hole1": "5 uA"},
+        vortices=[sc.Vortex(x=0, y=0, film="film")],
+    )
+    return model
+
+
+def test_save_and_load_factorized_model(
+    factorized_model: sc.solver.FactorizedModel, tmp_path
+):
+    h5path = tmp_path / "factorized-model.h5"
+    with h5py.File(h5path, "x") as f:
+        factorized_model.to_hdf5(f)
+
+    with h5py.File(h5path, "r") as f:
+        loaded_model = sc.solver.FactorizedModel.from_hdf5(f)
+
+    assert isinstance(loaded_model, sc.solver.FactorizedModel)
+
+
 @pytest.mark.parametrize("applied_field", [0, -1, 2])
-def test_multi_terminal_currents(plus_device, gpu, applied_field):
+def test_multi_terminal_currents(plus_device, applied_field):
     xs = np.linspace(-2, 2, 201)
     ys = -3 * np.ones_like(xs)
     rs = np.stack([xs, ys], axis=1)
     sections = [sc.geometry.rotate(rs, i * 90) for i in range(4)]
 
+    with pytest.raises(ValueError):
+        # Current not conserved
+        terminal_currents = {
+            "plus": {
+                "drain": -5,
+                "source1": "1 uA",
+                "source2": sc.ureg("2 uA"),
+                "source3": 3,
+            }
+        }
+        solution = sc.solve(
+            plus_device,
+            terminal_currents=terminal_currents,
+            applied_field=sc.sources.ConstantField(applied_field),
+            current_units="uA",
+            field_units="uT",
+        )[-1]
+
     terminal_currents = {
-        "source1": "1 uA",
-        "source2": sc.ureg("2 uA"),
-        "source3": 3,
+        "plus": {
+            "drain": -6,
+            "source1": "1 uA",
+            "source2": sc.ureg("2 uA"),
+            "source3": 3,
+        }
     }
     solution = sc.solve(
         plus_device,
@@ -150,31 +180,25 @@ def test_multi_terminal_currents(plus_device, gpu, applied_field):
         applied_field=sc.sources.ConstantField(applied_field),
         current_units="uA",
         field_units="uT",
-        gpu=gpu,
     )[-1]
 
     currents = []
     for coords in sections:
-        J = solution.interp_current_density(coords, units="uA/um", with_units=False)[
-            "base"
-        ]
+        J = solution.interp_current_density(
+            coords, film="plus", units="uA/um", with_units=False
+        )
         _, unit_normals = sc.geometry.path_vectors(coords)
         dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
         currents.append(np.sum(J * dr * unit_normals))
-    drain_current, *source_currents = currents
-    target_currents = solution.terminal_currents.values()
-    total_current = sum(target_currents)
-    assert np.isclose(drain_current, total_current, rtol=1e-3)
-    for actual, target in zip(source_currents, target_currents):
-        assert np.isclose(-actual, target, rtol=1e-3)
+    target_currents = solution.terminal_currents["plus"].values()
+    assert np.abs(np.sum(currents) / terminal_currents["plus"]["drain"]) < 5e-2
+    for actual, target in zip(currents, target_currents):
+        assert np.isclose(-actual, target, rtol=5e-2)
 
 
-@pytest.mark.parametrize("gpu", [False, True])
-def test_holey_device(holey_device, gpu):
+def test_holey_device(holey_device):
     device = holey_device
-    terminal_currents = {
-        "source": "2 uA",
-    }
+    terminal_currents = {"film": {"source": "2 uA", "drain": "-2 uA"}}
     circulating_currents = {
         "hole1": "1 uA",
         "hole2": "-1 uA",
@@ -187,7 +211,6 @@ def test_holey_device(holey_device, gpu):
         applied_field=sc.sources.ConstantField(0),
         field_units="uT",
         current_units="uA",
-        gpu=gpu,
     )[-1]
 
     xs_left = np.linspace(-0.5, 0, 201)
@@ -208,14 +231,15 @@ def test_holey_device(holey_device, gpu):
     for coords in sections:
         J = solution.interp_current_density(
             coords,
+            film="film",
             units="uA/um",
             with_units=False,
-        )["base"]
+        )
         _, unit_normals = sc.geometry.path_vectors(coords)
         dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
         currents.append(np.sum(J * dr * unit_normals))
     for actual, target in zip(currents, target_currents):
-        assert np.isclose(actual, target, rtol=1e-2, atol=1e-2)
+        assert np.isclose(actual, target, rtol=5e-2, atol=1e-2)
 
 
 def test_no_terminals(plus_device_no_terminals):

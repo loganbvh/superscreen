@@ -1,42 +1,11 @@
 import argparse
-import logging
-
-import matplotlib.pyplot as plt
 
 import superscreen as sc
 
 from . import huber, hypres, ibm
 
-
-def get_mutual(squid, label, iterations, fc_lambda=None):
-    if fc_lambda is not None:
-        squid.layers["BE"].london_lambda = fc_lambda
-    print(squid)
-    fluxoid_polys = sc.make_fluxoid_polygons(squid)
-    fig, ax = squid.plot()
-    for name, poly in fluxoid_polys.items():
-        ax.plot(*sc.geometry.close_curve(poly).T, label=name + "_fluxoid")
-    ax.legend(bbox_to_anchor=(1, 1))
-    ax.set_title(label)
-    return squid.mutual_inductance_matrix(iterations=iterations, units="Phi_0 / A")
-
-
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--min-points",
-        type=int,
-        default=5_000,
-        help="Minimum number of vertices in the mesh.",
-    )
-    parser.add_argument(
-        "--solve-dtype",
-        type=str,
-        help="Device solve_dtype.",
-        default="float64",
-    )
     parser.add_argument(
         "--iterations",
         type=int,
@@ -46,42 +15,55 @@ if __name__ == "__main__":
     parser.add_argument(
         "--smooth",
         type=int,
-        default=40,
-        help="Number of Laplacian smoothing steps to perform.",
+        default=100,
+        help="Number of Laplacian mesh smoothing steps to perform.",
     )
     parser.add_argument(
-        "--fc-lambda",
-        type=float,
-        default=None,
-        help="London penetration depth for the field coil layer.",
+        "--no-terminals", action="store_true", help="Set with_terminals=False"
     )
+
     args = parser.parse_args()
 
     squid_funcs = {
+        "hypres-small": hypres.small.make_squid,
         "ibm-small": ibm.small.make_squid,
         "ibm-medium": ibm.medium.make_squid,
         "ibm-large": ibm.large.make_squid,
         "ibm-xlarge": ibm.xlarge.make_squid,
         "huber": huber.make_squid,
-        "hypres-small": hypres.small.make_squid,
+    }
+
+    max_edge_lengths = {
+        "hypres-small": 0.2,
+        "ibm-small": 0.1,
+        "ibm-medium": 0.1,
+        "ibm-large": 0.15,
+        "ibm-xlarge": 0.4,
+        "huber": 0.4,
     }
 
     mutuals = {}
-    for make_squid in squid_funcs.values():
-        squid = make_squid()
+    for name, make_squid in squid_funcs.items():
+        squid: sc.Device = make_squid(with_terminals=(not args.no_terminals))
         squid.make_mesh(
-            min_points=args.min_points,
+            max_edge_length=max_edge_lengths[name],
             smooth=args.smooth,
         )
-        squid.solve_dtype = args.solve_dtype
-        M = get_mutual(
-            squid,
-            make_squid.__module__,
-            args.iterations,
-            fc_lambda=args.fc_lambda,
-        )
-        mutuals[make_squid.__module__] = M
-        print(M)
+        if args.no_terminals:
+            M = squid.mutual_inductance_matrix(
+                iterations=args.iterations, units="Phi_0 / A"
+            )
+        else:
+            I_fc = "1 mA"
+            solution = sc.solve(
+                squid,
+                terminal_currents={"fc": {"source": I_fc, "drain": f"-{I_fc}"}},
+                iterations=args.iterations,
+            )[-1]
+            M = sum(solution.hole_fluxoid("pl_center")) / sc.ureg(I_fc)
+        M.ito("Phi_0 / A")
+        mutuals[make_squid.__module__] = M.to("Phi_0 / A")
+        print(f"{name!r}: {M:.3f~P}")
 
     for label, mutual in mutuals.items():
         print()
@@ -89,6 +71,4 @@ if __name__ == "__main__":
         print("-" * len(label))
         print(mutual)
         print(mutual.to("pH"))
-        print("-" * len(repr(mutual)))
-
-    plt.show()
+        print("-" * len(str(mutual)))

@@ -1,29 +1,31 @@
-import json
 import logging
 import os
 from collections import defaultdict
-from contextlib import contextmanager
-from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple, Union
+from contextlib import contextmanager, nullcontext
+from typing import Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 import dill
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.sparse as sp
+from IPython.display import HTML
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
+from shapely import geometry as geo
 
 from .. import fem
-from ..parameter import Parameter
+from ..geometry import ensure_unique
 from ..units import ureg
-from . import mesh
-from .components import Layer, Polygon
+from . import utils
+from .layer import Layer
+from .mesh import Mesh
+from .polygon import Polygon
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("device")
 
 
 class Device:
-    """An object representing a device composed of multiple layers of
+    """An object representing a device composed of one or more layers of
     thin film superconductor.
 
     Args:
@@ -31,27 +33,12 @@ class Device:
         layers: ``Layers`` making up the device.
         films: ``Polygons`` representing regions of superconductor.
         holes: ``Holes`` representing holes in superconducting films.
+        terminals: A dict of ``{film_name: terminals}`` representing transport
+            terminals in the device.
         abstract_regions: ``Polygons`` representing abstract regions in a device.
-            Abstract regions will be meshed, and one can calculate the flux through them.
         length_units: Distance units for the coordinate system.
         solve_dtype: The float data type to use when solving the device.
     """
-
-    ARRAY_NAMES = (
-        "points",
-        "triangles",
-        "weights",
-        "Del2",
-        "Q",
-        "gradx",
-        "grady",
-    )
-
-    POLYGONS = (
-        "films",
-        "holes",
-        "abstract_regions",
-    )
 
     ureg = ureg
 
@@ -59,41 +46,51 @@ class Device:
         self,
         name: str,
         *,
-        layers: Union[List[Layer], Dict[str, Layer]],
-        films: Union[List[Polygon], Dict[str, Polygon]],
-        holes: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
-        abstract_regions: Optional[Union[List[Polygon], Dict[str, Polygon]]] = None,
+        layers: Union[Sequence[Layer], Dict[str, Layer]],
+        films: Union[Sequence[Polygon], Dict[str, Polygon]],
+        holes: Optional[Union[Sequence[Polygon], Dict[str, Polygon]]] = None,
+        terminals: Optional[Dict[str, List[Polygon]]] = None,
+        abstract_regions: Optional[Union[Sequence[Polygon], Dict[str, Polygon]]] = None,
         length_units: str = "um",
-        solve_dtype: Union[str, np.dtype] = "float64",
+        solve_dtype: Union[str, np.dtype] = "float32",
     ):
         self.name = name
 
-        self._films_list = []
-        self._holes_list = []
-        self._abstract_regions_list = []
-        self.layers_list = []
-
         if isinstance(layers, dict):
-            self.layers = layers
-        else:
-            self.layers = {layer.name: layer for layer in layers}
+            layers = list(layers.values())
+        self.layers = {layer.name: layer for layer in layers}
+
         if isinstance(films, dict):
-            self.films = films
-        else:
-            self.films = {film.name: film for film in films}
+            films = list(films.values())
+        self.films = {film.name: film for film in films}
+
         if holes is None:
             holes = []
         if isinstance(holes, dict):
-            self.holes = holes
-        else:
-            self.holes = {hole.name: hole for hole in holes}
+            holes = list(holes.values())
+        self.holes = {hole.name: hole for hole in holes}
+
+        if terminals is None:
+            terminals = {}
+        self.terminals = terminals
+        if not set(self.terminals).issubset(self.films):
+            raise ValueError(
+                f"terminals.keys() must be a subset of films.keys() ({list(self.films)!r})."
+            )
+        for film, terminals in self.terminals.items():
+            for terminal in terminals:
+                terminal.layer = self.films[film].layer
+
         if abstract_regions is None:
             abstract_regions = []
         if isinstance(abstract_regions, dict):
-            self.abstract_regions = abstract_regions
-        else:
-            self.abstract_regions = {region.name: region for region in abstract_regions}
-        for polygons, label in [(self._films_list, "film"), (self._holes_list, "hole")]:
+            abstract_regions = list(abstract_regions.values())
+        self.abstract_regions = {region.name: region for region in abstract_regions}
+
+        for polygons, label in [
+            (self.films.values(), "film"),
+            (self.holes.values(), "hole"),
+        ]:
             for polygon in polygons:
                 if not polygon.is_valid:
                     raise ValueError(f"The following {label} is not valid: {polygon}.")
@@ -103,25 +100,11 @@ class Device:
                         f"exist in the device: {polygon}."
                     )
 
-        if len(self.polygons) < (
-            len(self._holes_list)
-            + len(self._films_list)
-            + len(self._abstract_regions_list)
-        ):
-            raise ValueError("All Polygons in a Device must have a unique name.")
         # Make units a "read-only" attribute.
         # It should never be changed after instantiation.
         self._length_units = length_units
         self.solve_dtype = solve_dtype
-
-        self.points = None
-        self.triangles = None
-
-        self.weights = None
-        self.Del2 = None
-        self.Q = None
-        self.gradx = None
-        self.grady = None
+        self.meshes: Union[Dict[str, Mesh], None] = None
 
     @property
     def length_units(self) -> str:
@@ -141,104 +124,50 @@ class Device:
             raise ValueError(f"Invalid float dtype: {dtype}") from e
         self._solve_dtype = np.dtype(dtype)
 
-    @property
-    def layers(self) -> Dict[str, Layer]:
-        """Dict of ``{layer_name: layer}``"""
-        return {layer.name: layer for layer in self.layers_list}
+    def get_polygons(self, include_terminals: bool = True) -> List[Polygon]:
+        """Returns list of all Polygons in the device.
 
-    @staticmethod
-    def _validate_polygons(polygons: List[Polygon], label: str) -> List[Polygon]:
-        for polygon in polygons:
-            if not polygon.is_valid:
-                raise ValueError(f"The following {label} is not valid: {polygon}.")
+        Args:
+            include_terminals: Include transport terminals in the list.
+
+        Returns:
+            A list of all Polygons in the device.
+        """
+        polygons = []
+        for attr_name in ("films", "holes", "abstract_regions"):
+            polygons.extend(list(getattr(self, attr_name).values()))
+        if include_terminals:
+            for terminals in self.terminals.values():
+                polygons.extend(terminals)
         return polygons
 
-    @layers.setter
-    def layers(self, layers_dict: Dict[str, Layer]) -> None:
-        """Dict of ``{layer_name: layer}``"""
-        if not (
-            isinstance(layers_dict, dict)
-            and all(isinstance(obj, Layer) for obj in layers_dict.values())
-        ):
-            raise TypeError("Layers must be a dict of {layer_name: Layer}.")
-        self.layers_list = list(layers_dict.values())
-
     @property
-    def films(self) -> Dict[str, Polygon]:
-        """Dict of ``{film_name: film_polygon}``"""
-        return {film.name: film for film in self._films_list}
-
-    @films.setter
-    def films(self, films_dict: Dict[str, Polygon]) -> None:
-        """Dict of ``{film_name: film_polygon}``"""
-        if not (
-            isinstance(films_dict, dict)
-            and all(isinstance(obj, Polygon) for obj in films_dict.values())
-        ):
-            raise TypeError("Films must be a dict of {film_name: Polygon}.")
-        for name, polygon in films_dict.items():
-            polygon.name = name
-        self._films_list = list(self._validate_polygons(films_dict.values(), "film"))
-
-    @property
-    def holes(self) -> Dict[str, Polygon]:
-        """Dict of ``{hole_name: hole_polygon}``"""
-        return {hole.name: hole for hole in self._holes_list}
-
-    @holes.setter
-    def holes(self, holes_dict: Dict[str, Polygon]) -> None:
-        """Dict of ``{hole_name: hole_polygon}``"""
-        if not (
-            isinstance(holes_dict, dict)
-            and all(isinstance(obj, Polygon) for obj in holes_dict.values())
-        ):
-            raise TypeError("Holes must be a dict of {hole_name: Polygon}.")
-        for name, polygon in holes_dict.items():
-            polygon.name = name
-        self._holes_list = list(self._validate_polygons(holes_dict.values(), "hole"))
-
-    @property
-    def abstract_regions(self) -> Dict[str, Polygon]:
-        """Dict of ``{region_name: region_polygon}``"""
-        return {region.name: region for region in self._abstract_regions_list}
-
-    @abstract_regions.setter
-    def abstract_regions(self, regions_dict: Dict[str, Polygon]) -> None:
-        """Dict of ``{region_name: region_polygon}``"""
-        if not (
-            isinstance(regions_dict, dict)
-            and all(isinstance(obj, Polygon) for obj in regions_dict.values())
-        ):
-            raise TypeError(
-                "Abstract regions must be a dict of {region_name: Polygon}."
-            )
-        for name, polygon in regions_dict.items():
-            polygon.name = name
-        self._abstract_regions_list = list(
-            self._validate_polygons(regions_dict.values(), "abstract region")
+    def poly_points(self) -> np.ndarray:
+        """Shape (n, 2) array of (x, y) coordinates of all Polygons in the Device."""
+        points = np.concatenate(
+            [poly.points for poly in self.get_polygons(include_terminals=False)]
         )
-
-    @property
-    def polygons(self) -> Dict[str, Polygon]:
-        """A dict of ``{name: polygon}`` for all Polygons in the device."""
-        polygons = {}
-        for attr_name in self.POLYGONS:
-            polygons.update(getattr(self, attr_name))
-        return polygons
+        # Remove duplicate points to avoid meshing issues.
+        # If you don't do this and there are duplicate points,
+        # meshpy.triangle will segfault.
+        return ensure_unique(points)
 
     def polygons_by_layer(
-        self, polygon_type: Optional[str] = None
+        self,
+        polygon_type: Optional[
+            Literal["film", "hole", "abstract", "terminal", "all"]
+        ] = None,
     ) -> Dict[str, List[Polygon]]:
         """Returns a dict of ``{layer_name: list of polygons in layer}``.
 
         Args:
-            polygon_type: One of 'film', 'hole', or 'all', specifying which types of
-                polygons to include.
+            polygon_type: One of 'film', 'hole', 'abstract', 'terminal', or 'all', specifying
+                which types of polygons to include.
 
         Returns:
            A dict of ``{layer_name: list of polygons in layer of the given type}``.
         """
-        valid_types = ("film", "hole", "all")
+        valid_types = ("film", "hole", "abstract", "terminal", "all")
         if polygon_type is None:
             polygon_type = "all"
         polygon_type = polygon_type.lower()
@@ -250,153 +179,52 @@ class Device:
             all_polygons = self.films.values()
         elif polygon_type == "hole":
             all_polygons = self.holes.values()
+        elif polygon_type == "abstract":
+            all_polygons = self.abstract_regions.values()
+        elif polygon_type == "terminal":
+            all_polygons = []
+            for terminals in self.terminals.values():
+                all_polygons.extend(terminals)
         else:
-            # Films + holes + abstract regions
-            all_polygons = self.polygons.values()
+            # Films + holes + terminals + abstract regions
+            all_polygons = self.get_polygons()
         polygons = {}
         for layer in self.layers:
             polygons[layer] = [p for p in all_polygons if p.layer == layer]
         return polygons
 
-    def contains_points_by_layer(
-        self,
-        points: np.ndarray,
-        polygon_type: Optional[str] = None,
-        index: bool = False,
-        radius: float = 0,
-    ) -> Dict[str, np.ndarray]:
-        """For each layer, determines whether ``points`` lie within a polygon
-        in that layer.
-
-        Args:
-            points: Shape ``(n, 2)`` array of x, y coordinates.
-            polygon_type: One of 'film', 'hole', or 'all', specifying which types of
-                polygons to include.
-            index: If True, then return the indices of the points in ``points``
-                that lie within the polygon. Otherwise, returns a shape ``(n, )``
-                boolean array.
-            radius: An additional margin on ``polygon.path``.
-                See :meth:`matplotlib.path.Path.contains_points`.
+    def holes_by_film(self) -> Dict[str, List[Polygon]]:
+        """Generates a mapping of films to holes contained in the film.
 
         Returns:
-            A dict of ``{layer_name: contains_points}``. If index is True, then
-            ``contains_points`` is an array of indices of the points in ``points``
-            that lie within any polygon in the layer. Otherwise, ``contains_points``
-            is a shape ``(n, )`` boolean array indicating whether each point lies
-            within a polygon in the layer.
+           A dict of ``{film_name: list of holes in the film}``.
         """
-        polygons_by_layer = self.polygons_by_layer(polygon_type)
-        in_polygons = {}
-        for layer, polygons in polygons_by_layer.items():
-            contains_points = np.logical_or.reduce(
-                [p.contains_points(points, radius=radius) for p in polygons]
-            )
-            if index:
-                contains_points = np.where(contains_points)[0]
-            in_polygons[layer] = contains_points
-        return in_polygons
+        holes_by_layer = self.polygons_by_layer("hole")
+        holes_by_film = {}
+        for film in self.films.values():
+            holes_by_film[film.name] = []
+            for hole in holes_by_layer[film.layer]:
+                if film.contains_points(hole.points).all():
+                    holes_by_film[film.name].append(hole)
+        return holes_by_film
 
-    @property
-    def poly_points(self) -> np.ndarray:
-        """Shape (n, 2) array of (x, y) coordinates of all Polygons in the Device."""
-        points = np.concatenate(
-            [poly.points for poly in self.polygons.values() if poly.mesh]
-        )
-        # Remove duplicate points to avoid meshing issues.
-        # If you don't do this and there are duplicate points,
-        # meshpy.triangle will segfault.
-        _, ix = np.unique(points, return_index=True, axis=0)
-        points = points[np.sort(ix)]
-        return points
-
-    @property
-    def vertex_distances(self) -> np.ndarray:
-        """An array of the mesh vertex-to-vertex distances."""
-        if self.points is None:
-            return None
-        inv_distances = fem.weights_inv_euclidean(
-            self.points, self.triangles, sparse=True
-        )
-        distances = (1 / inv_distances[inv_distances.nonzero()].toarray()).squeeze()
-        return distances
-
-    @property
-    def triangle_areas(self) -> np.ndarray:
-        """An array of the mesh triangle areas."""
-        if self.points is None:
-            return None
-        return fem.areas(self.points, self.triangles)
-
-    def get_arrays(
-        self,
-        copy_arrays: bool = False,
-        dense: bool = True,
-    ) -> Optional[
-        Dict[str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]]
-    ]:
-        """Returns a dict of the large arrays that belong to the device.
-
-        Args:
-            copy_arrays: Whether to copy all of the arrays or just return references
-                to the existing arrays.
-            dense: Whether to convert any sparse matrices to dense numpy arrays.
-
-        Returns:
-            A dict of arrays, with keys specified by ``Device.ARRAY_NAMES``,
-            or None if the arrays don't exist.
-        """
-        arrays = {name: getattr(self, name, None) for name in self.ARRAY_NAMES}
-        if all(val is None for val in arrays.values()):
-            return None
-        if copy_arrays:
-            arrays = deepcopy(arrays)
-        for name, array in arrays.items():
-            if dense and sp.issparse(array):
-                arrays[name] = array.toarray()
-        return arrays
-
-    def set_arrays(
-        self,
-        arrays: Dict[
-            str, Union[Union[np.ndarray, sp.csr_matrix], Dict[str, np.ndarray]]
-        ],
-    ) -> None:
-        """Sets the Device's large arrays from a dict like that returned
-        by Device.get_arrays().
-
-        Args:
-            arrays: The dict containing the arrays to use.
-        """
-        # Ensure that all names and types are valid before setting any attributes.
-        valid_types = {name: (np.ndarray,) for name in self.ARRAY_NAMES}
-        for name in ("Del2", "gradx", "grady"):
-            valid_types[name] = valid_types[name] + (sp.spmatrix,)
-        for name, array in arrays.items():
-            if name not in self.ARRAY_NAMES:
-                raise ValueError(f"Unexpected array name: {name}.")
-            if array is not None and not isinstance(array, valid_types[name]):
-                raise TypeError(
-                    f"Expected type in {valid_types[name]} for array '{name}', "
-                    f"but got {type(array)}."
-                )
-        # Finally actually set the attributes
-        for name, array in arrays.items():
-            setattr(self, name, array)
-
-    def copy(self, with_arrays: bool = True, copy_arrays: bool = False) -> "Device":
+    def copy(self, with_mesh: bool = True, copy_mesh: bool = False) -> "Device":
         """Copy this Device to create a new one.
 
         Args:
-            with_arrays: Whether to set the large arrays on the new Device.
-            copy_arrays: Whether to create copies of the large arrays, or just
-                return references to the existing arrays.
+            with_mesh: Whether to shallow copy the ``meshes`` dictionary.
+            copy_mesh: Whether to deepcopy the arrays defining the mesh.
 
         Returns:
             A new Device instance, copied from self
         """
-        layers = [layer.copy() for layer in self.layers_list]
+        layers = [layer.copy() for layer in self.layers.values()]
         films = [film.copy() for film in self.films.values()]
         holes = [hole.copy() for hole in self.holes.values()]
+        terminals = {
+            film: [term.copy() for term in film_terms]
+            for film, film_terms in self.terminals.items()
+        }
         abstract_regions = [region.copy() for region in self.abstract_regions.values()]
 
         device = Device(
@@ -404,25 +232,27 @@ class Device:
             layers=layers,
             films=films,
             holes=holes,
+            terminals=terminals,
             abstract_regions=abstract_regions,
             length_units=self.length_units,
         )
-        if with_arrays:
-            arrays = self.get_arrays(copy_arrays=copy_arrays)
-            if arrays is not None:
-                device.set_arrays(arrays)
+        if with_mesh and self.meshes is not None:
+            meshes = self.meshes
+            if copy_mesh:
+                meshes = {name: mesh.copy() for name, mesh in meshes.items()}
+            device.meshes = meshes
         return device
 
     def __copy__(self) -> "Device":
         # Shallow copy (create new references to existing arrays).
-        return self.copy(with_arrays=True, copy_arrays=False)
+        return self.copy(with_mesh=True, copy_mesh=False)
 
     def __deepcopy__(self, memo) -> "Device":
         # Deep copy (copy all arrays and return references to copies)
-        return self.copy(with_arrays=True, copy_arrays=True)
+        return self.copy(with_mesh=True, copy_mesh=True)
 
     def _warn_if_mesh_exist(self, method: str) -> None:
-        if self.points is None and self.triangles is None:
+        if not self.meshes:
             return
         message = (
             f"Calling device.{method} on a device whose mesh already exists returns "
@@ -454,8 +284,8 @@ class Device:
         ):
             raise TypeError("Origin must be a tuple of floats (x, y).")
         self._warn_if_mesh_exist("scale()")
-        device = self.copy(with_arrays=False)
-        for polygon in device.polygons.values():
+        device = self.copy(with_mesh=False)
+        for polygon in device.get_polygons():
             polygon.scale(xfact=xfact, yfact=yfact, origin=origin, inplace=True)
         return device
 
@@ -477,8 +307,8 @@ class Device:
         ):
             raise TypeError("Origin must be a tuple of floats (x, y).")
         self._warn_if_mesh_exist("rotate()")
-        device = self.copy(with_arrays=False)
-        for polygon in device.polygons.values():
+        device = self.copy(with_mesh=False)
+        for polygon in device.get_polygons():
             polygon.rotate(degrees, origin=origin, inplace=True)
         return device
 
@@ -493,7 +323,8 @@ class Device:
         Returns:
             The mirrored :class:`superscreen.Device`.
         """
-        device = self.copy(with_arrays=True, copy_arrays=True)
+        self._warn_if_mesh_exist("mirror_layers()")
+        device = self.copy(with_mesh=False)
         for layer in device.layers.values():
             layer.z0 = about_z - layer.z0
         return device
@@ -505,7 +336,7 @@ class Device:
         dz: float = 0,
         inplace: bool = False,
     ) -> "Device":
-        """Translates the device polygons, layers, and mesh in space by a given amount.
+        """Translates the device polygons, layers, and meshes in space by a given amount.
 
         Args:
             dx: Distance by which to translate along the x-axis.
@@ -520,12 +351,12 @@ class Device:
         if inplace:
             device = self
         else:
-            self._warn_if_mesh_exist("translate(..., inplace=False)")
-            device = self.copy(with_arrays=True, copy_arrays=True)
-        for polygon in device.polygons.values():
+            device = self.copy(with_mesh=True, copy_mesh=True)
+        for polygon in device.get_polygons():
             polygon.translate(dx, dy, inplace=True)
-        if device.points is not None:
-            device.points += np.array([[dx, dy]])
+        if device.meshes:
+            for mesh in device.meshes.values():
+                mesh.sites += np.array([[dx, dy]])
         if dz:
             for layer in device.layers.values():
                 layer.z0 += dz
@@ -549,96 +380,156 @@ class Device:
 
     def make_mesh(
         self,
-        bounding_polygon: Optional[str] = None,
-        compute_matrices: bool = True,
-        convex_hull: bool = True,
-        weight_method: str = "half_cotangent",
-        min_points: Optional[int] = None,
-        smooth: int = 0,
+        buffer_factor: Union[float, Dict[str, float], None] = 0.05,
+        buffer: Union[float, Dict[str, float], None] = None,
+        join_style: str = "round",
+        min_points: Union[int, Dict[str, int], None] = None,
+        max_edge_length: Union[float, Dict[str, float], None] = None,
+        preserve_boundary: bool = False,
+        smooth: Union[int, Dict[str, int]] = 0,
         **meshpy_kwargs,
     ) -> None:
-        """Generates and optimizes the triangular mesh.
+        """Generates the triangular mesh for each film and stores them in the
+        ``self.meshes`` dictionary.
+
+        The arguments ``buffer_factor``, ``buffer``, ``min_points``,
+        ``max_edge_length``, and ``smooth`` can be specified either as a
+        single value for all films or as a dict of ``{film_name: argument_value}``.
 
         Args:
-            compute_matrices: Whether to compute the field-independent matrices
-                (weights, Q, Laplace operator) needed for Brandt simulations.
-            convex_hull: If True, mesh the entire convex hull of the device's polygons.
-            weight_method: Weight methods for computing the Laplace operator:
-                one of "uniform", "half_cotangent", or "inv_euclidian".
+            buffer_factor: Buffer for the film bounding box(es), in units of the maximum
+                film dimension. This argument is ignored if ``buffer`` is not None.
+            buffer: Buffer for the film bounding box(es), in ``length_units``.
+            join_style: The join style for the buffered region (see :meth:`superscreen.Polygon.buffer`).
             min_points: Minimum number of vertices in the mesh. If None, then
                 the number of vertices will be determined by meshpy_kwargs and the
                 number of vertices in the underlying polygons.
+            max_edge_length: The maximum distance between vertices in the resulting mesh.
+            preserve_boundary: Do not add any mesh sites to the boundary.
             smooth: Number of Laplacian smoothing iterations to perform.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
-        logger.info("Generating mesh...")
-        poly_points = self.poly_points
-        if bounding_polygon is None:
-            boundary = None
-        else:
-            boundary = self.polygons[bounding_polygon].points
-        points, triangles = mesh.generate_mesh(
-            poly_points,
-            min_points=min_points,
-            convex_hull=convex_hull,
-            boundary=boundary,
-            **meshpy_kwargs,
-        )
-        if smooth:
-            logger.info(f"Smoothin mesh with {points.shape[0]} vertices.")
-            points, triangles = mesh.smooth_mesh(points, triangles, smooth)
-        logger.info(
-            f"Finished generating mesh with {points.shape[0]} points and "
-            f"{triangles.shape[0]} triangles."
-        )
-        self.points = points
-        self.triangles = triangles
+        films = self.films
+        meshes = {}
+        if not isinstance(buffer_factor, dict):
+            buffer_factor = {name: buffer_factor for name in films}
+        if not isinstance(buffer, dict):
+            buffer = {name: buffer for name in films}
+        if not isinstance(min_points, dict):
+            min_points = {name: min_points for name in films}
+        if not isinstance(max_edge_length, dict):
+            max_edge_length = {name: max_edge_length for name in films}
+        if not isinstance(smooth, dict):
+            smooth = {name: smooth for name in films}
+        holes_by_layer = self.polygons_by_layer("hole")
+        abs_regions_by_layer = self.polygons_by_layer("abstract")
+        for name, film in films.items():
+            film_terminals = self.terminals.get(name)
+            holes = holes_by_layer[film.layer]
+            abs_regions = abs_regions_by_layer[film.layer]
+            coords = [film.points]
+            for poly in holes + abs_regions:
+                if film.contains_points(poly.points).all():
+                    coords.append(poly.points)
+            if film_terminals is not None or (
+                buffer_factor[name] is None and buffer[name] is None
+            ):
+                boundary = film.points
+            else:
+                boundary = Polygon(points=film.points)
+                if buffer[name] is None:
+                    buffer_size = buffer_factor[name] * max(boundary.extents)
+                else:
+                    buffer_size = buffer[name]
+                buffered = boundary.polygon.buffer(
+                    buffer_size,
+                    join_style=getattr(geo.JOIN_STYLE, join_style),
+                    single_sided=True,
+                    mitre_limit=5.0,
+                ).exterior.coords
+                boundary = Polygon(points=buffered).resample(len(film.points)).points
+                coords.append(boundary)
+            points, triangles = utils.generate_mesh(
+                ensure_unique(np.concatenate(coords, axis=0)),
+                min_points=min_points[name],
+                max_edge_length=max_edge_length[name],
+                boundary=boundary,
+                convex_hull=False,
+                preserve_boundary=preserve_boundary or (film_terminals is not None),
+                **meshpy_kwargs,
+            )
+            if smooth[name]:
+                meshes[name] = Mesh.from_triangulation(
+                    points, triangles, build_operators=False
+                ).smooth(smooth[name])
+            else:
+                meshes[name] = Mesh.from_triangulation(points, triangles)
+        self.meshes = meshes
 
-        self.weights = None
-        self.Del2 = None
-        self.Q = None
-        self.gradx = None
-        self.grady = None
-        if compute_matrices:
-            self.compute_matrices(weight_method=weight_method)
-
-    def compute_matrices(self, weight_method: str = "half_cotangent") -> None:
-        """Calculcates mesh weights, Laplace oeprator, and kernel functions.
+    def boundary_vertices(self, film: str) -> np.ndarray:
+        """An array of boundary vertex indices, ordered counterclockwise.
 
         Args:
-            weight_method: Meshing scheme: either "uniform", "half_cotangent",
-                or "inv_euclidian".
+            film: The name of the film for which to find boundary indices.
+
+        Returns:
+            An array of indices for vertices that are on the film boundary,
+            ordered counterclockwise.
         """
+        if self.meshes is None:
+            return None
+        mesh = self.meshes[film]
+        points = mesh.sites
+        triangles = mesh.elements
+        indices = utils.boundary_vertices(points, triangles)
+        if film not in self.terminals:
+            return indices
+        # Ensure that the indices wrap around outside of any terminals.
+        for terminal in self.terminals[film]:
+            boundary_points = points[indices]
+            terminal_indices = terminal.contains_points(boundary_points, index=True)
+            discont = np.diff(terminal_indices) != 1
+            if np.any(discont):
+                i_discont = np.where(discont)[0][0]
+                indices = np.roll(indices, -(i_discont + 1))
+                break
+        return indices
 
-        from ..solve import C_vector, Q_matrix, q_matrix
+    def mesh_stats_dict(self) -> Optional[Dict[str, Dict[str, Union[int, float]]]]:
+        """Returns a dictionary of information about all meshes."""
+        if self.meshes is None:
+            return None
+        return {name: mesh.stats() for name, mesh in self.meshes.items()}
 
-        points = self.points
-        triangles = self.triangles
+    def mesh_stats(self, precision: int = 3) -> Optional[HTML]:
+        """When called with in Jupyter notebook, displays
+        a table of information about the mesh.
 
-        if points is None or triangles is None:
-            raise ValueError(
-                "Device mesh does not exist. Run Device.make_mesh() "
-                "to generate the mesh."
-            )
+        Args:
+            precision: Number of digits after the decimal for float values.
 
-        logger.info("Calculating weight matrix.")
-        self.weights = fem.mass_matrix(points, triangles)
+        Returns:
+            An HTML table of mesh statistics.
+        """
+        all_stats = self.mesh_stats_dict()
+        if all_stats is None:
+            return None
 
-        logger.info("Calculating Laplace operator.")
-        self.Del2 = fem.laplace_operator(
-            points,
-            triangles,
-            masses=self.weights,
-            weight_method=weight_method,
-            sparse=True,
-        )
-        logger.info("Calculating kernel matrix.")
-        solve_dtype = self.solve_dtype
-        q = q_matrix(points, dtype=solve_dtype)
-        C = C_vector(points, dtype=solve_dtype)
-        self.Q = Q_matrix(q, C, self.weights, dtype=solve_dtype)
-        logger.info("Calculating gradient matrix.")
-        self.gradx, self.grady = fem.gradient_vertices(points, triangles)
+        def make_row(*cols):
+            return "<tr>" + "".join([f"<td>{c}</td>" for c in cols]) + "</tr>"
+
+        html = ["<table>", "<tr><h2>Mesh Statistics</h2></tr>"]
+        html.append(make_row("", "<b>length_units</b>", repr(self.length_units)))
+        for name, stats in all_stats.items():
+            for i, (key, value) in enumerate(stats.items()):
+                if isinstance(value, float):
+                    value = f"{value:.{precision}e}"
+                if i == 0:
+                    html.append(make_row(f"<b>{name!r}</b>", f"<b>{key}</b>", value))
+                else:
+                    html.append(make_row("", f"<b>{key}</b>", value))
+        html.append("</table>")
+        return HTML("".join(html))
 
     def mutual_inductance_matrix(
         self,
@@ -674,7 +565,7 @@ class Device:
             length of the list is ``1`` if the device has a single layer, or
             ``iterations + 1`` if the device has multiple layers.
         """
-        from ..solve import solve
+        from ..solver import solve
 
         holes = self.holes
         if hole_polygon_mapping is None:
@@ -703,22 +594,27 @@ class Device:
         mutual_inductance = np.zeros((n_iter, n_holes, n_holes))
         for j, hole_name in enumerate(hole_polygon_mapping):
             logger.info(
-                f"Evaluating '{self.name}' mutual inductance matrix "
+                f"Evaluating {self.name!r} mutual inductance matrix "
                 f"column ({j+1}/{len(hole_polygon_mapping)}), "
-                f"source = '{hole_name}'."
+                f"source = {hole_name!r}."
             )
             solutions = solve(
                 device=self,
                 circulating_currents={hole_name: str(I_circ)},
                 **solve_kwargs,
             )[solution_slice]
+            films_by_hole = {}
+            for film, holes in self.holes_by_film().items():
+                for hole in holes:
+                    films_by_hole[hole.name] = film
             for n, solution in enumerate(solutions):
                 logger.info(
                     f"Evaluating fluxoids for solution {n + 1}/{len(solutions)}."
                 )
                 for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
-                    layer = holes[name].layer
-                    fluxoid = solution.polygon_fluxoid(polygon, layer)[layer]
+                    fluxoid = solution.polygon_fluxoid(
+                        polygon, film=films_by_hole[name]
+                    )
                     mutual_inductance[n, i, j] = (
                         (sum(fluxoid) / I_circ).to(units).magnitude
                     )
@@ -732,77 +628,140 @@ class Device:
             result = result[0]
         return result
 
-    def plot(
+    def plot_polygons(
         self,
         ax: Optional[plt.Axes] = None,
         subplots: bool = False,
-        legend: bool = True,
+        legend: bool = False,
         figsize: Optional[Tuple[float, float]] = None,
-        mesh: bool = False,
-        mesh_kwargs: Dict[str, Any] = dict(color="k", lw=0.5),
         **kwargs,
     ) -> Tuple[plt.Figure, plt.Axes]:
-        """Plot all of the device's polygons.
+        """Plot all of the Device's polygons.
 
         Args:
             ax: matplotlib axis on which to plot. If None, a new figure is created.
-            subplots: If True, plots each layer on a different subplot.
+            subplots: If True, plots each film on a different subplot.
             legend: Whether to add a legend.
             figsize: matplotlib figsize, only used if ax is None.
-            mesh: If True, plot the mesh.
-            mesh_kwargs: Keyword arguments passed to ``ax.triplot()``
-                if ``mesh`` is True.
             kwargs: Passed to ``ax.plot()`` for the polygon boundaries.
 
         Returns:
             Matplotlib Figure and Axes
         """
-        if len(self.layers_list) > 1 and subplots and ax is not None:
+        if len(self.films) > 1 and subplots and ax is not None:
             raise ValueError(
                 "Axes may not be provided if subplots is True and the device has "
-                "multiple layers."
+                "multiple films."
             )
         if ax is None:
             if subplots:
                 from ..visualization import auto_grid
 
                 fig, axes = auto_grid(
-                    len(self.layers_list),
+                    len(self.films),
                     max_cols=2,
                     figsize=figsize,
                     constrained_layout=True,
                 )
             else:
                 fig, axes = plt.subplots(figsize=figsize, constrained_layout=True)
-                axes = np.array([axes for _ in self.layers_list])
+                axes = np.array([axes for _ in self.films])
         else:
             subplots = False
             fig = ax.get_figure()
-            axes = np.array([ax for _ in self.layers_list])
-        polygons_by_layer = defaultdict(list)
-        for polygon in self.polygons.values():
-            polygons_by_layer[polygon.layer].append(polygon)
-        if mesh:
-            if self.triangles is None:
-                raise RuntimeError(
-                    "Mesh does not exist. Run device.make_mesh() to generate the mesh."
-                )
-            x = self.points[:, 0]
-            y = self.points[:, 1]
-            tri = self.triangles
-            mesh_kwargs = mesh_kwargs or {}
+            axes = np.array([ax for _ in self.films])
+        holes_by_film = self.holes_by_film()
+        terminals = self.terminals
+        for ax, (name, film) in zip(axes.flat, self.films.items()):
+            _ = film.plot(ax=ax, **kwargs)
+            for hole in holes_by_film[name]:
+                _ = hole.plot(ax=ax, **kwargs)
+            if name in terminals:
+                for terminal in terminals[name]:
+                    _ = terminal.plot(ax=ax, **kwargs)
             if subplots:
-                for ax in axes.flat:
-                    ax.triplot(x, y, tri, **mesh_kwargs)
-            else:
-                axes[0].triplot(x, y, tri, **mesh_kwargs)
-        for ax, (layer, polygons) in zip(axes.flat, polygons_by_layer.items()):
-            for polygon in polygons:
-                ax = polygon.plot(ax=ax, **kwargs)
-            if subplots:
-                ax.set_title(layer)
+                ax.set_title(name)
             if legend:
                 ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+            units = self.ureg(self.length_units).units
+            ax.set_xlabel(f"$x$ $[{units:~L}]$")
+            ax.set_ylabel(f"$y$ $[{units:~L}]$")
+            ax.set_aspect("equal")
+        if not subplots:
+            axes = axes[0]
+        return fig, axes
+
+    def plot_mesh(
+        self,
+        ax: Optional[plt.Axes] = None,
+        subplots: bool = False,
+        figsize: Optional[Tuple[float, float]] = None,
+        show_sites: bool = False,
+        show_edges: bool = True,
+        site_color: Union[str, Sequence[float], None] = None,
+        edge_color: Union[str, Sequence[float], None] = None,
+        linewidth: float = 0.75,
+        linestyle: str = "-",
+        marker: str = ".",
+    ) -> Tuple[plt.Figure, plt.Axes]:
+        """Plot all of the Device's meshes.
+
+        Args:
+            ax: matplotlib axis on which to plot. If None, a new figure is created.
+            subplots: If True, plots each film on a different subplot.
+            figsize: matplotlib figsize, only used if ax is None.
+            show_sites: Whether to show the mesh sites.
+            show_edges: Whether to show the mesh edges.
+            site_color: The color for the sites.
+            edge_color: The color for the edges.
+            linewidth: The line width for all edges.
+            linestyle: The line style for all edges.
+            marker: The marker to use for the mesh sites.
+
+        Returns:
+            Matplotlib Figure and Axes
+        """
+        if len(self.films) > 1 and subplots and ax is not None:
+            raise ValueError(
+                "Axes may not be provided if subplots is True and the device has "
+                "multiple films."
+            )
+        if self.meshes is None:
+            raise ValueError(
+                "Mesh doesn't exist. Run Device.make_mesh() to generate one."
+            )
+        if ax is None:
+            if subplots:
+                from ..visualization import auto_grid
+
+                fig, axes = auto_grid(
+                    len(self.films),
+                    max_cols=2,
+                    figsize=figsize,
+                    constrained_layout=True,
+                )
+            else:
+                fig, axes = plt.subplots(figsize=figsize, constrained_layout=True)
+                axes = np.array([axes for _ in self.films])
+        else:
+            subplots = False
+            fig = ax.get_figure()
+            axes = np.array([ax for _ in self.films])
+        for i, (ax, (name, mesh)) in enumerate(zip(axes.flat, self.meshes.items())):
+            sc = f"C{i}" if site_color is None else site_color
+            ec = f"C{i}" if edge_color is None else edge_color
+            ax = mesh.plot(
+                ax=ax,
+                show_sites=show_sites,
+                show_edges=show_edges,
+                site_color=sc,
+                edge_color=ec,
+                linestyle=linestyle,
+                linewidth=linewidth,
+                marker=marker,
+            )
+            if subplots:
+                ax.set_title(name)
             units = self.ureg(self.length_units).units
             ax.set_xlabel(f"$x$ $[{units:~L}]$")
             ax.set_ylabel(f"$y$ $[{units:~L}]$")
@@ -869,7 +828,7 @@ class Device:
         Returns:
             Matplotlib Figre and Axes.
         """
-        if len(self.layers_list) > 1 and subplots and ax is not None:
+        if len(self.layers) > 1 and subplots and ax is not None:
             raise ValueError(
                 "Axes may not be provided if subplots is True and the device has "
                 "multiple layers."
@@ -886,22 +845,24 @@ class Device:
                 from ..visualization import auto_grid
 
                 fig, axes = auto_grid(
-                    len(self.layers_list),
+                    len(self.layers),
                     max_cols=max_cols,
                     figsize=figsize,
                     constrained_layout=True,
                 )
             else:
                 fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
-                axes = np.array([ax for _ in self.layers_list])
+                axes = np.array([ax for _ in self.layers])
         else:
             subplots = False
             fig = ax.get_figure()
-            axes = np.array([ax for _ in self.layers_list])
+            axes = np.array([ax for _ in self.layers])
         exclude = exclude or []
         if isinstance(exclude, str):
             exclude = [exclude]
-        layers = [layer.name for layer in sorted(self.layers_list, key=lambda x: x.z0)]
+        layers = [
+            layer.name for layer in sorted(self.layers.values(), key=lambda x: x.z0)
+        ]
         if layer_order == "decreasing":
             layers = layers[::-1]
         patches = self.patches()
@@ -953,162 +914,87 @@ class Device:
                 axes.legend(handles, labels, bbox_to_anchor=(1, 1), loc="upper left")
         return fig, axes
 
-    def to_file(
-        self, directory: str, save_mesh: bool = True, compressed: bool = True
+    def to_hdf5(
+        self,
+        path_or_group: Union[os.PathLike, h5py.Group],
+        save_mesh: bool = True,
+        compress: bool = True,
     ) -> None:
-        """Serializes the Device to disk.
+        """Serializes the Device to and HDF5 file.
 
         Args:
-            directory: The name of the directory in which to save the Device
-                (must either be empty or not yet exist).
+            path_or_group: Path to an HDF5 file to create, or an open HD5F file.
             save_mesh: Whether to save the full mesh to file.
-            compressed: Whether to use numpy.savez_compressed rather than numpy.savez
-                when saving the mesh.
+            compress: Save the minimum amount of data needed to recreate the mesh.
         """
-        from ..io import NumpyJSONEncoder
+        if isinstance(path_or_group, h5py.Group):
+            save_context = nullcontext(path_or_group)
+        else:
+            save_context = h5py.File(path_or_group, "x")
+        with save_context as h5group:
+            h5group.attrs["name"] = self.name
+            h5group.attrs["length_units"] = self.length_units
+            h5group.attrs["solve_dtype"] = str(self.solve_dtype)
+            layer_grp = h5group.create_group("layers")
+            film_grp = h5group.create_group("films")
+            hole_grp = h5group.create_group("holes")
+            terminals_grp = h5group.create_group("terminals")
+            abs_grp = h5group.create_group("abstract_regions")
+            for name, layer in self.layers.items():
+                layer.to_hdf5(layer_grp.create_group(name))
+            for name, polygon in self.films.items():
+                polygon.to_hdf5(film_grp.create_group(name))
+            for name, polygon in self.holes.items():
+                polygon.to_hdf5(hole_grp.create_group(name))
+            for name, polygon in self.abstract_regions.items():
+                polygon.to_hdf5(abs_grp.create_group(name))
+            for film_name, terminals in self.terminals.items():
+                grp = terminals_grp.create_group(film_name)
+                for i, terminal in enumerate(terminals):
+                    terminal.to_hdf5(grp.create_group(str(i)))
+            if save_mesh and self.meshes:
+                mesh_grp = h5group.create_group("mesh")
+                for name, mesh in self.meshes.items():
+                    mesh.to_hdf5(mesh_grp.create_group(name), compress=compress)
 
-        if os.path.isdir(directory) and len(os.listdir(directory)):
-            raise IOError(f"Directory '{directory}' already exists and is not empty.")
-        os.makedirs(directory, exist_ok=True)
-
-        # Serialize films, holes, and abstract_regions to JSON
-        polygons = {"device_name": self.name, "length_units": self.length_units}
-        for poly_type in ["films", "holes", "abstract_regions"]:
-            polygons[poly_type] = {}
-            for name, poly in getattr(self, poly_type).items():
-                polygons[poly_type][name] = {
-                    "layer": poly.layer,
-                    "points": poly.points,
-                }
-        with open(os.path.join(directory, "polygons.json"), "w") as f:
-            json.dump(polygons, f, indent=4, cls=NumpyJSONEncoder)
-
-        # Serialize layers to JSON.
-        # If Lambda or london_lambda is a Parameter, then we will
-        # pickle it using dill.
-        layers = {
-            "device_name": self.name,
-            "length_units": self.length_units,
-            "solve_dtype": str(self.solve_dtype),
-        }
-        for name, layer in self.layers.items():
-            layers[name] = {"z0": layer.z0, "thickness": layer.thickness}
-            if isinstance(layer._Lambda, (int, float)):
-                layers[name]["Lambda"] = layer._Lambda
-                layers[name]["london_lambda"] = None
-            elif isinstance(layer.london_lambda, (int, float)):
-                layers[name]["Lambda"] = None
-                layers[name]["london_lambda"] = layer.london_lambda
-            else:
-                if isinstance(layer._Lambda, Parameter):
-                    # Lambda is defined as a Parameter and london_lambda is None
-                    assert layer.london_lambda is None
-                    param = layer._Lambda
-                    key = "Lambda"
-                    null_key = "london_lambda"
-                else:
-                    # london_lambda is defined as a Parameter and _Lambda is None
-                    assert layer._Lambda is None
-                    param = layer.london_lambda
-                    key = "london_lambda"
-                    null_key = "Lambda"
-                dill_fname = f"{layer.name}_{param.func.__name__}.dill"
-                layers[name][null_key] = None
-                layers[name][key] = {"path": dill_fname}
-                with open(os.path.join(directory, dill_fname), "wb") as f:
-                    dill.dump(param, f)
-
-        with open(os.path.join(directory, "layers.json"), "w") as f:
-            json.dump(layers, f, indent=4, cls=NumpyJSONEncoder)
-
-        if save_mesh:
-            # Serialize mesh, if it exists.
-            save_npz = np.savez_compressed if compressed else np.savez
-            if self.points is not None:
-                save_npz(
-                    os.path.join(directory, "mesh.npz"),
-                    points=self.points,
-                    triangles=self.triangles,
-                )
-
-    @classmethod
-    def from_file(cls, directory: str, compute_matrices: bool = False) -> "Device":
-        """Creates a new Device from one serialized to disk.
+    @staticmethod
+    def from_hdf5(path_or_group: Union[os.PathLike, h5py.Group]) -> "Device":
+        """Loads a Device from an HDF5 file.
 
         Args:
-            directory: The directory from which to load the device.
-            compute_matrices: Whether to compute the field-independent
-                matrices for the device if the mesh already exists.
+            path_or_group: Path to an HDF5 file to read, or an open HD5F file.
 
         Returns:
-            The loaded Device instance
+            The deserialized Device.
         """
-        from ..io import json_numpy_obj_hook
-
-        # Load all polygons (films, holes, abstract_regions)
-        with open(os.path.join(directory, "polygons.json"), "r") as f:
-            polygons_json = json.load(f, object_hook=json_numpy_obj_hook)
-
-        device_name = polygons_json.pop("device_name")
-        length_units = polygons_json.pop("length_units")
-        films = {
-            name: Polygon(name, **kwargs)
-            for name, kwargs in polygons_json["films"].items()
-        }
-        holes = {
-            name: Polygon(name, **kwargs)
-            for name, kwargs in polygons_json["holes"].items()
-        }
-        abstract_regions = {
-            name: Polygon(name, **kwargs)
-            for name, kwargs in polygons_json["abstract_regions"].items()
-        }
-
-        # Load all layers
-        with open(os.path.join(directory, "layers.json"), "r") as f:
-            layers_json = json.load(f, object_hook=json_numpy_obj_hook)
-
-        device_name = layers_json.pop("device_name")
-        length_units = layers_json.pop("length_units")
-        solve_dtype = layers_json.pop("solve_dtype", "float64")
-        for name, layer_dict in layers_json.items():
-            # Check whether either Lambda or london_lambda is a Parameter
-            # that was pickled.
-            if isinstance(layer_dict["Lambda"], dict):
-                assert layer_dict["london_lambda"] is None
-                path = layer_dict["Lambda"]["path"]
-                with open(os.path.join(directory, path), "rb") as f:
-                    Lambda = dill.load(f)
-                layers_json[name]["Lambda"] = Lambda
-            elif isinstance(layer_dict["london_lambda"], dict):
-                assert layer_dict["Lambda"] is None
-                path = layer_dict["london_lambda"]["path"]
-                with open(os.path.join(directory, path), "rb") as f:
-                    london_lambda = dill.load(f)
-                layers_json[name]["london_lambda"] = london_lambda
-
-        layers = {name: Layer(name, **kwargs) for name, kwargs in layers_json.items()}
-
-        device = cls(
-            device_name,
-            layers=layers,
-            films=films,
-            holes=holes,
-            abstract_regions=abstract_regions,
-            length_units=length_units,
-            solve_dtype=solve_dtype,
-        )
-
-        # Load the mesh if it exists
-        if "mesh.npz" in os.listdir(directory):
-            with np.load(os.path.join(directory, "mesh.npz")) as npz:
-                device.points = npz["points"]
-                device.triangles = npz["triangles"]
-
-        if compute_matrices and device.Del2 is None:
-            device.compute_matrices()
-
-        return device
+        if isinstance(path_or_group, h5py.Group):
+            read_context = nullcontext(path_or_group)
+        else:
+            read_context = h5py.File(path_or_group, "r")
+        with read_context as h5group:
+            terminals = {}
+            for film, grp in h5group["terminals"].items():
+                terminals[film] = []
+                for i in range(len(grp)):
+                    terminals[film].append(Polygon.from_hdf5(grp[str(i)]))
+            device = Device(
+                name=h5group.attrs["name"],
+                layers=[Layer.from_hdf5(grp) for grp in h5group["layers"].values()],
+                films=[Polygon.from_hdf5(grp) for grp in h5group["films"].values()],
+                holes=[Polygon.from_hdf5(grp) for grp in h5group["holes"].values()],
+                terminals=terminals,
+                abstract_regions=[
+                    Polygon.from_hdf5(grp)
+                    for grp in h5group["abstract_regions"].values()
+                ],
+                length_units=h5group.attrs["length_units"],
+                solve_dtype=h5group.attrs["solve_dtype"],
+            )
+            if "mesh" in h5group:
+                device.meshes = {
+                    name: Mesh.from_hdf5(grp) for name, grp in h5group["mesh"].items()
+                }
+            return device
 
     def __repr__(self) -> str:
         # Normal tab "\t" renders a bit too big in jupyter if you ask me.
@@ -1116,33 +1002,25 @@ class Device:
         t = " " * indent
         nt = "\n" + t
 
-        # def format_dict(d):
-        #     if not d:
-        #         return None
-        #     items = [f'{t}"{key}": {value}' for key, value in d.items()]
-        #     return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
-
-        # args = [
-        #     f'"{self.name}"',
-        #     f"layers={format_dict(self.layers)}",
-        #     f"films={format_dict(self.films)}",
-        #     f"holes={format_dict(self.holes)}",
-        #     f"abstract_regions={format_dict(self.abstract_regions)}",
-        #     f'length_units="{self.length_units}"',
-        # ]
-
         def format_list(L):
             if not L:
                 return None
             items = [f"{t}{value}" for value in L]
             return "[" + nt + (", " + nt).join(items) + "," + nt + "]"
 
+        def format_dict(D):
+            if not D:
+                return None
+            items = [f"{t}{key!r}: {value}" for key, value in D.items()]
+            return "{" + nt + (", " + nt).join(items) + "," + nt + "}"
+
         args = [
             f'"{self.name}"',
-            f"layers={format_list(self.layers_list)}",
-            f"films={format_list(self._films_list)}",
-            f"holes={format_list(self._holes_list)}",
-            f"abstract_regions={format_list(self._abstract_regions_list)}",
+            f"layers={format_list(self.layers.values())}",
+            f"films={format_list(self.films.values())}",
+            f"holes={format_list(self.holes.values())}",
+            f"terminals={format_dict(self.terminals)}",
+            f"abstract_regions={format_list(self.abstract_regions.values())}",
             f'length_units="{self.length_units}"',
         ]
 
@@ -1155,22 +1033,31 @@ class Device:
         if not isinstance(other, Device):
             return False
 
+        def equals_sorted(first, second):
+            def key(x):
+                return x.name
+
+            return sorted(first, key=key) == sorted(second, key=key)
+
         return (
             self.name == other.name
-            and self.layers_list == other.layers_list
-            and self.films == other.films
-            and self.holes == other.holes
-            and self.abstract_regions == other.abstract_regions
+            and equals_sorted(self.layers.values(), other.layers.values())
+            and equals_sorted(self.films.values(), other.films.values())
+            and equals_sorted(self.holes.values(), other.holes.values())
+            and self.terminals == other.terminals
+            and equals_sorted(
+                self.abstract_regions.values(), other.abstract_regions.values()
+            )
             and self.length_units == other.length_units
         )
 
     def __getstate__(self):
         state = self.__dict__.copy()
         # Use dill for Layer objects because Layer.Lambda could be a Parameter
-        state["layers_list"] = dill.dumps(self.layers_list)
+        state["layers"] = dill.dumps(self.layers)
         return state
 
     def __setstate__(self, state):
         # Use dill for Layer objects because Layer.Lambda could be a Parameter
-        state["layers_list"] = dill.loads(state["layers_list"])
+        state["layers"] = dill.loads(state["layers"])
         self.__dict__.update(state)
