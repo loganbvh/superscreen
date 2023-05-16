@@ -100,3 +100,34 @@ def cdist(XA: np.ndarray, XB: np.ndarray, metric: str = "euclidean"):
             return euclidean_distance_3d(XA, XB)
         return sqeuclidean_distance_3d(XA, XB)
     raise ValueError(f"Excpected shape (n, 2) arrays, got {XA.shape} and {XB.shape}.")
+
+
+@numba.njit(fastmath=True, parallel=True)
+def q_matrix(points: np.ndarray):
+    """Computes the q-matrix :math:`q_{ij}=1/(4\\pi|\\vec{r}_i-\\vec{r}_j|^3)`
+
+    Args:
+        points: The mesh sites :math:`\\vec{r}_i`, shape ``(n, 2)``
+
+    Returns:
+        The matrix :math:`q_{ij}`, shape ``(n, n)`` with zeros on the diagonal.
+    """
+    assert points.ndim == 2
+    assert points.shape[1] == 2
+    one_over_4pi = 1 / (4 * np.pi)
+    minus_three_halves = -3.0 / 2.0
+    out = np.empty((points.shape[0], points.shape[0]), dtype=points.dtype)
+    for i in numba.prange(points.shape[0]):
+        for j in range(points.shape[0]):
+            if i == j:
+                out[i, j] = 0.0
+            else:
+                out[i, j] = (
+                    one_over_4pi
+                    * (
+                        (points[i, 0] - points[j, 0]) ** 2
+                        + (points[i, 1] - points[j, 1]) ** 2
+                    )
+                    ** minus_three_halves
+                )
+    return out

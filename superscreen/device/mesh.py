@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
 
-from ..distance import cdist
+from ..distance import q_matrix
 from ..fem import gradient_vertices, laplace_operator
 from . import utils
 from .edge_mesh import EdgeMesh
@@ -335,11 +335,7 @@ class MeshOperators:
         sites = mesh.sites
         elements = mesh.elements
         weights = mesh.vertex_areas
-        Q = MeshOperators.Q_matrix(
-            MeshOperators.q_matrix(sites),
-            MeshOperators.C_vector(sites),
-            weights,
-        )
+        Q = MeshOperators.Q_matrix(sites, weights)
         gradient_x, gradient_y = gradient_vertices(
             sites, elements, areas=mesh.triangle_areas
         )
@@ -357,30 +353,6 @@ class MeshOperators:
 
     def copy(self) -> "MeshOperators":
         return deepcopy(self)
-
-    @staticmethod
-    def q_matrix(points: np.ndarray) -> np.ndarray:
-        """Computes the denominator matrix, q:
-
-        .. math::
-
-            q_{ij} = \\frac{1}{4\\pi|\\vec{r}_i-\\vec{r}_j|^3}
-
-        See Eq. 7 in [Brandt-PRB-2005]_, Eq. 8 in [Kirtley-RSI-2016]_,
-        and Eq. 8 in [Kirtley-SST-2016]_.
-
-        Args:
-            points: Shape (n, 2) array of x,y coordinates of vertices.
-
-        Returns:
-            Shape (n, n) array, qij
-        """
-        # Euclidean distance between points
-        distances = cdist(points, points, metric="euclidean")
-        with np.errstate(divide="ignore"):
-            q = 1 / (4 * np.pi * distances**3)
-        np.fill_diagonal(q, np.inf)
-        return q
 
     @staticmethod
     def C_vector(points: np.ndarray) -> np.ndarray:
@@ -417,7 +389,7 @@ class MeshOperators:
         return C
 
     @staticmethod
-    def Q_matrix(q: np.ndarray, C: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    def Q_matrix(points: np.ndarray, weights: np.ndarray) -> np.ndarray:
         """Computes the kernel matrix, Q:
 
         .. math::
@@ -430,17 +402,14 @@ class MeshOperators:
         and Eq. 11 in [Kirtley-SST-2016]_.
 
         Args:
-            q: Shape (n, n) matrix qij.
-            C: Shape (n, ) vector Ci.
-            weights: Shape (n, ) weight vector.
+            points: Shape ``(n, 2)`` array of mesh sites.
+            weights: Shape ``(n, )`` weight vector.
 
         Returns:
             Shape (n, n) array, Qij
         """
-        # q[i, i] are np.inf, but Q[i, i] involves a sum over only the
-        # off-diagonal elements of q, so we can just set q[i, i] = 0 here.
-        q = q.copy()
-        np.fill_diagonal(q, 0)
-        Q = -q
-        np.fill_diagonal(Q, (C + np.einsum("ij, j -> i", q, weights)) / weights)
-        return Q
+        q = q_matrix(points)
+        C = MeshOperators.C_vector(points)
+        diag = -(C + np.einsum("ij, j -> i", q, weights)) / weights
+        np.fill_diagonal(q, diag)
+        return -q
