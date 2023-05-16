@@ -16,9 +16,11 @@ The documentation for `SuperScreen` can be found at [superscreen.readthedocs.io]
 
 ## Try `SuperScreen`
 
-Click the badge below and navigate to `docs/notebooks/` to try `SuperScreen` interactively online via [Binder](https://mybinder.org/):
+Click the badges below to try `SuperScreen` interactively online via [Google Colab](https://colab.research.google.com/):
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/loganbvh/superscreen/HEAD)
+Quickstart notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loganbvh/superscreen/blob/main/docs/notebooks/quickstart.ipynb)
+
+All notebooks: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loganbvh/superscreen/)
 
 ## Install `SuperScreen`
 
