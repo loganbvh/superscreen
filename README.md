@@ -16,11 +16,9 @@ The documentation for `SuperScreen` can be found at [superscreen.readthedocs.io]
 
 ## Try `SuperScreen`
 
-Click the badges below to try `SuperScreen` interactively online via [Google Colab](https://colab.research.google.com/):
+Click the badge below to try `SuperScreen` interactively online via [Google Colab](https://colab.research.google.com/):
 
-Quickstart notebook: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loganbvh/superscreen/blob/main/docs/notebooks/quickstart.ipynb)
-
-All notebooks: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loganbvh/superscreen/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loganbvh/superscreen/blob/main/docs/notebooks/quickstart.ipynb)
 
 ## Install `SuperScreen`
 
