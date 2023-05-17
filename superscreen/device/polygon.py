@@ -196,6 +196,7 @@ class Polygon:
         max_edge_length: Optional[float] = None,
         convex_hull: bool = False,
         smooth: int = 0,
+        build_operators: bool = False,
         **meshpy_kwargs,
     ) -> Mesh:
         """Creates a :class:`Mesh` for the polygon.
@@ -208,6 +209,8 @@ class Polygon:
             convex_hull: If True, then the entire convex hull of the polygon (minus holes)
                 will be meshed. Otherwise, only the polygon interior is meshed.
             smooth: Number of Laplacian smoothing steps to perform.
+            build_operators: Whether to build the :class:`superscreen.device.MeshOperators`
+                for the mesh.
             **meshpy_kwargs: Passed to meshpy.triangle.build().
         """
         points, triangles = generate_mesh(
@@ -217,7 +220,9 @@ class Polygon:
             convex_hull=convex_hull,
             **meshpy_kwargs,
         )
-        return Mesh.from_triangulation(points, triangles).smooth(smooth)
+        return Mesh.from_triangulation(
+            points, triangles, build_operators=build_operators
+        ).smooth(smooth, build_operators=build_operators)
 
     def rotate(
         self,
