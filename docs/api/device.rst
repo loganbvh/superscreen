@@ -47,6 +47,9 @@ Meshing
 .. autoclass:: superscreen.device.EdgeMesh
     :members:
 
+.. autoclass:: superscreen.device.MeshOperators
+    :members:
+
 .. autofunction:: superscreen.device.generate_mesh
 
 .. autofunction:: superscreen.device.smooth_mesh
