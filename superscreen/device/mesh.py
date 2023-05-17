@@ -309,7 +309,7 @@ class Mesh:
 
 
 class MeshOperators:
-    """A container for the finite element operators for a :class:`superscreen.device.Mesh`.
+    """A container for the finite element operators for a :class:`superscreen.Mesh`.
 
     Args:
         weights: The mesh weights or effective vertex areas, shape ``(n, )``
@@ -337,10 +337,10 @@ class MeshOperators:
     @staticmethod
     def from_mesh(mesh: Mesh) -> "MeshOperators":
         """Construct a :class:`superscreen.device.MeshOperators` instance
-        from a :class:`superscreen.device.Mesh`.
+        from a :class:`superscreen.Mesh`.
 
         Args:
-            mesh: The :class:`superscreen.device.Mesh`
+            mesh: The :class:`superscreen.Mesh`
 
         Returns:
             A new :class:`superscreen.device.MeshOperators` instance

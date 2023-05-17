@@ -153,7 +153,7 @@ def device_with_mesh():
     device.make_mesh(min_points=3000)
     assert isinstance(device.meshes, dict)
     assert set(device.meshes) == set(device.films)
-    assert all(isinstance(mesh, sc.device.Mesh) for mesh in device.meshes.values())
+    assert all(isinstance(mesh, sc.Mesh) for mesh in device.meshes.values())
     for mesh in device.meshes.values():
         centroids = sc.fem.centroids(mesh.sites, mesh.elements)
         assert centroids.shape[0] == mesh.elements.shape[0]
