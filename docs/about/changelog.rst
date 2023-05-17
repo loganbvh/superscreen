@@ -19,6 +19,17 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.9.1
+-------------
+
+Release date: 2023-05-17
+
+Changes
+=======
+
+- Don't build ``MeshOperators`` by default in :meth:`superscreen.Polygon.make_mesh` (`#101 <https://github.com/loganbvh/superscreen/pull/101>`_)
+
+
 Version 0.9.0
 -------------
 
