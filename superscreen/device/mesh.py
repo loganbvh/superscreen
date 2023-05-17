@@ -125,7 +125,6 @@ class Mesh:
                 f"The elements must have shape (m, 3), got {elements.shape!r}."
             )
         boundary_indices = Mesh.find_boundary_indices(elements)
-        edge_mesh = triangle_areas = vertex_areas = None
         edge_mesh = EdgeMesh.from_mesh(sites, elements)
         triangle_areas = utils.triangle_areas(sites, elements)
         vertex_areas = utils.vertex_areas(sites, elements, tri_areas=triangle_areas)
