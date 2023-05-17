@@ -240,8 +240,7 @@ def laplace_operator(
     weight_method: Literal[
         "uniform", "half_cotangent", "inv_euclidean"
     ] = "half_cotangent",
-    sparse: bool = True,
-) -> Union[np.ndarray, sp.csr_array]:
+) -> sp.csr_array:
     """Laplacian operator for the mesh (sometimes called
     Laplace-Beltrami operator).
 
@@ -254,7 +253,6 @@ def laplace_operator(
         masses: Pre-computed mass matrix, i.e., the vertex areas.
         weight_method: Method for calculating the weights. One of: "uniform",
             "inv_euclidean", or "half_cotangent".
-        sparse: Whether to return a sparse matrix or numpy ndarray.
 
     Returns:
         Shape (n, n) Laplacian operator
@@ -272,9 +270,7 @@ def laplace_operator(
         L.setdiag(-L.sum(axis=1))
         L = L.tocsr()
     laplacian = sp.diags(1 / masses, format="csr") @ L
-    if sparse:
-        return laplacian
-    return laplacian.toarray()
+    return laplacian
 
 
 def gradient_triangles(

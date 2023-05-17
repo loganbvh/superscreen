@@ -309,14 +309,24 @@ class Mesh:
 
 
 class MeshOperators:
+    """A container for the finite element operators for a :class:`superscreen.device.Mesh`.
+
+    Args:
+        weights: The mesh weights or effective vertex areas, shape ``(n, )``
+        Q: The kernel matrix ``Q``, shape ``(n, n)``
+        gradient_x: The x-gradient matrix, shape ``(n, n)``
+        gradient_y: The y-gradient matrix, shape ``(n, n)``
+        laplacian: The mesh Laplacian, shape ``(n, n)``
+    """
+
     def __init__(
         self,
         *,
         weights: np.ndarray,
         Q: np.ndarray,
-        gradient_x: Union[np.ndarray, sp.spmatrix],
-        gradient_y: Union[np.ndarray, sp.spmatrix],
-        laplacian: Union[np.ndarray, sp.spmatrix],
+        gradient_x: sp.spmatrix,
+        gradient_y: sp.spmatrix,
+        laplacian: sp.spmatrix,
     ):
         self.weights = weights
         self.Q = Q
