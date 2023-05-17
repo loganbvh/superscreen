@@ -336,6 +336,15 @@ class MeshOperators:
 
     @staticmethod
     def from_mesh(mesh: Mesh) -> "MeshOperators":
+        """Construct a :class:`superscreen.device.MeshOperators` instance
+        from a :class:`superscreen.device.Mesh`.
+
+        Args:
+            mesh: The :class:`superscreen.device.Mesh`
+
+        Returns:
+            A new :class:`superscreen.device.MeshOperators` instance
+        """
         sites = mesh.sites
         elements = mesh.elements
         weights = mesh.vertex_areas
@@ -356,6 +365,7 @@ class MeshOperators:
         )
 
     def copy(self) -> "MeshOperators":
+        """Returns a deep copy."""
         return deepcopy(self)
 
     @staticmethod
