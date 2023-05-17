@@ -30,6 +30,8 @@ class Mesh:
         vertex_areas: The areas corresponding to the sites or vertices.
         triangle_areas: The areas of the triangular mesh elements.
         edge_mesh: The edge mesh.
+        build_operators: Whether to build the :class:`superscreen.device.MeshOperators`
+            for the mesh.
     """
 
     def __init__(
@@ -37,37 +39,24 @@ class Mesh:
         sites: Sequence[Tuple[float, float]],
         elements: Sequence[Tuple[int, int, int]],
         boundary_indices: Sequence[int],
-        vertex_areas: Optional[Sequence[float]] = None,
-        triangle_areas: Optional[Sequence[float]] = None,
-        edge_mesh: Optional[EdgeMesh] = None,
+        vertex_areas: Sequence[float],
+        triangle_areas: Sequence[float],
+        edge_mesh: EdgeMesh,
+        build_operators: bool = True,
     ):
         self.sites = np.asarray(sites).squeeze()
-        # Setting dtype to int64 is important when running on Windows.
-        # Using default dtype uint64 does not work as Scipy indices in some
-        # instances.
         self.elements = np.asarray(elements, dtype=np.int64)
         self.boundary_indices = np.asarray(boundary_indices, dtype=np.int64)
-        if vertex_areas is not None:
-            vertex_areas = np.asarray(vertex_areas)
-        self.vertex_areas = vertex_areas
-        if triangle_areas is not None:
-            triangle_areas = np.asarray(triangle_areas)
-        self.triangle_areas = triangle_areas
+        self.vertex_areas = np.asarray(vertex_areas)
+        self.triangle_areas = np.asarray(triangle_areas)
         self.edge_mesh = edge_mesh
-        if (
-            self.edge_mesh is None
-            or self.vertex_areas is None
-            or self.triangle_areas is None
-        ):
-            self.operators = None
-        else:
+        self.operators: Optional[MeshOperators] = None
+        if build_operators:
             self.operators = MeshOperators.from_mesh(self)
 
     def stats(self) -> Dict[str, Union[int, float]]:
         """Returns a dictionary of information about the mesh."""
-        edge_lengths = None
-        if self.edge_mesh is not None:
-            edge_lengths = self.edge_mesh.edge_lengths
+        edge_lengths = self.edge_mesh.edge_lengths
         vertex_areas = self.vertex_areas
 
         def _min(arr):
@@ -119,6 +108,8 @@ class Mesh:
                 that form a triangle.   E.g. [[0, 1, 2], [0, 1, 3]] corresponds to a
                 triangle connecting vertices 0, 1, and 2 and another triangle
                 connecting vertices 0, 1, and 3.
+            build_operators: Whether to build the :class:`superscreen.device.MeshOperators`
+                for the mesh.
 
         Returns:
             A new :class:`tdgl.finite_volume.Mesh` instance
@@ -135,10 +126,9 @@ class Mesh:
             )
         boundary_indices = Mesh.find_boundary_indices(elements)
         edge_mesh = triangle_areas = vertex_areas = None
-        if build_operators:
-            edge_mesh = EdgeMesh.from_mesh(sites, elements)
-            triangle_areas = utils.triangle_areas(sites, elements)
-            vertex_areas = utils.vertex_areas(sites, elements, tri_areas=triangle_areas)
+        edge_mesh = EdgeMesh.from_mesh(sites, elements)
+        triangle_areas = utils.triangle_areas(sites, elements)
+        vertex_areas = utils.vertex_areas(sites, elements, tri_areas=triangle_areas)
         return Mesh(
             sites=sites,
             elements=elements,
@@ -146,6 +136,7 @@ class Mesh:
             edge_mesh=edge_mesh,
             vertex_areas=vertex_areas,
             triangle_areas=triangle_areas,
+            build_operators=build_operators,
         )
 
     @staticmethod
@@ -163,12 +154,14 @@ class Mesh:
         boundary_edges = edges[is_boundary]
         return np.unique(boundary_edges.ravel())
 
-    def smooth(self, iterations: int) -> "Mesh":
+    def smooth(self, iterations: int, build_operators: bool = True) -> "Mesh":
         """Perform Laplacian smoothing of the mesh, i.e., moving each interior vertex
         to the arithmetic average of its neighboring points.
 
         Args:
             iterations: The number of smoothing iterations to perform.
+            build_operators: Whether to build the :class:`superscreen.device.MeshOperators`
+                for the mesh.
 
         Returns:
             A new Mesh with relaxed vertex positions.
@@ -196,7 +189,9 @@ class Mesh:
             # reset boundary points
             new_sites[boundary] = sites[boundary]
             mesh = Mesh.from_triangulation(
-                new_sites, elements, build_operators=(i == (iterations - 1))
+                new_sites,
+                elements,
+                build_operators=(build_operators and (i == (iterations - 1))),
             )
         return mesh
 
