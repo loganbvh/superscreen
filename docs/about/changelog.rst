@@ -19,6 +19,71 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.9.0
+-------------
+
+Release date: 2023-05-16
+
+``SuperScreen`` ``v0.9.0`` is a significant update indented to improve the CPU/memory efficiency and ergonomics of the package.
+The major upgrades are contained in the following Pull Requests: `#96 <https://github.com/loganbvh/superscreen/pull/96>`_,
+`#99 <https://github.com/loganbvh/superscreen/pull/99>`_.
+
+Changes
+=======
+
+1. Rather than creating a single mesh containing all films in a device, each film now gets its own mesh and finite element operators.
+
+  - This approach avoids meshing large vacuum regions between films, which is costly.
+  - This approach also means that films with transport terminals can exist in the same :class:`superscreen.Device` as films without terminals.
+    As a result, the ``superscreen.TransportDevice`` class is no longer needed and has been removed.
+  - It is no longer necessary to explicitly define a bounding box around the film(s) being modeled.
+    A suitable bounding box is automatically generated for each film within :meth:`superscreen.Device.make_mesh`.
+  
+2. Reduced memory footprint and improved performance using `numba <https://numba.pydata.org/>`_ JIT compiled functions.
+
+  - Several costly numerical operations have been migrated from ``numpy``/``scipy`` to custom ``numba`` just-in-time (JIT) compiled functions.
+    The ``numba`` functions are automatically executed in parallel on multiple CPU cores and avoid the allocation of large intermediate arrays,
+    which can cause significant memory usage in ``numpy``/``scipy``.
+  - For devices with multiple films, the inductive coupling between films is now calculated using the supercurrent density and a
+    ``numba`` implementation of the Biot-Savart law, rather than the stream function and Ampere's law. The new approach is both
+    more robust for closely-stacked films and avoids storage of large temporary arrays.
+  - The default for :meth:`superscreen.Device.solve_dtype` has been changed from ``float64`` to ``float32``.
+
+3. The linear system describing the magnetic response of each film is now LU factored only once per call to :func:`superscreen.solve`.
+
+  - This dramatically speeds up self-consistent simulations involving multiple films and makes the solver code more modular.
+  - The portions of the model that are independent of the applied field can be pre-factorized using :func:`superscreen.factorize_model`,
+    which returns a :class:`superscreen.FactorizedModel` object that can be saved for future use.
+    A :class:`superscreen.FactorizedModel` instance can be passed directly to :func:`superscreen.solve`.
+
+4. As a result of the above optimizations, GPU support using `jax`_ and parallel processing with shared memory using
+   `ray <https://docs.ray.io/en/latest/>`_ no longer seem to add much value to the package, so they have been removed.
+
+  - The ``gpu`` argument to :func:`superscreen.solve` has been removed, along with the (optional) dependency on ``jax``.
+  - ``superscreen.solve_many()`` has been removed, along with the dependency on ``ray``.
+
+5. All IO operations, including writing :class:`superscreen.Device` and :class:`superscreen.Solution` objects to disk,
+   are now performed using the HDF5 file format via `h5py <https://docs.h5py.org/en/stable/>`_.
+
+  - All objects within superscreen that can be serialized to disk now have ``.to_hdf5()`` and ``.from_hdf5()`` methods.
+
+6. SuperScreen has dropped support for Python 3.7, which will `reach end-of-life in June 2023 <https://devguide.python.org/versions/>`_.
+
+  - Added support for Python 3.11, which was being blocked by the dependency on ``ray``.
+
+
+Version 0.8.2
+-------------
+
+Release date: 2023-05-06
+
+Changes
+=======
+
+- Added Python 3.10 support (`#93 <https://github.com/loganbvh/superscreen/pull/93>`_)
+- Removed ``cdist_batched()``, which was added in ``v0.8.1`` and had a bug(`#95 <https://github.com/loganbvh/superscreen/pull/95>`_)
+
+
 Version 0.8.1
 -------------
 
@@ -27,7 +92,8 @@ Release date: 2023-04-03
 Changes
 =======
 
-- Evaluating the magnetic field within a ``Layer`` is no longer supported in :meth:`superscreen.Solution.field_at_position` and must be done using :meth:`superscreen.Solution.interp_fields` (`#91 <https://github.com/loganbvh/superscreen/pull/91>`_).
+- Evaluating the magnetic field within a ``Layer`` is no longer supported in :meth:`superscreen.Solution.field_at_position`
+  and must be done using :meth:`superscreen.Solution.interp_fields` (`#91 <https://github.com/loganbvh/superscreen/pull/91>`_).
 
 Version 0.8.0
 -------------
