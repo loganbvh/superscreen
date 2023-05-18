@@ -349,7 +349,7 @@ def gradient_vertices(
     """
     if areas is None:
         areas = triangle_areas(points, triangles)
-    n = points.shape[0]
+    n = len(points)
     Gx, Gy = gradient_triangles(points, triangles, areas=areas)
     # Use numpy arrays for fast slicing even though the operators are sparse.
     Gx = Gx.toarray()
@@ -359,18 +359,18 @@ def gradient_vertices(
     # This loop is difficult to vectorize because different vertices
     # have different numbers of adjacent triangles.
     for i in range(n):
-        adjacent_triangles, _ = np.where(np.isin(triangles, i))
-        t = adjacent_triangles
+        # Triangles adjacent to site i
+        adj = np.where((triangles == i).any(axis=1))[0]
         # Weight each triangle adjacent to vertex i by its angle at the vertex.
-        vec1 = points[triangles[t, 1]] - points[triangles[t, 0]]
-        vec2 = points[triangles[t, 2]] - points[triangles[t, 0]]
+        vec1 = points[triangles[adj, 1]] - points[triangles[adj, 0]]
+        vec2 = points[triangles[adj, 2]] - points[triangles[adj, 0]]
         weights = np.arccos(
-            np.sum(vec1 * vec2, axis=1)
+            np.einsum("ij, ij -> i", vec1, vec2)
             / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
         )
         weights /= weights.sum()
-        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[t, :])
-        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[t, :])
+        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[adj, :])
+        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[adj, :])
     return gx.asformat("csr"), gy.asformat("csr")
 
 
