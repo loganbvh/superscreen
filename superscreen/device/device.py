@@ -431,8 +431,10 @@ class Device:
             for poly in holes + abs_regions:
                 if film.contains_points(poly.points).all():
                     coords.append(poly.points)
-            if film_terminals is not None or (
-                buffer_factor[name] is None and buffer[name] is None
+            if (
+                film_terminals is not None
+                or buffer[name] == 0
+                or (buffer_factor[name] is None and buffer[name] is None)
             ):
                 boundary = film.points
             else:
