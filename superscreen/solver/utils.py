@@ -102,7 +102,9 @@ class FilmInfo:
         lambda_info: A :class:`superscreen.solver.LambdaInfo` instance defining the
             effective penetration depth in the film
         vortices: Any :class:`superscreen.Vortex` instances located in the film
-        film_indices: The indices of the film in its mesh
+        interior_indices: The indices of the film in its mesh
+        boundary_indices: Indices of the boundary vertices for the mesh,
+            ordered counterclockwise
         hole_indices: A dict containing the indices of each hole in the film's mesh
         in_hole: A boolean array indicated which mesh sites lie inside a hole
         circulating_currents: A dict of ``{hole_name, circulating_current}``
@@ -111,15 +113,14 @@ class FilmInfo:
         laplacian: The mesh Laplacian :math:`\\nabla^2`
         gradient: The mesh gradient operator :math:`\\vec{\\nabla}`
         terminal_currents: A dict of ``{terminal_name: terminal_current}``
-        boundary_indices: Indices of the boundary vertices for the mesh,
-            ordered counterclockwise.
     """
 
     name: str
     layer: str
     lambda_info: LambdaInfo
     vortices: Tuple[Vortex]
-    film_indices: np.ndarray
+    interior_indices: np.ndarray
+    boundary_indices: np.ndarray
     hole_indices: Dict[str, np.ndarray]
     in_hole: np.ndarray
     circulating_currents: Dict[str, float]
@@ -128,7 +129,6 @@ class FilmInfo:
     laplacian: np.ndarray
     gradient: Optional[np.ndarray] = None
     terminal_currents: Optional[Dict[str, float]] = None
-    boundary_indices: Optional[np.ndarray] = None
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
         """Save the :class:`superscreen.solver.FilmInfo` instance to an :class:`h5py.Group`.
@@ -142,7 +142,8 @@ class FilmInfo:
         vortices_grp = h5group.create_group("vortices")
         for i, vortex in enumerate(self.vortices):
             vortex.to_hdf5(vortices_grp.create_group(str(i)))
-        h5group["film_indices"] = self.film_indices
+        h5group["interior_indices"] = self.interior_indices
+        h5group["boundary_indices"] = self.boundary_indices
         hole_indices_grp = h5group.create_group("hole_indices")
         for hole, indices in self.hole_indices.items():
             hole_indices_grp[hole] = indices
@@ -159,8 +160,6 @@ class FilmInfo:
             term_grp = h5group.create_group("terminal_currents")
             for name, current in self.terminal_currents.items():
                 term_grp.attrs[name] = current
-        if self.boundary_indices is not None:
-            h5group["boundary_indices"] = self.boundary_indices
 
     @staticmethod
     def from_hdf5(h5group: h5py.Group) -> "FilmInfo":
@@ -178,7 +177,8 @@ class FilmInfo:
         vortices = []
         for i in sorted(h5group["vortices"], key=int):
             vortices.append(Vortex.from_hdf5(h5group[f"vortices/{i}"]))
-        film_indices = np.array(h5group["film_indices"])
+        interior_indices = np.array(h5group["interior_indices"])
+        boundary_indices = np.array(h5group["boundary_indices"])
         hole_indices = {}
         for hole, indices in h5group["hole_indices"].items():
             hole_indices[hole] = np.array(indices)
@@ -192,23 +192,21 @@ class FilmInfo:
             gradient = np.array(h5group["gradient"])
         if "terminal_currents" in h5group:
             terminal_currents = dict(h5group["terminal_currents"].attrs)
-        if "boundary_indices" in h5group:
-            boundary_indices = np.array(h5group["boundary_indices"])
         return FilmInfo(
-            name,
-            layer,
-            lambda_info,
-            tuple(vortices),
-            film_indices,
-            hole_indices,
-            in_hole,
-            circulating_currents,
-            weights,
-            kernel,
-            laplacian,
+            name=name,
+            layer=layer,
+            lambda_info=lambda_info,
+            vortices=tuple(vortices),
+            interior_indices=interior_indices,
+            boundary_indices=boundary_indices,
+            hole_indices=hole_indices,
+            in_hole=in_hole,
+            circulating_currents=circulating_currents,
+            weights=weights,
+            kernel=kernel,
+            laplacian=laplacian,
             gradient=gradient,
             terminal_currents=terminal_currents,
-            boundary_indices=boundary_indices,
         )
 
 
@@ -296,9 +294,13 @@ def make_film_info(
             grad_x = mesh.operators.gradient_x.toarray().astype(dtype, copy=False)
             grad_y = mesh.operators.gradient_y.toarray().astype(dtype, copy=False)
             grad = np.array([grad_x, grad_y])
-        boundary_indices = None
         if name in device.terminals:
             boundary_indices = device.boundary_vertices(name)
+        else:
+            boundary_indices = mesh.boundary_indices
+        interior_indices = np.setdiff1d(
+            film.contains_points(mesh.sites, index=True), boundary_indices
+        )
         term_currents = None
         if name in terminal_currents:
             term_currents = terminal_currents[name]
@@ -307,7 +309,8 @@ def make_film_info(
             layer=layer.name,
             lambda_info=lambda_info,
             vortices=vortices_by_film[name],
-            film_indices=film.contains_points(mesh.sites, index=True),
+            interior_indices=interior_indices,
+            boundary_indices=boundary_indices,
             hole_indices=hole_indices,
             in_hole=in_hole,
             circulating_currents=circ_currents,
@@ -316,7 +319,6 @@ def make_film_info(
             kernel=Q,
             gradient=grad,
             laplacian=laplacian,
-            boundary_indices=boundary_indices,
         )
     return film_info
 
