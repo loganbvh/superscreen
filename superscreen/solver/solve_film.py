@@ -170,7 +170,7 @@ def factorize_linear_systems(
     terminal_systems = {}
     for film_name, film_info in film_info_dict.items():
         hole_systems[film_name] = {}
-        film_indices = film_info.film_indices
+        interior_indices = film_info.interior_indices
         boundary_indices = film_info.boundary_indices
         hole_indices = film_info.hole_indices
         Lambda_info = film_info.lambda_info
@@ -224,7 +224,6 @@ def factorize_linear_systems(
                 grad_Lambda_term=grad_Lambda_term,
             )
             # Make the film interior linear system (including holes)
-            interior_indices = np.setdiff1d(film_indices, boundary_indices)
             A = make_system_2d(interior_indices, terminal_Lambda)
             film_without_boundary_system = LinearSystem(
                 A=A,
@@ -266,7 +265,6 @@ def factorize_linear_systems(
         # gf = -K @ h, where K = inv(Q * w - Lambda * Del2 - grad_Lambda_term) = inv(A)
         # Eqs. 15-17 in [Brandt], Eqs 12-14 in [Kirtley1], Eqs. 12-14 in [Kirtley2].
         # We want all points that are in a film and not in a hole.
-        interior_indices = film_indices
         if hole_indices:
             interior_indices = np.setdiff1d(
                 interior_indices, np.concatenate(list(hole_indices.values()))
