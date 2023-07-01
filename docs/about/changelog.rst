@@ -35,7 +35,7 @@ Version 0.9.0
 
 Release date: 2023-05-16
 
-``SuperScreen`` ``v0.9.0`` is a significant update indented to improve the CPU/memory efficiency and ergonomics of the package.
+``SuperScreen`` ``v0.9.0`` is a significant update intended to improve the CPU/memory efficiency and ergonomics of the package.
 The major upgrades are contained in the following Pull Requests: `#96 <https://github.com/loganbvh/superscreen/pull/96>`_,
 `#99 <https://github.com/loganbvh/superscreen/pull/99>`_.
 
