@@ -85,6 +85,7 @@ class FactorizedModel:
         terminal_currents: A dict of ``{film_name: {terminal_name: terminal_current}}``
         circulating_currents: A dict of ``{hole_name: circulating_current}``
         vortices: A dict of ``{film_name: vortices}``
+        current_units: str
     """
 
     device: Device
@@ -95,6 +96,7 @@ class FactorizedModel:
     terminal_currents: Dict[str, Dict[str, float]]
     circulating_currents: Dict[str, float]
     vortices: Dict[str, Sequence[Vortex]]
+    current_units: str
 
     def to_hdf5(self, h5group: h5py.Group) -> None:
         """Save a :class:`superscreen.FactorizedModel` to an :class:`h5py.Group`.
@@ -102,6 +104,7 @@ class FactorizedModel:
         Args:
             h5group: The :class:`h5py.Group` in which to save the model
         """
+        h5group.attrs["current_units"] = self.current_units
         self.device.to_hdf5(h5group.create_group("device"))
         film_info_grp = h5group.create_group("film_info")
         for film, info in self.film_info.items():
@@ -137,6 +140,7 @@ class FactorizedModel:
         Returns:
             The loaded :class:`superscreen.FactorizedModel`
         """
+        current_units = h5group.attrs["current_units"]
         device = Device.from_hdf5(h5group["device"])
         film_info = {
             film: FilmInfo.from_hdf5(grp) for film, grp in h5group["film_info"].items()
@@ -171,7 +175,30 @@ class FactorizedModel:
             terminal_currents=terminal_currents,
             circulating_currents=circulating_currents,
             vortices=vortices,
+            current_units=current_units,
         )
+
+    def set_circulating_currents(self, circulating_currents: Dict[str, float]) -> None:
+        """Set the circulating currents for the model.
+
+        Args:
+            circulating_currents: A dict of ``{hole_name: current}``, where ``current``
+                is a float in units of ``self.current_units``.
+        """
+        diff = set(circulating_currents) - set(self.device.holes)
+        if diff:
+            raise KeyError(
+                "circulating_currents contains keys not in"
+                f" self.device.holes: {list(diff)!r}"
+            )
+        self.circulating_currents = circulating_currents.copy()
+        holes_by_film = self.device.holes_by_film()
+        for film_name, film_info in self.film_info.items():
+            holes = [hole.name for hole in holes_by_film[film_name]]
+            film_info.circulating_currents = {}
+            for hole, current in self.circulating_currents.items():
+                if hole in holes:
+                    film_info.circulating_currents[hole] = current
 
 
 def factorize_model(
@@ -237,6 +264,7 @@ def factorize_model(
         terminal_currents,
         circulating_currents,
         vortices,
+        current_units,
     )
 
 
@@ -321,10 +349,11 @@ def solve(
         or terminal_currents is not None
         or circulating_currents is not None
         or vortices is not None
+        or current_units is not None
     ):
         raise ValueError(
             "If model argument is provided, device, terminal_currents,"
-            " circulating_currents, and vortices must be None."
+            " circulating_currents, vortices, and current_units must be None."
         )
 
     if not isinstance(model, FactorizedModel):
@@ -340,6 +369,7 @@ def solve(
     terminal_currents = model.terminal_currents
     circulating_currents = model.circulating_currents
     vortices = model.vortices
+    current_units = model.current_units
 
     if not device.meshes:
         raise ValueError(
