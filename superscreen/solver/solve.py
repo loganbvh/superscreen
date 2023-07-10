@@ -344,17 +344,22 @@ def solve(
             circulating_currents=circulating_currents,
             vortices=vortices,
         )
-    elif (
-        device is not None
-        or terminal_currents is not None
-        or circulating_currents is not None
-        or vortices is not None
-        or current_units is not None
-    ):
-        raise ValueError(
-            "If model argument is provided, device, terminal_currents,"
-            " circulating_currents, vortices, and current_units must be None."
-        )
+    else:
+        if (
+            device is not None
+            or terminal_currents is not None
+            or circulating_currents is not None
+            or vortices is not None
+        ):
+            raise ValueError(
+                "If model argument is provided, device, terminal_currents,"
+                " circulating_currents, and vortices must be None."
+            )
+        if current_units is not None:
+            logger.warning(
+                "Keyword argument 'current_units' is ignored when"
+                "a factorized model is provided."
+            )
 
     if not isinstance(model, FactorizedModel):
         raise TypeError(
