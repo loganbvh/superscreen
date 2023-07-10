@@ -351,9 +351,8 @@ def gradient_vertices(
         areas = triangle_areas(points, triangles)
     n = len(points)
     Gx, Gy = gradient_triangles(points, triangles, areas=areas)
-    # Use numpy arrays for fast slicing even though the operators are sparse.
-    Gx = Gx.toarray()
-    Gy = Gy.toarray()
+    Gx = Gx.asformat("lil")
+    Gy = Gy.asformat("lil")
     gx = sp.lil_array((n, n), dtype=float)
     gy = sp.lil_array((n, n), dtype=float)
     # This loop is difficult to vectorize because different vertices
@@ -369,8 +368,8 @@ def gradient_vertices(
             / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
         )
         weights /= weights.sum()
-        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[adj, :])
-        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[adj, :])
+        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[adj, :].toarray())
+        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[adj, :].toarray())
     return gx.asformat("csr"), gy.asformat("csr")
 
 
