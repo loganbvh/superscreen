@@ -12,6 +12,7 @@ from IPython.display import HTML
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
 from shapely import geometry as geo
+from tqdm import tqdm
 
 from .. import fem
 from ..geometry import ensure_unique
@@ -600,7 +601,9 @@ class Device:
             for hole in holes:
                 films_by_hole[hole.name] = film
         model = None
-        for j, hole_name in enumerate(hole_polygon_mapping):
+        for j, hole_name in enumerate(
+            tqdm(hole_polygon_mapping, desc="Holes", disable=n_holes < 2)
+        ):
             logger.info(
                 f"Evaluating {self.name!r} mutual inductance matrix "
                 f"column ({j+1}/{len(hole_polygon_mapping)}), "
