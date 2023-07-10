@@ -98,6 +98,29 @@ def adjacency_matrix(
     return adj.toarray()
 
 
+def adj_directed_tri_indices(triangles: np.ndarray, num_sites: int) -> sp.csc_array:
+    """Construct the directed adjacency matrix.
+
+    Each element (i, j) represents an edge in the mesh, and the value at (i, j)
+    is 1 + the index of a triangle containing that edge.
+
+    Args:
+        triangles: The triangle indices, shape ``(m, 3)``
+        num_sites: The number of sites in the mesh
+
+    Returns:
+        A directed adjacency matrix containing triangle indices + 1
+    """
+    t0 = triangles[:, 0]
+    t1 = triangles[:, 1]
+    t2 = triangles[:, 2]
+    i = np.column_stack([t0, t1, t2]).ravel()
+    j = np.column_stack([t1, t2, t0]).ravel()
+    # store triangle index + 1 (zero means no edge connecting i and j)
+    data = np.repeat(np.arange(1, triangles.shape[0] + 1), 3)
+    return sp.csc_array((data, (i, j)), shape=(num_sites, num_sites))
+
+
 def weights_inv_euclidean(
     points: np.ndarray, triangles: np.ndarray, sparse: bool = True
 ) -> Union[np.ndarray, sp.lil_array]:
@@ -351,16 +374,16 @@ def gradient_vertices(
         areas = triangle_areas(points, triangles)
     n = len(points)
     Gx, Gy = gradient_triangles(points, triangles, areas=areas)
-    # Use numpy arrays for fast slicing even though the operators are sparse.
-    Gx = Gx.toarray()
-    Gy = Gy.toarray()
+    Gx = Gx.tolil()
+    Gy = Gy.tolil()
     gx = sp.lil_array((n, n), dtype=float)
     gy = sp.lil_array((n, n), dtype=float)
     # This loop is difficult to vectorize because different vertices
     # have different numbers of adjacent triangles.
+    adj_tri = adj_directed_tri_indices(triangles, n).tolil()
     for i in range(n):
         # Triangles adjacent to site i
-        adj = np.where((triangles == i).any(axis=1))[0]
+        adj = np.array(adj_tri.data[i]) - 1
         # Weight each triangle adjacent to vertex i by its angle at the vertex.
         vec1 = points[triangles[adj, 1]] - points[triangles[adj, 0]]
         vec2 = points[triangles[adj, 2]] - points[triangles[adj, 0]]
@@ -369,8 +392,8 @@ def gradient_vertices(
             / (la.norm(vec1, axis=1) * la.norm(vec2, axis=1))
         )
         weights /= weights.sum()
-        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[adj, :])
-        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[adj, :])
+        gx[i, :] = np.einsum("i, ij -> j", weights, Gx[adj, :].toarray())
+        gy[i, :] = np.einsum("i, ij -> j", weights, Gy[adj, :].toarray())
     return gx.asformat("csr"), gy.asformat("csr")
 
 

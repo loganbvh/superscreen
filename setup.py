@@ -56,7 +56,7 @@ EXTRAS_REQUIRE = {
         "pre-commit",
     ],
     "docs": [
-        "sphinx",
+        "sphinx<7",
         "sphinx_rtd_theme",
         "sphinx-autodoc-typehints",
         "nbsphinx",

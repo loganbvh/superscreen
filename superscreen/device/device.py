@@ -12,6 +12,7 @@ from IPython.display import HTML
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path
 from shapely import geometry as geo
+from tqdm import tqdm
 
 from .. import fem
 from ..geometry import ensure_unique
@@ -567,7 +568,7 @@ class Device:
             length of the list is ``1`` if the device has a single layer, or
             ``iterations + 1`` if the device has multiple layers.
         """
-        from ..solver import solve
+        from ..solver import factorize_model, solve
 
         holes = self.holes
         if hole_polygon_mapping is None:
@@ -585,6 +586,7 @@ class Device:
                     f"within the given polygon."
                 )
         iterations = solve_kwargs.get("iterations", 1)
+        solve_kwargs["current_units"] = None
         # The magnitude of this current is not important
         I_circ = self.ureg("1 mA")
         if all_iterations:
@@ -594,21 +596,30 @@ class Device:
             n_iter = 1
             solution_slice = slice(-1, None)
         mutual_inductance = np.zeros((n_iter, n_holes, n_holes))
-        for j, hole_name in enumerate(hole_polygon_mapping):
+        films_by_hole = {}
+        for film, holes in self.holes_by_film().items():
+            for hole in holes:
+                films_by_hole[hole.name] = film
+        model = None
+        for j, hole_name in enumerate(
+            tqdm(hole_polygon_mapping, desc="Holes", disable=n_holes < 2)
+        ):
             logger.info(
                 f"Evaluating {self.name!r} mutual inductance matrix "
                 f"column ({j+1}/{len(hole_polygon_mapping)}), "
                 f"source = {hole_name!r}."
             )
-            solutions = solve(
-                device=self,
-                circulating_currents={hole_name: str(I_circ)},
-                **solve_kwargs,
-            )[solution_slice]
-            films_by_hole = {}
-            for film, holes in self.holes_by_film().items():
-                for hole in holes:
-                    films_by_hole[hole.name] = film
+            if model is None:
+                model = factorize_model(
+                    device=self,
+                    current_units="mA",
+                    circulating_currents={hole_name: str(I_circ)},
+                )
+                I_circ_val = model.circulating_currents[hole_name]
+            else:
+                model.set_circulating_currents({hole_name: I_circ_val})
+            solutions = solve(device=None, model=model, **solve_kwargs)[solution_slice]
+
             for n, solution in enumerate(solutions):
                 logger.info(
                     f"Evaluating fluxoids for solution {n + 1}/{len(solutions)}."
