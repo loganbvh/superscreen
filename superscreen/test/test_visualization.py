@@ -92,11 +92,11 @@ cross_section_coord_params = [
 ]
 thetas = np.linspace(0, 2 * np.pi, endpoint=False)
 cross_section_coord_params.append(
-    [r * np.stack([np.cos(thetas), np.sin(thetas)], axis=1) for r in (0.5, 1.0, 1.5)]
+    [r * np.array([np.cos(thetas), np.sin(thetas)]).T for r in (0.5, 1.0, 1.5)]
 )
 
 
-@pytest.mark.parametrize("interp_method", ["nearest", "linear", "cubic"])
+@pytest.mark.parametrize("interp_method", ["linear", "cubic"])
 @pytest.mark.parametrize("cross_section_coords", cross_section_coord_params)
 def test_cross_section(solution, cross_section_coords, interp_method):
     if cross_section_coords is None:

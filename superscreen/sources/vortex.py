@@ -166,9 +166,9 @@ def pearl_vortex(
     hzk = np.fft.fftshift(hzk)
     hz = np.abs(np.fft.fftshift(np.fft.ifft2(hzk))) / (dx * dy)
     # Interpolate to x, y, z coordinates
-    XY = np.stack([X.ravel(), Y.ravel()], axis=1)
+    XY = np.array([X.ravel(), Y.ravel()]).T
     interp = LinearNDInterpolator(XY, hz.ravel())
-    return interp(np.stack([x, y], axis=1)).squeeze()
+    return interp(np.array([x, y]).T).squeeze()
 
 
 def PearlVortexField(
