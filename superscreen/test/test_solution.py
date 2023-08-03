@@ -236,7 +236,7 @@ def test_fluxoid_simply_connected(
 @pytest.mark.parametrize(
     "film, method, positions",
     [
-        ("disk", "nearest", [0, 0]),
+        ("disk", "linear", [0, 0]),
         ("ring", "linear", np.array([[1, 0], [0, 1]])),
         ("disk", "cubic", None),
     ],
@@ -340,7 +340,7 @@ def test_bz_from_vector_potential(
 
 @pytest.mark.parametrize("units", [None, "mT", "mA/um"])
 @pytest.mark.parametrize("with_units", [False, True])
-@pytest.mark.parametrize("method", ["nearest", "linear", "cubic"])
+@pytest.mark.parametrize("method", ["linear", "cubic"])
 def test_interp_field(solution2: sc.Solution, units, with_units, method):
     solution = solution2
     positions = np.random.random(size=(100, 2))

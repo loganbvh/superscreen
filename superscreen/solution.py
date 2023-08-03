@@ -18,9 +18,9 @@ from typing import (
 
 import h5py
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 import numpy as np
 import pint
-from scipy import interpolate
 
 from .about import version_dict
 from .device import Device, Polygon
@@ -33,7 +33,7 @@ from .sources.current import biot_savart_2d
 
 logger = logging.getLogger("solution")
 
-InterpolatorType = Literal["nearest", "linear", "cubic"]
+InterpolatorType = Literal["linear", "cubic"]
 
 
 class Fluxoid(NamedTuple):
@@ -271,9 +271,8 @@ class Solution:
     @staticmethod
     def _select_interpolator(method: InterpolatorType) -> type:
         return {
-            "nearest": interpolate.NearestNDInterpolator,
-            "linear": interpolate.LinearNDInterpolator,
-            "cubic": interpolate.CloughTocher2DInterpolator,
+            "linear": mtri.LinearTriInterpolator,
+            "cubic": mtri.CubicTriInterpolator,
         }[method]
 
     def interp_current_density(
@@ -284,20 +283,14 @@ class Solution:
         method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
-        **kwargs,
     ) -> np.ndarray:
         """Interpolates the current density ``J = [dg/dy, -dg/dx]`` within a film.
-
-        Additional keyword arguments are passed to the relevant interpolator:
-        :class:`scipy.interpolate.NearestNDInterpolator`,
-        :class:`scipy.interpolate.LinearNDInterpolator`, or
-        :class:`scipy.interpolate.CloughTocher2DInterpolator`.
 
         Args:
             positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
                 the current density.
             film: The name of the film in which to interpolate current density.
-            method: Interpolation method to use ("nearest", "linear" or "cubic").
+            method: Interpolation method to use ("linear" or "cubic").
             units: The desired units for the current density. Defaults to
                 ``self.current_units / self.device.length_units``.
             with_units: Whether to return arrays of pint.Quantities with units attached.
@@ -310,12 +303,13 @@ class Solution:
         if units is None:
             units = default_units
         positions = np.atleast_2d(positions)
-        interpolator = self._select_interpolator(method)
-        xy = device.meshes[film].sites
+        xv, yv = positions.T
+        interp_type = self._select_interpolator(method)
+        mesh = device.meshes[film]
         J = self.film_solutions[film].current_density
-        Jx_interp = interpolator(xy, J[:, 0], **kwargs)
-        Jy_interp = interpolator(xy, J[:, 1], **kwargs)
-        J = np.stack([Jx_interp(positions), Jy_interp(positions)], axis=1)
+        Jx_interp = interp_type(mesh.triangulation, J[:, 0])
+        Jy_interp = interp_type(mesh.triangulation, J[:, 1])
+        J = np.array([Jx_interp(xv, yv).data, Jy_interp(xv, yv).data]).T
         in_film = device.films[film].contains_points(positions)
         J[~in_film] = 0
         J[~np.isfinite(J).all(axis=1)] = 0
@@ -339,7 +333,7 @@ class Solution:
             path_coords: An ``(n, 2)`` array of ``(x, y)`` coordinates defining
                 the path.
             film: The name of the film in which to interpolate current density.
-            interp_method: Interpolation method to use ("nearest", "linear" or "cubic").
+            interp_method: Interpolation method to use ("linear" or "cubic").
             units: The current units to return.
             with_units: Whether to return a :class:`pint.Quantity` with units attached.
 
@@ -378,14 +372,8 @@ class Solution:
         method: InterpolatorType = "linear",
         units: Optional[str] = None,
         with_units: bool = False,
-        **kwargs,
     ):
         """Interpolates the z-component of the field within a film.
-
-        Additional keyword arguments are passed to the relevant interpolator:
-        :class:`scipy.interpolate.NearestNDInterpolator`,
-        :class:`scipy.interpolate.LinearNDInterpolator`, or
-        :class:`scipy.interpolate.CloughTocher2DInterpolator`.
 
         Args:
             positions: Shape ``(m, 2)`` array of x, y coordinates at which to evaluate
@@ -393,7 +381,7 @@ class Solution:
             film: The name of the film in which to interpolate the field.
             dataset: The dataset to interpolate. One of 'field', 'self_field',
                 'applied_field', or 'field_from_other_films'.
-            method: Interpolation method to use: 'nearest', 'linear', or 'cubic'.
+            method: Interpolation method to use: 'linear' or 'cubic'.
             units: The desired units for the current density. Defaults to
                 ``self.field_units``.
             with_units: Whether to return arrays of pint.Quantities with units attached.
@@ -403,7 +391,7 @@ class Solution:
         """
         from .solver import convert_field
 
-        interpolator = self._select_interpolator(method)
+        interp_type = self._select_interpolator(method)
         device = self.device
         if units is None:
             units = self.field_units
@@ -413,7 +401,7 @@ class Solution:
             "applied_field",
             "field_from_other_films",
         )
-        points = self.device.meshes[film].sites
+        mesh = self.device.meshes[film]
         if dataset not in valid_datasets:
             raise ValueError(
                 f"Invalid dataset: {dataset!r}. Expected one of {valid_datasets!r}"
@@ -427,11 +415,11 @@ class Solution:
         else:
             field = self.film_solutions[film].field_from_other_films
             if field is None:
-                field = np.zeros(len(points))
+                field = np.zeros(len(mesh.sites))
         positions = np.atleast_2d(positions)
-        Hz_interp = interpolator(points, field, **kwargs)
+        Hz_interp = interp_type(mesh.triangulation, field)
         Hz = convert_field(
-            Hz_interp(positions),
+            Hz_interp(positions[:, 0], positions[:, 1]).data,
             units,
             old_units=self.field_units,
             ureg=device.ureg,

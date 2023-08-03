@@ -219,24 +219,22 @@ def cross_section(
         cross_section_coords: A shape (m, 2) array of (x, y) coordinates specifying
             the cross-section path (or a list of such arrays for multiple
             cross sections).
-        interp_method: The interpolation method to use: "nearest", "linear", "cubic".
+        interp_method: The interpolation method to use: "linear" or "cubic".
 
     Returns:
         A list of coordinate arrays, a list of curvilinear coordinate (path) arrays,
         and a list of cross section values.
     """
-    valid_methods = ("nearest", "linear", "cubic")
+    valid_methods = ("linear", "cubic")
     if interp_method not in valid_methods:
         raise ValueError(
             f"Interpolation method must be one of {valid_methods} "
             f"(got {interp_method})."
         )
-    if interp_method == "nearest":
-        interpolator = interpolate.NearestNDInterpolator
-    elif interp_method == "linear":
-        interpolator = interpolate.LinearNDInterpolator
-    else:  # "cubic"
-        interpolator = interpolate.CloughTocher2DInterpolator
+    interpolator = {
+        "linear": interpolate.LinearNDInterpolator,
+        "cubic": interpolate.CloughTocher2DInterpolator,
+    }[interp_method]
 
     if not (isinstance(cross_section_coords, Sequence)):
         cross_section_coords = [cross_section_coords]

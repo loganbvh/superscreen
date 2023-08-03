@@ -6,6 +6,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
+from matplotlib.tri import Triangulation
 
 from ..distance import q_matrix
 from ..fem import gradient_vertices, laplace_operator
@@ -51,8 +52,18 @@ class Mesh:
         self.triangle_areas = np.asarray(triangle_areas)
         self.edge_mesh = edge_mesh
         self.operators: Optional[MeshOperators] = None
+        self._triangulation: Optional[Triangulation] = None
         if build_operators:
             self.operators = MeshOperators.from_mesh(self)
+
+    @property
+    def triangulation(self) -> Triangulation:
+        """Matplotlib triangulation of the mesh."""
+        if self._triangulation is None:
+            self._triangulation = Triangulation(
+                self.sites[:, 0], self.sites[:, 1], self.elements
+            )
+        return self._triangulation
 
     def stats(self) -> Dict[str, Union[int, float]]:
         """Returns a dictionary of information about the mesh."""
