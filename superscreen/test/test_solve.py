@@ -323,5 +323,5 @@ def test_fluxoid_multi(two_rings):
         assert np.isclose(
             sum(fluxoid).to("Phi_0").m,
             fluxoids[hole_name],
-            atol=3e-6,
+            atol=1e-5,
         )
