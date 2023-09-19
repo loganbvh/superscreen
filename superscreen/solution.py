@@ -680,7 +680,10 @@ class Solution:
         # Compute the fields at the specified positions from the currents in each film
         for name, film in device.films.items():
             layer = layers[film.layer]
-            field_from_film = np.zeros(len(positions), dtype=dtype)
+            if vector:
+                field_from_film = np.array([zeros, zeros, zeros]).T
+            else:
+                field_from_film = np.zeros(len(positions), dtype=dtype)
             in_film = np.zeros(len(positions), dtype=bool)
             if np.all(zs == layer.z0):
                 # Evaluate the screening field within a film.
