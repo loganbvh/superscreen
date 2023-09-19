@@ -672,16 +672,12 @@ class Solution:
         if not isinstance(zs, np.ndarray):
             raise ValueError(f"Expected zs to be an ndarray, but got {type(zs)}.")
 
-        fields = {}
-        shape = (len(positions),)
-        if vector:
-            shape = shape + (3,)
-            zeros = np.zeros(len(positions), dtype=dtype)
         # Compute the fields at the specified positions from the currents in each film
+        fields = {}
         for name, film in device.films.items():
             layer = layers[film.layer]
             if vector:
-                field_from_film = np.array([zeros, zeros, zeros]).T
+                field_from_film = np.zeros((len(positions), 3), dtype=dtype)
             else:
                 field_from_film = np.zeros(len(positions), dtype=dtype)
             in_film = np.zeros(len(positions), dtype=bool)
@@ -698,6 +694,7 @@ class Solution:
                 )
                 if vector:
                     # Make shape (m, 3)
+                    zeros = np.zeros_like(field_in_film)
                     field_in_film = np.array([zeros, zeros, field_in_film]).T
                 field_from_film[in_film] = field_in_film
             # Evaluate the screening field outside of any films.
