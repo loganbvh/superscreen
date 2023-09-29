@@ -19,6 +19,55 @@ View release history on `PyPI <https://pypi.org/project/superscreen/#history>`_,
 
 ----
 
+Version 0.10.2
+--------------
+
+Release date: 2023-09-19
+
+Changes
+=======
+
+- Fixed a bug in ``Solution.screening_field_at_position()`` (`#106 <https://github.com/loganbvh/superscreen/pull/106>`_)
+
+----
+
+Version 0.10.1
+--------------
+
+Release date: 2023-09-08
+
+Changes
+=======
+
+- Fixed a bug in ``Polygon.resample()`` (`#105 <https://github.com/loganbvh/superscreen/pull/105>`_)
+
+----
+
+Version 0.10.0
+--------------
+
+Release date: 2023-08-03
+
+Changes
+=======
+
+- Use matplotlib tri interpolators instead of scipy (`#104 <https://github.com/loganbvh/superscreen/pull/104>`_)
+
+----
+
+Version 0.9.2
+-------------
+
+Release date: 2023-07-10
+
+Changes
+=======
+
+- Constrain the stream function on mesh boundary (`#102 <https://github.com/loganbvh/superscreen/pull/102>`_)
+- Use less memory in ``gradient_vertices`` (`#103 <https://github.com/loganbvh/superscreen/pull/103>`_)
+
+----
+
 Version 0.9.1
 -------------
 
@@ -29,6 +78,7 @@ Changes
 
 - Don't build ``MeshOperators`` by default in :meth:`superscreen.Polygon.make_mesh` (`#101 <https://github.com/loganbvh/superscreen/pull/101>`_)
 
+----
 
 Version 0.9.0
 -------------
@@ -82,6 +132,7 @@ Changes
 
   - Added support for Python 3.11, which was being blocked by the dependency on ``ray``.
 
+----
 
 Version 0.8.2
 -------------
@@ -92,8 +143,9 @@ Changes
 =======
 
 - Added Python 3.10 support (`#93 <https://github.com/loganbvh/superscreen/pull/93>`_)
-- Removed ``cdist_batched()``, which was added in ``v0.8.1`` and had a bug(`#95 <https://github.com/loganbvh/superscreen/pull/95>`_)
+- Removed ``cdist_batched()``, which was added in ``v0.8.1`` and had a bug (`#95 <https://github.com/loganbvh/superscreen/pull/95>`_)
 
+----
 
 Version 0.8.1
 -------------
@@ -105,6 +157,8 @@ Changes
 
 - Evaluating the magnetic field within a ``Layer`` is no longer supported in :meth:`superscreen.Solution.field_at_position`
   and must be done using :meth:`superscreen.Solution.interp_fields` (`#91 <https://github.com/loganbvh/superscreen/pull/91>`_).
+
+----
 
 Version 0.8.0
 -------------
@@ -118,6 +172,7 @@ Changes
 
   - :meth:`superscreen.Device.make_mesh` and :meth:`superscreen.Polygon.make_mesh` now take an integer argument, ``smooth``, which specifies the number of Laplacian mesh smoothing iterations to perform.
 
+----
 
 Version 0.7.0
 -------------
@@ -137,6 +192,8 @@ Changes
   which is much more efficient than the previous least-squares method, especially for multiple holes
   (`#78 <https://github.com/loganbvh/superscreen/pull/78>`_).
 
+----
+
 Version 0.6.1
 -------------
 
@@ -147,6 +204,8 @@ Changes
 
 - Fixed an off-by-one error in the :math:`k`-space coordinates used to
   calculate the field from a Pearl vortex in :meth:`superscreen.sources.pearl_vortex` (`#74 <https://github.com/loganbvh/superscreen/pull/74>`_).
+
+----
 
 Version 0.6.0
 -------------
