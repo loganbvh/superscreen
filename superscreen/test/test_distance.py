@@ -35,12 +35,3 @@ def test_cdist(metric, dtype, ndim):
     dist_sc = sc.distance.cdist(XA, XB, metric=metric)
     dist_sp = scipy.spatial.distance.cdist(XA, XB, metric=metric)
     assert np.allclose(dist_sc, dist_sp)
-
-
-@pytest.mark.parametrize("dtype", ("float64", "float32"))
-def test_pairwise_difference(dtype):
-    XA = np.random.random(400).astype(dtype)
-    XB = np.random.random(777).astype(dtype)
-    diff_sc = sc.distance.pairwise_difference(XA, XB)
-    diff_np = np.subtract.outer(XA, XB)
-    assert np.allclose(diff_sc, diff_np)
