@@ -357,7 +357,7 @@ def solve(
             )
         if current_units is not None:
             logger.warning(
-                "Keyword argument 'current_units' is ignored when"
+                "Keyword argument 'current_units' is ignored when "
                 "a factorized model is provided."
             )
 
