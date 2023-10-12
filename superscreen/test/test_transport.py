@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 import h5py
 import numpy as np
 import pytest
@@ -179,6 +182,12 @@ def test_multi_terminal_currents(plus_device, applied_field):
         current_units="uA",
         field_units="uT",
     )[-1]
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        path = os.path.join(tempdir, "solution.h5")
+        solution.to_hdf5(path)
+        loaded_solution = sc.Solution.from_hdf5(path)
+        assert loaded_solution == solution
 
     currents = []
     for coords in sections:

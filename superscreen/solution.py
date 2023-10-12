@@ -974,7 +974,9 @@ class Solution:
             circ_grp = h5group.create_group("circulating_currents")
             circ_grp.attrs.update(self.circulating_currents)
             term_grp = h5group.create_group("terminal_currents")
-            term_grp.attrs.update(self.terminal_currents)
+            for film_name, current_dict in self.terminal_currents.items():
+                grp = term_grp.create_group(film_name)
+                grp.attrs.update(current_dict)
 
     @staticmethod
     def from_hdf5(
@@ -1005,13 +1007,17 @@ class Solution:
             time_created = dt.datetime.fromisoformat(h5group.attrs["time_created"])
             version_info = dict(h5group["version_info"].attrs)
 
+            terminal_currents = {}
+            for film_name, grp in h5group["terminal_currents"].items():
+                terminal_currents[film_name] = dict(grp.attrs)
+
             solution = Solution(
                 device=device,
                 film_solutions=film_solutions,
                 applied_field_func=applied_field_func,
                 vortices=vortices,
                 circulating_currents=dict(h5group["circulating_currents"].attrs),
-                terminal_currents=dict(h5group["terminal_currents"].attrs),
+                terminal_currents=terminal_currents,
                 current_units=h5group.attrs["current_units"],
                 field_units=h5group.attrs["field_units"],
                 solver=h5group.attrs["solver"],
