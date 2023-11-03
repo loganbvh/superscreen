@@ -357,7 +357,7 @@ def solve(
                 "If model argument is provided, device, terminal_currents,"
                 " circulating_currents, and vortices must be None."
             )
-        if current_units is not None:
+        if current_units is not None and current_units != model.current_units:
             logger.warning(
                 "Keyword argument 'current_units' is ignored when "
                 "a factorized model is provided."
