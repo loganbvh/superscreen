@@ -285,6 +285,7 @@ def solve(
     return_solutions: bool = True,
     save_path: Optional[os.PathLike] = None,
     log_level: Optional[int] = None,
+    progress_bar: bool = True,
     _solver: str = "superscreen.solve",
 ) -> List[Solution]:
     """Computes the stream functions and magnetic fields for all layers in a ``Device``.
@@ -323,6 +324,7 @@ def solve(
         return_solutions: Whether to return a list of Solution objects.
         save_path: Path to an HDF5 file in which to save the results.
         log_level: Logging level to use, if any.
+        progress_bar: Show a progress bar for self-consistent iterations.
         _solver: Name of the solver method used.
 
     Returns:
@@ -355,10 +357,11 @@ def solve(
                 "If model argument is provided, device, terminal_currents,"
                 " circulating_currents, and vortices must be None."
             )
-        if current_units is not None:
+        if current_units is not None and current_units != model.current_units:
             logger.warning(
                 "Keyword argument 'current_units' is ignored when "
-                "a factorized model is provided."
+                "a factorized model is provided. "
+                f"Using model.current_units = {model.current_units!r}"
             )
 
     if not isinstance(model, FactorizedModel):
@@ -460,7 +463,9 @@ def solve(
             return solutions
         return
 
-    for i in tqdm(range(iterations), desc="Solver iterations"):
+    for i in tqdm(
+        range(iterations), desc="Solver iterations", disable=(not progress_bar)
+    ):
         # Calculate the screening fields at each layer from every other layer
         other_screening_fields = {
             name: np.zeros(len(mesh.sites), dtype=dtype)
