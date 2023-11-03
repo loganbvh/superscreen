@@ -360,7 +360,8 @@ def solve(
         if current_units is not None and current_units != model.current_units:
             logger.warning(
                 "Keyword argument 'current_units' is ignored when "
-                "a factorized model is provided."
+                "a factorized model is provided. "
+                f"Using model.current_units = {model.current_units!r}"
             )
 
     if not isinstance(model, FactorizedModel):
