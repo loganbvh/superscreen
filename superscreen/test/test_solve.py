@@ -325,3 +325,14 @@ def test_fluxoid_multi(two_rings):
             fluxoids[hole_name],
             atol=1e-5,
         )
+
+
+def test_applied_field_shape(device: sc.Device):
+    dipole_field = sc.sources.DipoleField(
+        dipole_positions=[(0, 0, 1000)],
+        dipole_moments=[(0, 0, 100000)],
+        moment_units="uA * um ** 2",
+        length_units="um",
+    )
+    with pytest.raises(ValueError):
+        _ = sc.solve(device=device, applied_field=dipole_field)
