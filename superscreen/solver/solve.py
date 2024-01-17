@@ -411,8 +411,8 @@ def solve(
         ).astype(dtype, copy=False)
         if Hz_applied.ndim != 1:
             raise ValueError(
-                "Unexpected shape for applied field."
-                f" Expected 1D array, got shape {Hz_applied.shape}"
+                "Expected applied_field to return a 1D vector,"
+                f" got a {Hz_applied.shape[1]}D vector."
             )
         applied_fields[film] = Hz_applied
 
