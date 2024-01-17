@@ -405,10 +405,16 @@ def solve(
         layer = device.layers[film_info[film].layer]
         z0 = layer.z0 * np.ones(len(mesh.sites))
         # Units: current_units / device.length_units
-        applied_fields[film] = (
+        Hz_applied = np.squeeze(
             applied_field(mesh.sites[:, 0], mesh.sites[:, 1], z0)
             * field_conversion.magnitude
         ).astype(dtype, copy=False)
+        if Hz_applied.ndim != 1:
+            raise ValueError(
+                "Unexpected shape for applied field."
+                f" Expected 1D array, got shape {Hz_applied.shape}"
+            )
+        applied_fields[film] = Hz_applied
 
     # Vortex flux in magnetization-like units,
     # i.e. H * area as opposed to B * area = mu_0 * H * area.
