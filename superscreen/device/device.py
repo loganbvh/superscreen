@@ -539,6 +539,7 @@ class Device:
         hole_polygon_mapping: Optional[Dict[str, np.ndarray]] = None,
         units: str = "pH",
         all_iterations: bool = False,
+        progress_bar: bool = False,
         **solve_kwargs,
     ) -> Union[np.ndarray, List[np.ndarray]]:
         """Calculates the mutual inductance matrix :math:`\\mathbf{M}` for the Device.
@@ -558,6 +559,7 @@ class Device:
             units: The units in which to report the mutual inductance.
             all_iterations: Whether to return mutual inductance matrices for all
                 ``iterations + 1`` solutions, or just the final solution.
+            progress_bar: Display a progress bar.
             solve_kwargs: Keyword arguments passed to :func:`superscreen.solve.solve`,
                 e.g. ``iterations``.
 
@@ -585,8 +587,10 @@ class Device:
                     f"Hole '{hole_name}' is not completely contained "
                     f"within the given polygon."
                 )
+        solve_kwargs = solve_kwargs.copy()
         iterations = solve_kwargs.get("iterations", 1)
         solve_kwargs["current_units"] = None
+        solve_kwargs["progress_bar"] = False
         # The magnitude of this current is not important
         I_circ = self.ureg("1 mA")
         if all_iterations:
@@ -602,7 +606,7 @@ class Device:
                 films_by_hole[hole.name] = film
         model = None
         for j, hole_name in enumerate(
-            tqdm(hole_polygon_mapping, desc="Holes", disable=n_holes < 2)
+            tqdm(hole_polygon_mapping, desc="Holes", disable=(not progress_bar))
         ):
             logger.info(
                 f"Evaluating {self.name!r} mutual inductance matrix "
