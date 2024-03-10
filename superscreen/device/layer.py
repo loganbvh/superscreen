@@ -1,3 +1,4 @@
+import numbers
 from copy import deepcopy
 from typing import Optional, Union
 
@@ -73,13 +74,13 @@ class Layer:
 
     def __repr__(self) -> str:
         Lambda = self.Lambda
-        if isinstance(Lambda, (int, float)):
+        if isinstance(Lambda, numbers.Real):
             Lambda = f"{Lambda:.3f}"
         d = self.thickness
-        if isinstance(d, (int, float)):
+        if isinstance(d, numbers.Real):
             d = f"{d:.3f}"
         london = self.london_lambda
-        if isinstance(london, (int, float)):
+        if isinstance(london, numbers.Real):
             london = f"{london:.3f}"
         return (
             f"{self.__class__.__name__}({self.name!r}, Lambda={Lambda}, "

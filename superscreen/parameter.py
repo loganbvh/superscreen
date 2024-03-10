@@ -1,4 +1,5 @@
 import inspect
+import numbers
 import operator
 from typing import Callable, Optional, Union
 
@@ -239,7 +240,7 @@ class CompositeParameter(Parameter):
                 f"Right must be a number, Parameter, or CompositeParameter, "
                 f"not {type(right)!r}."
             )
-        if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        if isinstance(left, numbers.Real) and isinstance(right, numbers.Real):
             raise TypeError(
                 "Either left or right must be a Parameter or CompositeParameter."
             )
@@ -261,11 +262,11 @@ class CompositeParameter(Parameter):
         y: Union[int, float, np.ndarray],
         z: Optional[Union[int, float, np.ndarray]] = None,
     ) -> Union[int, float, np.ndarray]:
-        if isinstance(self.left, (int, float)):
+        if isinstance(self.left, numbers.Real):
             left_val = self.left
         else:
             left_val = self.left(x, y, z)
-        if isinstance(self.right, (int, float)):
+        if isinstance(self.right, numbers.Real):
             right_val = self.right
         else:
             right_val = self.right(x, y, z)

@@ -1,4 +1,5 @@
 import logging
+import numbers
 import os
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
@@ -281,7 +282,7 @@ class Device:
         if not (
             isinstance(origin, tuple)
             and len(origin) == 2
-            and all(isinstance(val, (int, float)) for val in origin)
+            and all(isinstance(val, numbers.Real) for val in origin)
         ):
             raise TypeError("Origin must be a tuple of floats (x, y).")
         self._warn_if_mesh_exist("scale()")
@@ -304,7 +305,7 @@ class Device:
         if not (
             isinstance(origin, tuple)
             and len(origin) == 2
-            and all(isinstance(val, (int, float)) for val in origin)
+            and all(isinstance(val, numbers.Real) for val in origin)
         ):
             raise TypeError("Origin must be a tuple of floats (x, y).")
         self._warn_if_mesh_exist("rotate()")
@@ -364,7 +365,7 @@ class Device:
         return device
 
     @contextmanager
-    def translation(self, dx: float, dy: float, dz: float = 0) -> None:
+    def translation(self, dx: float, dy: float, dz: float = 0):
         """A context manager that temporarily translates a device in-place,
         then returns it to its original position.
 

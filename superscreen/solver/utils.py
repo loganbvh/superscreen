@@ -1,4 +1,5 @@
 import logging
+import numbers
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -247,7 +248,7 @@ def make_film_info(
         london_lambda = layer.london_lambda
         d = layer.thickness
         Lambda = layer.Lambda
-        if isinstance(london_lambda, (int, float)) and london_lambda <= d:
+        if isinstance(london_lambda, numbers.Real) and london_lambda <= d:
             length_units = device.ureg(device.length_units).units
             logger.info(
                 f"Layer {name!r}: The film thickness, d = {d:.4f} {length_units:~P},"
@@ -257,12 +258,12 @@ def make_film_info(
                 f" {length_units:~P}. The assumption that the current density is nearly"
                 f" constant over the thickness of the film may not be valid."
             )
-        if isinstance(Lambda, (int, float)):
+        if isinstance(Lambda, numbers.Real):
             Lambda = Constant(Lambda)
         Lambda = Lambda(mesh.sites[:, 0], mesh.sites[:, 1]).astype(dtype, copy=False)
         Lambda = Lambda[:, np.newaxis]
         if london_lambda is not None:
-            if isinstance(london_lambda, (int, float)):
+            if isinstance(london_lambda, numbers.Real):
                 london_lambda = Constant(london_lambda)
             london_lambda = london_lambda(mesh.sites[:, 0], mesh.sites[:, 1])
             london_lambda = london_lambda.astype(dtype, copy=False)[:, np.newaxis]
