@@ -456,6 +456,7 @@ def solve_film(
         g[indices] += current  # g[hole] = I_circ
         Ha_eff += -(A @ g[indices])
 
+    g_transport = 0
     if film_info.name in device.terminals:
         g_transport = solve_for_terminal_current_stream(
             device,
@@ -497,7 +498,7 @@ def solve_film(
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     J = np.array([grad_y @ g, -(grad_x @ g)]).T
     # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = Q @ (weights * g)
+    screening_field = Q @ (weights * (g - g_transport))
     if field_from_other_films is not None:
         field_from_other_films = field_from_other_films / field_conversion
     return FilmSolution(
