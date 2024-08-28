@@ -1,3 +1,4 @@
+import copy
 import itertools
 import logging
 import os
@@ -200,6 +201,24 @@ class FactorizedModel:
                 if hole in holes:
                     film_info.circulating_currents[hole] = current
 
+    def set_vortices(self, vortices: Sequence[Vortex]) -> None:
+        """Set the vortices for the model.
+
+        Args:
+            vortices: A sequence of vortices.
+        """
+        for film in self.film_info.values():
+            film.vortices = []
+        for vortex in vortices:
+            self.film_info[vortex.film].vortices.append(vortex)
+        self.vortices = {}
+        for name, film in self.film_info.items():
+            film.vortices = tuple(film.vortices)
+            self.vortices[name] = film.vortices
+
+    def copy(self) -> "FactorizedModel":
+        return copy.copy(self)
+
 
 def factorize_model(
     *,
@@ -357,12 +376,12 @@ def solve(
                 "If model argument is provided, device, terminal_currents,"
                 " circulating_currents, and vortices must be None."
             )
-        if current_units is not None and current_units != model.current_units:
-            logger.warning(
-                "Keyword argument 'current_units' is ignored when "
-                "a factorized model is provided. "
-                f"Using model.current_units = {model.current_units!r}"
-            )
+        # if current_units is not None and current_units != model.current_units:
+        #     logger.warning(
+        #         "Keyword argument 'current_units' is ignored when "
+        #         "a factorized model is provided. "
+        #         f"Using model.current_units = {model.current_units!r}"
+        #     )
 
     if not isinstance(model, FactorizedModel):
         raise TypeError(

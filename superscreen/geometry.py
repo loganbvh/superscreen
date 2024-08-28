@@ -25,7 +25,6 @@ def path_vectors(path: np.ndarray) -> Tuple[float, np.ndarray]:
     normals = np.cross(dr, [0, 0, 1])
     unit_normals = unit_vector(normals)
     edge_lengths = la.norm(dr, axis=1)
-    unit_normals = np.concatenate([unit_normals, unit_normals[-1:]], axis=0)
     return edge_lengths, unit_normals[:, :2]
 
 

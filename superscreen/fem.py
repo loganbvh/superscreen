@@ -350,6 +350,7 @@ def gradient_triangles(
 def gradient_vertices(
     points: np.ndarray,
     triangles: np.ndarray,
+    gradient_tri: Optional[Tuple[sp.csr_array, sp.csr_array]] = None,
     areas: Optional[np.ndarray] = None,
 ) -> Tuple[sp.csr_array, sp.csr_array]:
     """Returns the vertex gradient operators ``gx`` and ``gy``.
@@ -365,15 +366,19 @@ def gradient_vertices(
     Args:
         points: Shape (n, 2) array of x, y coordinates of vertices
         triangles: Shape (m, 3) array of triangle indices
+        gradient_tri: Pre-computed triangle gradient operators for x and y
         areas: Shape (m, ) array of triangle areas
 
     Returns:
         x and y gradient matrices, both of which have shape ``(n, n)``
     """
-    if areas is None:
-        areas = triangle_areas(points, triangles)
+    if gradient_tri is None:
+        if areas is None:
+            areas = triangle_areas(points, triangles)
+        Gx, Gy = gradient_triangles(points, triangles, areas=areas)
+    else:
+        Gx, Gy = gradient_tri
     n = len(points)
-    Gx, Gy = gradient_triangles(points, triangles, areas=areas)
     Gx = Gx.tolil()
     Gy = Gy.tolil()
     gx = sp.lil_array((n, n), dtype=float)
