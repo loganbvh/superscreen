@@ -408,7 +408,7 @@ def _get_boundary_effective_field(
             out[i] += (
                 boundary_stream[j]
                 / np.linalg.norm(dr) ** 3
-                * np.sum(dr * boundary_normals[j])
+                * np.sum(dr * -boundary_normals[j])
                 * boundary_lengths[j]
             )
     return out / (4 * np.pi)
@@ -421,7 +421,7 @@ def _biot_savart_within_film(
     tri_areas: np.ndarray,
     tri_current_densities: np.ndarray,
 ) -> np.ndarray:
-    """Evaluates the Biot-Savar self-field within a single film."""
+    """Evaluates the Biot-Savart self-field within a single film."""
     Jx = tri_current_densities[:, 0]
     Jy = tri_current_densities[:, 1]
     out = np.empty(len(sites), dtype=float)
@@ -432,11 +432,11 @@ def _biot_savart_within_film(
         for k in range(len(tri_centroids)):
             dx = sites[i, 0] - tri_centroids[k, 0]
             dy = sites[i, 1] - tri_centroids[k, 1]
-            pref = (1 / (4 * np.pi)) * tri_areas[k] * (dx * dx + dy * dy) ** (-3 / 2)
+            pref = tri_areas[k] * (dx * dx + dy * dy) ** (-3 / 2)
             Jx_dy += pref * Jx[k] * dy
             Jy_dx += pref * Jy[k] * dx
         out[i] = Jx_dy - Jy_dx
-    return out
+    return out / (4 * np.pi)
 
 
 def solve_film(
@@ -516,12 +516,12 @@ def solve_film(
         g += g_transport
 
         boundary_sites = points[film_info.boundary_indices]
-        boundary_centers = 0.5 * (boundary_sites + np.roll(boundary_sites, -1, axis=0))
         boundary_stream = g_transport[film_info.boundary_indices]
+        boundary_centers = 0.5 * (boundary_sites + np.roll(boundary_sites, -1, axis=0))
         boundary_stream = 0.5 * (boundary_stream + np.roll(boundary_stream, -1, axis=0))
         edge_lengths, boundary_normals = path_vectors(close_curve(boundary_sites))
         Ha_transport = _get_boundary_effective_field(
-            points, boundary_centers, edge_lengths, -boundary_normals, boundary_stream
+            points, boundary_centers, edge_lengths, boundary_normals, boundary_stream
         )
         Ha_eff += Ha_transport
 
