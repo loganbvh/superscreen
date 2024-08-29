@@ -355,10 +355,11 @@ def solve_for_terminal_current_stream(
         stream = stream_from_terminal_current(points[ix_terminal], -current)
         g[ix_terminal[:-1]] += stream
         g[remaining_boundary] += stream[-1]
-    # The stream function on the "reference boundary" (i.e., the boundary
-    # immediately after the output terminal in a CCW direction) should be zero.
-    g_ref = g[ix_terminal.max()]
-    g[boundary_indices] += -g_ref
+    # # The stream function on the "reference boundary" (i.e., the boundary
+    # # immediately after the output terminal in a CCW direction) should be zero.
+    # g_ref = g[ix_terminal.max()]
+    # g[boundary_indices] += -g_ref
+    g = g - np.max(g) + np.ptp(g) / 2
     A = terminal_systems.boundary.A
     Ha_eff += -(A @ g[boundary_indices])
 
