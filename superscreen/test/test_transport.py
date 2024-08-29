@@ -191,12 +191,12 @@ def test_multi_terminal_currents(plus_device, applied_field):
 
     currents = []
     for coords in sections:
+        edge_positions = 0.5 * (coords[:-1] + coords[1:])
         J = solution.interp_current_density(
-            coords, film="plus", units="uA/um", with_units=False
+            edge_positions, film="plus", units="uA/um", with_units=False
         )
-        _, unit_normals = sc.geometry.path_vectors(coords)
-        dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
-        currents.append(np.sum(J * dr * unit_normals))
+        edge_lengths, unit_normals = sc.geometry.path_vectors(coords)
+        currents.append(np.sum(J * edge_lengths[:, np.newaxis] * unit_normals))
     target_currents = solution.terminal_currents["plus"].values()
     assert np.abs(np.sum(currents) / terminal_currents["plus"]["drain"]) < 5e-2
     for actual, target in zip(currents, target_currents):
@@ -236,15 +236,15 @@ def test_holey_device(holey_device):
     target_currents = [2, 2, 2, 0, 0]
     currents = []
     for coords in sections:
+        edge_positions = 0.5 * (coords[:-1] + coords[1:])
         J = solution.interp_current_density(
-            coords,
+            edge_positions,
             film="film",
             units="uA/um",
             with_units=False,
         )
-        _, unit_normals = sc.geometry.path_vectors(coords)
-        dr = np.linalg.norm(np.diff(coords, axis=0), axis=1)[0]
-        currents.append(np.sum(J * dr * unit_normals))
+        edge_lengths, unit_normals = sc.geometry.path_vectors(coords)
+        currents.append(np.sum(J * edge_lengths[:, np.newaxis] * unit_normals))
     for actual, target in zip(currents, target_currents):
         assert np.isclose(actual, target, rtol=5e-2, atol=1e-2)
 
