@@ -9,7 +9,7 @@ import scipy.sparse as sp
 from matplotlib.tri import Triangulation
 
 from ..distance import q_matrix
-from ..fem import gradient_vertices, laplace_operator
+from ..fem import gradient_triangles, gradient_vertices, laplace_operator
 from . import utils
 from .edge_mesh import EdgeMesh
 
@@ -27,6 +27,7 @@ class Mesh:
             form a triangle. [[0, 1, 2], [0, 1, 3]] corresponds to a triangle
             connecting vertices 0, 1, and 2 and another triangle connecting vertices
             0, 1, and 3.
+        triangle_centroids: Triangle centroid coordinates.
         boundary_indices: Indices corresponding to the boundary.
         vertex_areas: The areas corresponding to the sites or vertices.
         triangle_areas: The areas of the triangular mesh elements.
@@ -39,6 +40,7 @@ class Mesh:
         self,
         sites: Sequence[Tuple[float, float]],
         elements: Sequence[Tuple[int, int, int]],
+        triangle_centroids: Sequence[Tuple[int, int, int]],
         boundary_indices: Sequence[int],
         vertex_areas: Sequence[float],
         triangle_areas: Sequence[float],
@@ -47,6 +49,7 @@ class Mesh:
     ):
         self.sites = np.asarray(sites).squeeze()
         self.elements = np.asarray(elements, dtype=np.int64)
+        self.triangle_centroids = np.asarray(triangle_centroids)
         self.boundary_indices = np.asarray(boundary_indices, dtype=np.int64)
         self.vertex_areas = np.asarray(vertex_areas)
         self.triangle_areas = np.asarray(triangle_areas)
@@ -138,10 +141,12 @@ class Mesh:
         boundary_indices = Mesh.find_boundary_indices(elements)
         edge_mesh = EdgeMesh.from_mesh(sites, elements)
         triangle_areas = utils.triangle_areas(sites, elements)
+        centroids = sites[elements].mean(axis=1)
         vertex_areas = utils.vertex_areas(sites, elements, tri_areas=triangle_areas)
         return Mesh(
             sites=sites,
             elements=elements,
+            triangle_centroids=centroids,
             boundary_indices=boundary_indices,
             edge_mesh=edge_mesh,
             vertex_areas=vertex_areas,
@@ -252,6 +257,7 @@ class Mesh:
         h5group["sites"] = self.sites
         h5group["elements"] = self.elements
         if not compress:
+            h5group["triangle_centroids"] = self.triangle_centroids
             h5group["boundary_indices"] = self.boundary_indices
             h5group["vertex_areas"] = self.vertex_areas
             h5group["triangle_areas"] = self.triangle_areas
@@ -274,6 +280,7 @@ class Mesh:
             return Mesh(
                 sites=np.array(h5group["sites"]),
                 elements=np.array(h5group["elements"], dtype=np.int64),
+                triangle_centroids=np.array(h5group["triangle_centroids"]),
                 boundary_indices=np.array(h5group["boundary_indices"], dtype=np.int64),
                 vertex_areas=np.array(h5group["vertex_areas"]),
                 triangle_areas=np.array(h5group["triangle_areas"]),
@@ -299,6 +306,7 @@ class Mesh:
         return (
             "sites" in h5group
             and "elements" in h5group
+            and "triangle_centroids" in h5group
             and "boundary_indices" in h5group
             and "vertex_areas" in h5group
             and "triangle_areas" in h5group
@@ -309,6 +317,7 @@ class Mesh:
         mesh = Mesh(
             sites=self.sites.copy(),
             elements=self.elements.copy(),
+            triangle_centroids=self.triangle_centroids.copy(),
             boundary_indices=self.boundary_indices.copy(),
             vertex_areas=self.vertex_areas.copy(),
             triangle_areas=self.triangle_areas.copy(),
@@ -337,12 +346,16 @@ class MeshOperators:
         Q: np.ndarray,
         gradient_x: sp.spmatrix,
         gradient_y: sp.spmatrix,
+        gradient_tri_x: sp.spmatrix,
+        gradient_tri_y: sp.spmatrix,
         laplacian: sp.spmatrix,
     ):
         self.weights = weights
         self.Q = Q
         self.gradient_x = gradient_x
         self.gradient_y = gradient_y
+        self.gradient_tri_x = gradient_tri_x
+        self.gradient_tri_y = gradient_tri_y
         self.laplacian = laplacian
 
     @staticmethod
@@ -360,8 +373,11 @@ class MeshOperators:
         elements = mesh.elements
         weights = mesh.vertex_areas
         Q = MeshOperators.Q_matrix(sites, weights)
+        gradient_tri_x, gradient_tri_y = gradient_triangles(
+            sites, elements, mesh.triangle_areas
+        )
         gradient_x, gradient_y = gradient_vertices(
-            sites, elements, areas=mesh.triangle_areas
+            sites, elements, gradient_tri=(gradient_tri_x, gradient_tri_y)
         )
         # gradient_edges = gradient_edges(
         #     sites, mesh.edge_mesh.edges, mesh.edge_mesh.edge_lengths
@@ -372,6 +388,8 @@ class MeshOperators:
             Q=Q,
             gradient_x=gradient_x,
             gradient_y=gradient_y,
+            gradient_tri_x=gradient_tri_x,
+            gradient_tri_y=gradient_tri_y,
             laplacian=laplacian,
         )
 

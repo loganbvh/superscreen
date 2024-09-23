@@ -3,10 +3,12 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
 
 import h5py
+import numba
 import numpy as np
 import scipy.linalg as la
 
 from ..device import Device
+from ..geometry import close_curve, path_vectors
 from ..solution import FilmSolution
 from .utils import FilmInfo, stream_from_terminal_current
 
@@ -176,7 +178,6 @@ def factorize_linear_systems(
         Lambda_info = film_info.lambda_info
         inhomogeneous = Lambda_info.inhomogeneous
         Lambda = Lambda_info.Lambda
-        terminal_Lambda = 1e10 * np.ones_like(Lambda)
         if inhomogeneous:
             grad = film_info.gradient
             grad_Lambda_term = np.einsum("ijk, ijk -> jk", (grad @ Lambda), grad)
@@ -219,12 +220,12 @@ def factorize_linear_systems(
         if film_name in device.terminals:
             # Make the boundary linear system
             boundary_system = LinearSystem(
-                A=make_system_1d(boundary_indices, terminal_Lambda),
+                A=make_system_1d(boundary_indices, Lambda),
                 indices=boundary_indices,
                 grad_Lambda_term=grad_Lambda_term,
             )
             # Make the film interior linear system (including holes)
-            A = make_system_2d(interior_indices, terminal_Lambda)
+            A = make_system_2d(interior_indices, Lambda)
             film_without_boundary_system = LinearSystem(
                 A=A,
                 indices=interior_indices,
@@ -235,7 +236,7 @@ def factorize_linear_systems(
             terminal_hole_systems = {}
             for hole_name, indices in hole_indices.items():
                 terminal_hole_systems[hole_name] = LinearSystem(
-                    A=make_system_1d(indices, terminal_Lambda),
+                    A=make_system_1d(indices, Lambda),
                     indices=indices,
                     grad_Lambda_term=grad_Lambda_term,
                 )
@@ -245,7 +246,7 @@ def factorize_linear_systems(
                 interior_indices = np.setdiff1d(
                     interior_indices, np.concatenate(list(hole_indices.values()))
                 )
-                A = make_system_2d(interior_indices, terminal_Lambda)
+                A = make_system_2d(interior_indices, Lambda)
                 film_without_boundary_or_holes_system = LinearSystem(
                     A=A,
                     indices=interior_indices,
@@ -349,15 +350,13 @@ def solve_for_terminal_current_stream(
     for terminal in terminals:
         current = terminal_currents[terminal.name]
         ix_boundary = np.sort(terminal.contains_points(boundary_points, index=True))
-        remaining_boundary = boundary_indices[(ix_boundary[-1] + 1) :]
+        remaining_boundary = boundary_indices[ix_boundary[-1] :]
         ix_terminal = boundary_indices[ix_boundary]
         stream = stream_from_terminal_current(points[ix_terminal], -current)
-        g[ix_terminal] += stream
+        g[ix_terminal[:-1]] += stream
         g[remaining_boundary] += stream[-1]
-    # The stream function on the "reference boundary" (i.e., the boundary
-    # immediately after the output terminal in a CCW direction) should be zero.
-    g_ref = g[ix_terminal.max()]
-    g[boundary_indices] += -g_ref
+    # TODO: verify that this works for all film geometries!
+    g = g - np.max(g) + np.ptp(g) / 2
     A = terminal_systems.boundary.A
     Ha_eff += -(A @ g[boundary_indices])
 
@@ -389,6 +388,53 @@ def solve_for_terminal_current_stream(
     gf = la.lu_solve(lu_piv, -Ha_eff[ix])
     g[ix] = gf
     return g
+
+
+@numba.njit(fastmath=True, parallel=True)
+def _get_boundary_effective_field(
+    sites: np.ndarray,
+    boundary_centers: np.ndarray,
+    boundary_lengths: np.ndarray,
+    boundary_normals: np.ndarray,
+    boundary_stream: np.ndarray,
+) -> np.ndarray:
+    """Calculate the effective field from terminal current boundary conditions."""
+    out = np.zeros(len(sites), dtype=float)
+    for i in numba.prange(len(sites)):
+        for j in range(len(boundary_centers)):
+            dr = sites[i] - boundary_centers[j]
+            out[i] += (
+                boundary_stream[j]
+                / np.linalg.norm(dr) ** 3
+                * np.sum(dr * -boundary_normals[j])
+                * boundary_lengths[j]
+            )
+    return out / (4 * np.pi)
+
+
+@numba.njit(fastmath=True, parallel=True)
+def _biot_savart_within_film(
+    sites: np.ndarray,
+    tri_centroids: np.ndarray,
+    tri_areas: np.ndarray,
+    tri_current_densities: np.ndarray,
+) -> np.ndarray:
+    """Evaluates the Biot-Savart self-field within a single film."""
+    Jx = tri_current_densities[:, 0]
+    Jy = tri_current_densities[:, 1]
+    out = np.empty(len(sites), dtype=float)
+
+    for i in numba.prange(len(sites)):
+        Jx_dy = 0.0
+        Jy_dx = 0.0
+        for k in range(len(tri_centroids)):
+            dx = sites[i, 0] - tri_centroids[k, 0]
+            dy = sites[i, 1] - tri_centroids[k, 1]
+            pref = tri_areas[k] * (dx * dx + dy * dy) ** (-3 / 2)
+            Jx_dy += pref * Jx[k] * dy
+            Jy_dx += pref * Jy[k] * dx
+        out[i] = Jx_dy - Jy_dx
+    return out / (4 * np.pi)
 
 
 def solve_film(
@@ -456,6 +502,8 @@ def solve_film(
         g[indices] += current  # g[hole] = I_circ
         Ha_eff += -(A @ g[indices])
 
+    g_transport = 0.0
+    Ha_transport = 0.0
     if film_info.name in device.terminals:
         g_transport = solve_for_terminal_current_stream(
             device,
@@ -464,6 +512,16 @@ def solve_film(
             terminal_currents,
         )
         g += g_transport
+
+        boundary_sites = points[film_info.boundary_indices]
+        boundary_stream = g_transport[film_info.boundary_indices]
+        boundary_centers = 0.5 * (boundary_sites + np.roll(boundary_sites, -1, axis=0))
+        boundary_stream = 0.5 * (boundary_stream + np.roll(boundary_stream, -1, axis=0))
+        edge_lengths, boundary_normals = path_vectors(close_curve(boundary_sites))
+        Ha_transport = _get_boundary_effective_field(
+            points, boundary_centers, edge_lengths, boundary_normals, boundary_stream
+        )
+        Ha_eff += Ha_transport
 
     indices = film_system.indices
     A = film_system.A
@@ -496,8 +554,15 @@ def solve_film(
         g[indices] += g_vortex
     # Current density J = curl(g \hat{z}) = [dg/dy, -dg/dx]
     J = np.array([grad_y @ g, -(grad_x @ g)]).T
-    # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
-    screening_field = Q @ (weights * g)
+    if film_info.name in device.terminals:
+        Gx, Gy = mesh.operators.gradient_tri_x, mesh.operators.gradient_tri_y
+        J_tri = np.array([Gy @ g, -(Gx @ g)]).T
+        screening_field = _biot_savart_within_film(
+            points, mesh.triangle_centroids, mesh.triangle_areas, J_tri
+        )
+    else:
+        # Eq. 7 in [Kirtley1], Eq. 7 in [Kirtley2]
+        screening_field = Q @ (weights * g)
     if field_from_other_films is not None:
         field_from_other_films = field_from_other_films / field_conversion
     return FilmSolution(

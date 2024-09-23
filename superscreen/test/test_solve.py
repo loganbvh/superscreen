@@ -301,8 +301,9 @@ def test_fluxoid_single(device):
     _ = sc.make_fluxoid_polygons(device, interp_points=None)
     _ = sc.make_fluxoid_polygons(device, interp_points=101)
 
+    model = sc.factorize_model(device=device, current_units="mA")
     fluxoids = {hole: 0 for hole in device.holes}
-    solution = sc.find_fluxoid_solution(device, fluxoids=fluxoids)
+    solution = sc.find_fluxoid_solution(model, fluxoids=fluxoids)
     assert isinstance(solution, sc.Solution)
     fluxoid = solution.hole_fluxoid(list(device.holes)[0])
     assert np.isclose(sum(fluxoid).to("Phi_0").m, 0)
@@ -310,12 +311,12 @@ def test_fluxoid_single(device):
 
 def test_fluxoid_multi(two_rings):
     fluxoids = {hole: 0 for hole in two_rings.holes}
+    model = sc.factorize_model(device=two_rings, current_units="mA")
     solution = sc.find_fluxoid_solution(
-        two_rings,
+        model,
         fluxoids=fluxoids,
         applied_field=sc.sources.ConstantField(0.1),
         field_units="mT",
-        current_units="mA",
     )
     assert isinstance(solution, sc.Solution)
     for hole_name in two_rings.holes:

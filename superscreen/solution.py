@@ -355,7 +355,7 @@ class Solution:
         )
         edge_lengths, unit_normals = path_vectors(path_coords)
         edge_lengths = edge_lengths * device.ureg(device.length_units)
-        J_dot_n = (J_edge * unit_normals[:-1]).sum(axis=1)
+        J_dot_n = np.sum(J_edge * unit_normals, axis=1)
         total_current = np.trapz(J_dot_n * edge_lengths).to(units)
         if not with_units:
             total_current = total_current.magnitude

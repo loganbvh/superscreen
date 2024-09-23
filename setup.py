@@ -31,7 +31,7 @@ AUTHOR = "Logan Bishop-Van Horn"
 AUTHOR_EMAIL = "logan.bvh@gmail.com"
 URL = "https://github.com/loganbvh/superscreen"
 LICENSE = "MIT"
-PYTHON_VERSION = ">=3.8, <3.12"
+PYTHON_VERSION = ">=3.8, <3.13"
 
 INSTALL_REQUIRES = [
     "dill",
@@ -77,6 +77,7 @@ Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10
 Programming Language :: Python :: 3.11
+Programming Language :: Python :: 3.12
 Topic :: Scientific/Engineering
 Topic :: Scientific/Engineering :: Physics
 """

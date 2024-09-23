@@ -458,7 +458,7 @@ def stream_from_current_density(points: np.ndarray, J: np.ndarray) -> np.ndarray
     # (0, 0, 1) X (Jx, Jy, 0) == (-Jy, Jx, 0)
     zhat_cross_J = J[:, [1, 0]]
     zhat_cross_J[:, 0] *= -1
-    dl = np.diff(points, axis=0, prepend=points[:1])
+    dl = np.diff(points, axis=0)
     integrand = np.sum(zhat_cross_J * dl, axis=1)
     return integrate.cumulative_trapezoid(integrand, initial=0)
 
