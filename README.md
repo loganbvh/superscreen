@@ -22,7 +22,7 @@ Click the badge below to try `SuperScreen` interactively online via [Google Cola
 
 ## Install `SuperScreen`
 
-`SuperScreen` requires `python >=3.8, <3.13`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the [documentation](https://superscreen.readthedocs.io/en/latest/).
+`SuperScreen` requires `python >=3.8, <3.14`. We recommend installing `SuperScreen` in a fresh [`conda` environment](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html). For more details, see the [documentation](https://superscreen.readthedocs.io/en/latest/).
 
 ### Install via `pip`
 
