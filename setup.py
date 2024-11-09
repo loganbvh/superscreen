@@ -61,7 +61,6 @@ EXTRAS_REQUIRE = {
         "sphinx-autodoc-typehints",
         "nbsphinx",
         "pillow",  # required for image scaling in RTD,
-        "pint>='0.24.4'",
     ],
 }
 
