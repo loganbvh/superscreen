@@ -226,10 +226,10 @@ def test_fluxoid_simply_connected(
             total_vortex_flux += (vortex.nPhi0 * ureg("Phi_0")).to(units).magnitude
     if total_vortex_flux:
         # There are vortices in the region.
-        assert (abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)) < 5e-2
+        assert (abs(total_fluxoid - total_vortex_flux) / abs(total_vortex_flux)) < 8e-2
     else:
         # No vortices - fluxoid should be zero.
-        assert abs(total_fluxoid) / abs(flux_part) < 5e-2
+        assert abs(total_fluxoid) / abs(flux_part) < 8e-2
 
 
 @pytest.mark.parametrize("units, with_units", [("uA / um", False), (None, True)])

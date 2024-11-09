@@ -6,7 +6,6 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import path
-from scipy import interpolate
 from shapely import affinity
 from shapely import geometry as geo
 from shapely.validation import explain_validity
@@ -481,9 +480,7 @@ class Polygon:
             return polygon
         return polygon.points
 
-    def resample(
-        self, num_points: Optional[int] = None, degree: int = 1, smooth: float = 0
-    ) -> "Polygon":
+    def resample(self, num_points: Optional[int] = None) -> "Polygon":
         """Resample vertices so that they are approximately uniformly distributed
         along the polygon boundary.
 
@@ -492,25 +489,19 @@ class Polygon:
                 the polygon is resampled to ``len(self.points)`` points. If
                 ``num_points`` is not None and has a boolean value of False,
                 then an unaltered copy of the polygon is returned.
-            degree: The degree of the spline with which to iterpolate.
-                Defaults to 1 (linear spline).
-            smooth: Smoothing condition.
-
         """
         if num_points is None:
-            num_points = self.points.shape[0]
+            num_points = len(self.points)
         if not num_points:
             return self.copy()
-        points = self.points.copy()
-        _, ix = np.unique(points, return_index=True, axis=0)
-        points = close_curve(points[np.sort(ix)])
-        tck, _ = interpolate.splprep(points.T, k=degree, s=smooth)
-        x, y = interpolate.splev(np.linspace(0, 1, num_points), tck)
-        points = close_curve(np.stack([x, y], axis=1))
+        boundary = self.polygon.boundary
+        new_points = boundary.segmentize(boundary.length / num_points).interpolate(
+            np.linspace(0, 1, num_points), normalized=True
+        )
         return Polygon(
             name=self.name,
             layer=self.layer,
-            points=points,
+            points=new_points,
         )
 
     def plot(self, ax: Optional[plt.Axes] = None, **kwargs) -> plt.Axes:

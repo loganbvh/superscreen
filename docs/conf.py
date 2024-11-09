@@ -18,7 +18,7 @@
 # -- Project information -----------------------------------------------------
 
 project = "SuperScreen"
-copyright = "2021-2023, Logan Bishop-Van Horn"
+copyright = "2021-2024, Logan Bishop-Van Horn"
 author = "Logan Bishop-Van Horn"
 
 
