@@ -73,45 +73,47 @@ def find_fluxoid_solution(
     """
     device = model.device
     fluxoids = fluxoids or {}
-    holes = list(device.holes)
+    hole_names = list(device.holes)
     current_units = model.current_units
+    inductance_units = f"Phi_0 / {current_units}"
     solve_kwargs = solve_kwargs.copy()
     applied_field = solve_kwargs.pop("applied_field", None)
-    target_fluxoids = np.array([fluxoids.get(name, 0) for name in holes])
+    target_fluxoids = np.array([fluxoids.get(name, 0) for name in hole_names])
 
-    model = model.copy()
-    model.circulating_currents = {}
+    orig_circulating_currents = model.circulating_currents
+    try:
+        # Find the hole fluxoids assuming no circulating currents.
+        model.set_circulating_currents({name: 0 for name in hole_names})
+        solution_no_circ = solve(
+            model=model,
+            applied_field=applied_field,
+            **solve_kwargs,
+        )[-1]
 
-    # Find the hole fluxoids assuming no circulating currents.
-    solution_no_circ = solve(
-        model=model,
-        applied_field=applied_field,
-        **solve_kwargs,
-    )[-1]
+        if not hole_names:
+            if np.any(target_fluxoids):
+                raise ValueError(
+                    "Cannot calculate nonzero fluxoid solution for a device with no holes."
+                )
+            return solution_no_circ
 
-    if not holes:
-        if np.any(target_fluxoids):
-            raise ValueError(
-                "Cannot calculate nonzero fluxoid solution for a device with no holes."
-            )
-        return solution_no_circ
+        fluxoids = [
+            sum(solution_no_circ.hole_fluxoid(name)).to("Phi_0").magnitude
+            for name in hole_names
+        ]
+        fluxoids = np.array(fluxoids)
+        M = device.mutual_inductance_matrix(units=inductance_units, **solve_kwargs)
 
-    fluxoids = [
-        sum(solution_no_circ.hole_fluxoid(name)).to("Phi_0").magnitude for name in holes
-    ]
-    fluxoids = np.array(fluxoids)
-
-    M = device.mutual_inductance_matrix(
-        units=f"Phi_0 / {current_units}", **solve_kwargs
-    )
-    # Solve for the circulating currents needed to realize the target_fluxoids.
-    I_circ = np.linalg.solve(M.magnitude, target_fluxoids - fluxoids)
-    circulating_currents = dict(zip(holes, I_circ))
-    # Solve the model with the optimized circulating currents.
-    model.set_circulating_currents(circulating_currents)
-    solution = solve(
-        model=model,
-        applied_field=applied_field,
-        **solve_kwargs,
-    )[-1]
+        # Solve for the circulating currents needed to realize the target_fluxoids.
+        I_circ = np.linalg.solve(M.magnitude, target_fluxoids - fluxoids)
+        circulating_currents = dict(zip(hole_names, I_circ))
+        # Solve the model with the optimized circulating currents.
+        model.set_circulating_currents(circulating_currents)
+        solution = solve(
+            model=model,
+            applied_field=applied_field,
+            **solve_kwargs,
+        )[-1]
+    finally:
+        model.set_circulating_currents(orig_circulating_currents)
     return solution

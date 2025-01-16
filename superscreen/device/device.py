@@ -574,6 +574,7 @@ class Device:
         from ..solver import factorize_model, solve
 
         holes = self.holes
+        hole_names = list(self.holes)
         if hole_polygon_mapping is None:
             from ..fluxoid import make_fluxoid_polygons
 
@@ -607,11 +608,11 @@ class Device:
                 films_by_hole[hole.name] = film
         model = None
         for j, hole_name in enumerate(
-            tqdm(hole_polygon_mapping, desc="Holes", disable=(not progress_bar))
+            tqdm(hole_names, desc="Holes", disable=(not progress_bar))
         ):
             logger.info(
                 f"Evaluating {self.name!r} mutual inductance matrix "
-                f"column ({j+1}/{len(hole_polygon_mapping)}), "
+                f"column ({j+1}/{len(hole_names)}), "
                 f"source = {hole_name!r}."
             )
             if model is None:
@@ -623,15 +624,15 @@ class Device:
                 I_circ_val = model.circulating_currents[hole_name]
             else:
                 model.set_circulating_currents({hole_name: I_circ_val})
-            solutions = solve(device=None, model=model, **solve_kwargs)[solution_slice]
+            solutions = solve(model=model, **solve_kwargs)[solution_slice]
 
             for n, solution in enumerate(solutions):
                 logger.info(
                     f"Evaluating fluxoids for solution {n + 1}/{len(solutions)}."
                 )
-                for i, (name, polygon) in enumerate(hole_polygon_mapping.items()):
+                for i, name in enumerate(hole_names):
                     fluxoid = solution.polygon_fluxoid(
-                        polygon, film=films_by_hole[name]
+                        hole_polygon_mapping[name], film=films_by_hole[name]
                     )
                     mutual_inductance[n, i, j] = (
                         (sum(fluxoid) / I_circ).to(units).magnitude
