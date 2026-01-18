@@ -1064,7 +1064,7 @@ class Solution:
 
     @staticmethod
     def load_solutions(
-        path_or_group: Union[os.PathLike, h5py.Group]
+        path_or_group: Union[os.PathLike, h5py.Group],
     ) -> List["Solution"]:
         """Load a series of Solutions from an HDF5 file.
 
