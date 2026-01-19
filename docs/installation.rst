@@ -10,14 +10,14 @@ Installation
 .. role:: python(code)
   :language: python
 
-``SuperScreen`` requires ``Python >=3.8, <3.13`` and can be installed either from
+``SuperScreen`` requires ``Python >=3.8, <3.15`` and can be installed either from
 `PyPI <https://pypi.org/project/superscreen/>`_, the Python Package index,
 or from the ``SuperScreen`` `GitHub repository <https://github.com/loganbvh/superscreen>`_.
 
 We recommend creating a new
 `conda environment <https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html>`_
 for ``SuperScreen`` to avoid dependency conflicts with other packages. To create a new conda environment called
-``superscreen``, run ``conda create --name superscreen python="3.x"``, where ``x`` is one of ``{8, 9, 10, 11, 12}``.
+``superscreen``, run ``conda create --name superscreen python="3.x"``, where ``x`` is one of ``{8, 9, 10, 11, 12, 13, 14}``.
 After the environment has been created, run ``conda activate superscreen`` to activate it.
 
 

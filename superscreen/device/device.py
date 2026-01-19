@@ -448,7 +448,7 @@ class Device:
                 buffered = boundary.polygon.buffer(
                     buffer_size,
                     join_style=getattr(geo.JOIN_STYLE, join_style),
-                    single_sided=True,
+                    single_sided=False,
                     mitre_limit=5.0,
                 ).exterior.coords
                 boundary = Polygon(points=buffered).resample(len(film.points)).points
