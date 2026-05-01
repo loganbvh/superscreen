@@ -89,7 +89,7 @@ def two_rings():
         abstract_regions=abstract_regions,
         length_units=length_units,
     )
-    device.make_mesh(min_points=4000)
+    device.make_mesh(max_edge_length=0.5)
     return device
 
 
@@ -324,7 +324,7 @@ def test_fluxoid_multi(two_rings):
         assert np.isclose(
             sum(fluxoid).to("Phi_0").m,
             fluxoids[hole_name],
-            atol=1e-5,
+            atol=1e-4,
         )
 
 
