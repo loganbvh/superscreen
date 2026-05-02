@@ -124,9 +124,9 @@ class Parameter:
         z: Optional[Union[int, float, np.ndarray]] = None,
     ) -> Union[int, float, np.ndarray]:
         kwargs = self.kwargs.copy()
-        x, y = np.atleast_1d(x, y)
+        x, y = np.atleast_1d(np.squeeze(x), np.squeeze(y))
         if z is not None:
-            kwargs["z"] = np.atleast_1d(z)
+            kwargs["z"] = np.atleast_1d(np.squeeze(z))
         result = self.func(x, y, **kwargs).squeeze()
         if result.ndim == 0:
             result = result.item()

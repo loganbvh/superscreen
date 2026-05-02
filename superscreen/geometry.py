@@ -22,6 +22,7 @@ def path_vectors(path: np.ndarray) -> Tuple[float, np.ndarray]:
     dr = np.diff(path, axis=0)
     # x cross z = -y
     # y cross z = +x
+    dr = np.append(dr, np.zeros((len(dr), 1)), axis=1)
     normals = np.cross(dr, [0, 0, 1])
     unit_normals = unit_vector(normals)
     edge_lengths = la.norm(dr, axis=1)

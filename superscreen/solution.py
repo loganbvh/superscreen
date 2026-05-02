@@ -356,7 +356,7 @@ class Solution:
         edge_lengths, unit_normals = path_vectors(path_coords)
         edge_lengths = edge_lengths * device.ureg(device.length_units)
         J_dot_n = np.sum(J_edge * unit_normals, axis=1)
-        total_current = np.trapz(J_dot_n * edge_lengths).to(units)
+        total_current = np.trapezoid(J_dot_n * edge_lengths).to(units)
         if not with_units:
             total_current = total_current.magnitude
         return total_current
@@ -554,7 +554,7 @@ class Solution:
         Lambda_poly = Lambda(points[:, 0], points[:, 1])
         # \oint_{poly}\Lambda\vec{J}\cdot\mathrm{d}\vec{r}
         dl = np.diff(points, axis=0)
-        int_J = np.trapz(Lambda_poly[:-1] * np.sum(J_poly[:-1] * dl, axis=1))
+        int_J = np.trapezoid(Lambda_poly[:-1] * np.sum(J_poly[:-1] * dl, axis=1))
         int_J = int_J * ureg(J_units) * ureg(device.length_units) ** 2
         supercurrent_part = (ureg("mu_0") * int_J).to(units)
         if not with_units:
