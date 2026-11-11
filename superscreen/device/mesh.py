@@ -372,7 +372,7 @@ class MeshOperators:
         sites = mesh.sites
         elements = mesh.elements
         weights = mesh.vertex_areas
-        Q = MeshOperators.Q_matrix(sites, weights)
+        Q = MeshOperators.Q_matrix(sites, weights, elements=elements)
         gradient_tri_x, gradient_tri_y = gradient_triangles(
             sites, elements, mesh.triangle_areas
         )
@@ -398,8 +398,23 @@ class MeshOperators:
         return deepcopy(self)
 
     @staticmethod
-    def C_vector(points: np.ndarray) -> np.ndarray:
-        """Computes the edge vector, C:
+    def C_vector(
+        points: np.ndarray, elements: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        """Computes the edge vector, C.
+
+        If ``elements`` is given, C is computed exactly for the region covered by
+        the triangulation, which may have any shape and any number of holes:
+
+        .. math::
+            C_i = \\frac{1}{4\\pi}\\int_{\\text{outside}}\\frac{d^2r}{|\\mathbf{r}
+                - \\mathbf{r}_i|^3} = \\frac{1}{4\\pi}\\oint_{\\partial}
+                \\frac{(\\mathbf{r} - \\mathbf{r}_i)\\cdot\\hat{\\mathbf{n}}}
+                {|\\mathbf{r} - \\mathbf{r}_i|^3}\\,ds,
+
+        where the line integral runs over the boundary edges of the mesh and
+        :math:`\\hat{\\mathbf{n}}` is the outward normal. Otherwise, the film is
+        approximated by its bounding box:
 
         .. math::
             C_i &= \\frac{1}{4\\pi}\\sum_{p,q=\\pm1}\\sqrt{(\\Delta x - px_i)^{-2}
@@ -412,14 +427,18 @@ class MeshOperators:
 
         Args:
             points: Shape (n, 2) array of x, y coordinates of vertices.
+            elements: Shape (m, 3) array of triangle vertex indices. If given, C
+                is computed exactly from the boundary of the triangulation.
 
         Returns:
             Shape (n, ) array, Ci
         """
+        if elements is not None:
+            return _C_vector_from_boundary(points, elements)
         x = points[:, 0]
         y = points[:, 1]
-        x = x - x.mean()
-        y = y - y.mean()
+        x = x - (x.max() + x.min()) / 2
+        y = y - (y.max() + y.min()) / 2
         a = np.ptp(x) / 2
         b = np.ptp(y) / 2
         with np.errstate(divide="ignore"):
@@ -432,7 +451,11 @@ class MeshOperators:
         return C
 
     @staticmethod
-    def Q_matrix(points: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    def Q_matrix(
+        points: np.ndarray,
+        weights: np.ndarray,
+        elements: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """Computes the kernel matrix, Q:
 
         .. math::
@@ -447,12 +470,68 @@ class MeshOperators:
         Args:
             points: Shape ``(n, 2)`` array of mesh sites.
             weights: Shape ``(n, )`` weight vector.
+            elements: Shape ``(m, 3)`` array of triangle vertex indices, passed to
+                :meth:`MeshOperators.C_vector`.
 
         Returns:
             Shape (n, n) array, Qij
         """
         q = q_matrix(points)
-        C = MeshOperators.C_vector(points)
+        C = MeshOperators.C_vector(points, elements=elements)
         diag = -(C + np.einsum("ij, j -> i", q, weights)) / weights
         np.fill_diagonal(q, diag)
         return -q
+
+
+def _boundary_edges(points: np.ndarray, elements: np.ndarray) -> np.ndarray:
+    """Returns the (k, 2) boundary edges of a triangulation, oriented so that
+    the meshed region lies to the left of each edge.
+    """
+    elements = np.asarray(elements)
+    p = points[elements]
+    cross = (p[:, 1, 0] - p[:, 0, 0]) * (p[:, 2, 1] - p[:, 0, 1]) - (
+        p[:, 1, 1] - p[:, 0, 1]
+    ) * (p[:, 2, 0] - p[:, 0, 0])
+    # Make every triangle counterclockwise.
+    elements = np.where((cross < 0)[:, None], elements[:, [0, 2, 1]], elements)
+    edges = np.concatenate(
+        [elements[:, [0, 1]], elements[:, [1, 2]], elements[:, [2, 0]]]
+    )
+    _, inverse, counts = np.unique(
+        np.sort(edges, axis=1), axis=0, return_inverse=True, return_counts=True
+    )
+    return edges[counts[inverse.ravel()] == 1]
+
+
+def _C_vector_from_boundary(
+    points: np.ndarray, elements: np.ndarray, chunk_size: int = 1000
+) -> np.ndarray:
+    """Exact edge vector C for the region covered by a triangulation.
+
+    See :meth:`MeshOperators.C_vector`.
+    """
+    points = np.asarray(points, dtype=float)
+    edges = _boundary_edges(points, elements)
+    a = points[edges[:, 0]]
+    b = points[edges[:, 1]]
+    length = np.linalg.norm(b - a, axis=1)
+    t = (b - a) / length[:, None]
+    n = np.column_stack([t[:, 1], -t[:, 0]])  # outward normal
+    tol = 1e-12 * max(1.0, float(np.abs(points).max()))
+    C = np.empty(len(points))
+    for start in range(0, len(points), chunk_size):
+        r = a[None, :, :] - points[start : start + chunk_size, None, :]
+        # Distance of the edge's line from the point, and the edge's ends
+        # measured along it.
+        d = r[..., 0] * n[:, 0] + r[..., 1] * n[:, 1]
+        s0 = r[..., 0] * t[:, 0] + r[..., 1] * t[:, 1]
+        s1 = s0 + length
+        on_line = np.abs(d) < tol
+        d = np.where(on_line, 1.0, d)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            val = s1 / (d * np.hypot(d, s1)) - s0 / (d * np.hypot(d, s0))
+        # A collinear edge contributes nothing, unless the point lies on it.
+        val = np.where(on_line, np.where(s0 * s1 <= 0, np.inf, 0.0), val)
+        C[start : start + chunk_size] = val.sum(axis=1)
+    C[np.isinf(C)] = 1e30
+    return C / (4 * np.pi)
