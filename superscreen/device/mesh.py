@@ -418,8 +418,8 @@ class MeshOperators:
         """
         x = points[:, 0]
         y = points[:, 1]
-        x = x - x.mean()
-        y = y - y.mean()
+        x = x - (x.max() + x.min()) / 2
+        y = y - (y.max() + y.min()) / 2
         a = np.ptp(x) / 2
         b = np.ptp(y) / 2
         with np.errstate(divide="ignore"):
